@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.pkl
+
+# Database (large binary, not for git)
+*.db
+*.db.bak
+
+# Logs
+*.log
+
+# Generated reports
+eod_summary_*.txt
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# WorkBuddy internal
+.codebuddy/
+.workbuddy/

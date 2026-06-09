@@ -9,6 +9,11 @@ pandas>=2.2.0
 # Web 看板
 flask>=3.0.0
 
+# 交易日历
+# 主数据源：AKShare Sina 日历（交易所公告汇总，已由 akshare 依赖覆盖）
+# 备选降级：chinese_calendar（国务院公告 + 调休处理，可选安装）
+# chinese_calendar>=1.11.0
+
 # 测试
 pytest>=8.0.0
 

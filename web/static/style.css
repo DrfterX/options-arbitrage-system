@@ -1,0 +1,31 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #f5f6fa; color: #2c3e50; }
+header { background: #2c3e50; color: white; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; }
+header h1 { font-size: 20px; }
+#status-bar { font-size: 13px; opacity: 0.8; }
+main { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; padding: 16px; max-width: 1400px; margin: 0 auto; }
+section { background: white; border-radius: 8px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+section h2 { font-size: 16px; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px solid #eee; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { padding: 6px 8px; text-align: left; border-bottom: 1px solid #eee; }
+th { background: #f8f9fa; font-weight: 600; }
+.signal-ENTRY { background: #fff5f5; }
+.signal-CANDIDATE { background: #fffde7; }
+.signal-WATCH { background: #e3f2fd; }
+.option-card { padding: 10px; margin-bottom: 8px; border-radius: 4px; background: #f8f9fa; border-left: 4px solid #3498db; font-size: 13px; }
+.option-card.\u6781\u7AEF\u9AD8 { border-left-color: #e74c3c; background: #fdf2f2; }
+.option-card.\u504F\u9AD8 { border-left-color: #e67e22; background: #fef9e7; }
+.option-card.\u504F\u4F4E { border-left-color: #27ae60; background: #eafaf1; }
+.option-card.\u6781\u7AEF\u4F4E { border-left-color: #2980b9; background: #eaf2f8; }
+.option-card strong { display: block; margin-bottom: 4px; }
+.option-card span { color: #7f8c8d; font-size: 12px; }
+.option-card div { margin-top: 2px; color: #555; }
+#options-list { max-height: 500px; overflow-y: auto; }
+#futures-signals-table { display: block; }
+#futures-signals-table tbody { display: block; max-height: 500px; overflow-y: auto; }
+#futures-signals-table thead, #futures-signals-table tbody tr { display: table; width: 100%; table-layout: fixed; }
+
+@media (max-width: 900px) {
+    main { grid-template-columns: 1fr; }
+    header { flex-direction: column; gap: 8px; text-align: center; }
+}

@@ -1,0 +1,88 @@
+sequenceDiagram
+    participant Cron
+    participant Orchestrator
+    participant ContractRegistry
+    participant FuturesCollector
+    participant OptionsCollector
+    participant FuturesPipeline
+    participant OptionsPipeline
+    participant SignalHub
+    participant UnifiedFormatter
+    participant stdout
+
+    Cron->>Orchestrator: --mode=all
+    Orchestrator->>ContractRegistry: get_all()
+    ContractRegistry-->>Orchestrator: 60 symbols with contracts
+
+    par 期货信号扫描
+        Orchestrator->>FuturesCollector: collect_all(15m/1h/1d/1w)
+        FuturesCollector->>ContractRegistry: get contract codes
+        FuturesCollector-->>Orchestrator: collection stats
+        Orchestrator->>FuturesPipeline: aggregate_all → MACD → swing → N-structure
+        FuturesPipeline-->>Orchestrator: N structures updated
+        Orchestrator->>FuturesPipeline: run_scan()
+        FuturesPipeline-->>Orchestrator: list~SignalResult~
+    and 期权策略扫描
+        Orchestrator->>OptionsCollector: get_top40_futures()
+        OptionsCollector-->>Orchestrator: futures list
+        loop each symbol
+            Orchestrator->>OptionsCollector: get_option_chain(symbol)
+            OptionsCollector-->>Orchestrator: calls, puts
+            Orchestrator->>OptionsPipeline: scan_symbol(futures, iv_map, risk_mgr)
+            OptionsPipeline-->>Orchestrator: strategy result
+        end
+    end
+
+    Orchestrator->>SignalHub: record_futures_signal() for each ENTRY/CANDIDATE
+    Orchestrator->>SignalHub: record_options_signal() for each passed strategy
+    Orchestrator->>SignalHub: check_duplicate() for push dedup
+
+    Orchestrator->>UnifiedFormatter: format_daily_summary(futures, options)
+    UnifiedFormatter-->>Orchestrator: formatted message
+    Orchestrator->>stdout: print(message)
+
+    Note over Cron,stdout: === 数据库初始化流程 ===
+
+    participant CLI
+    participant Database
+    participant AKShare
+
+    CLI->>Database: --init
+    Database->>Database: init_all_tables()
+    Database-->>CLI: 10 tables created
+
+    CLI->>ContractRegistry: refresh_from_akshare()
+    ContractRegistry->>AKShare: futures_main_sina()
+    AKShare-->>ContractRegistry: 主力合约映射表
+    ContractRegistry->>ContractRegistry: merge with local defaults
+    ContractRegistry->>Database: INSERT OR REPLACE INTO symbols
+    Database-->>ContractRegistry: saved
+    ContractRegistry-->>CLI: 60 symbols registered
+
+    Note over CLI,AKShare: === Web看板API流程 ===
+
+    participant Browser
+    participant Flask
+
+    Browser->>Flask: GET /
+    Flask->>Flask: render_template('dashboard.html')
+    Flask-->>Browser: HTML page
+
+    Browser->>Flask: GET /api/signals/futures?limit=20
+    Flask->>SignalHub: get_recent_futures(20)
+    SignalHub->>Database: SELECT * FROM futures_signals ORDER BY created_at DESC
+    Database-->>SignalHub: rows
+    SignalHub-->>Flask: list~SignalResult~
+    Flask-->>Browser: JSON
+
+    Browser->>Flask: GET /api/signals/options?limit=20
+    Flask->>SignalHub: get_recent_options(20)
+    SignalHub->>Database: SELECT * FROM options_signals ORDER BY created_at DESC
+    Database-->>SignalHub: rows
+    SignalHub-->>Flask: list~dict~
+    Flask-->>Browser: JSON
+
+    Browser->>Flask: GET /api/iv/status
+    Flask->>Database: SELECT * FROM iv_history WHERE date=(SELECT MAX(date))
+    Database-->>Flask: rows
+    Flask-->>Browser: JSON

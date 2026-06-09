@@ -1,0 +1,252 @@
+classDiagram
+    class symbols {
+        +TEXT symbol PK
+        +TEXT name
+        +TEXT option_name
+        +TEXT exchange
+        +TEXT category
+        +INT multiplier
+        +INT has_options
+        +INT is_night
+        +TEXT updated_at
+    }
+
+    class futures_klines {
+        +INT id PK
+        +TEXT symbol
+        +TEXT contract
+        +TEXT timeframe
+        +INT timestamp
+        +REAL open
+        +REAL high
+        +REAL low
+        +REAL close
+        +INT volume
+    }
+
+    class futures_macd {
+        +INT id PK
+        +TEXT symbol
+        +TEXT contract
+        +TEXT timeframe
+        +INT timestamp
+        +REAL macd
+        +REAL signal
+        +REAL histogram
+        +TEXT color
+    }
+
+    class futures_swing_points {
+        +INT id PK
+        +TEXT symbol
+        +TEXT contract
+        +TEXT timeframe
+        +INT timestamp
+        +REAL price
+        +TEXT point_type
+    }
+
+    class futures_n_structures {
+        +INT id PK
+        +TEXT symbol
+        +TEXT contract
+        +TEXT timeframe
+        +TEXT direction
+        +TEXT state
+        +INT point_a_time
+        +REAL point_a_price
+        +INT point_b_time
+        +REAL point_b_price
+        +INT point_c_time
+        +REAL point_c_price
+        +TEXT created_at
+        +TEXT updated_at
+    }
+
+    class futures_signals {
+        +INT id PK
+        +TEXT symbol
+        +TEXT contract
+        +TEXT direction
+        +TEXT signal_type
+        +INT level1_pass
+        +INT level2_pass
+        +INT level3_pass
+        +REAL entry_price
+        +REAL stop_loss
+        +REAL take_profit
+        +REAL score
+        +TEXT detail
+        +TEXT created_at
+    }
+
+    class iv_history {
+        +INT id PK
+        +TEXT symbol
+        +TEXT contract
+        +TEXT date
+        +TEXT time
+        +REAL futures_price
+        +REAL atm_strike
+        +REAL atm_call_iv
+        +REAL atm_put_iv
+        +REAL avg_iv
+        +REAL top5_call_iv
+        +REAL top5_put_iv
+        +REAL top5_avg_iv
+    }
+
+    class options_signals {
+        +INT id PK
+        +TEXT symbol
+        +TEXT contract
+        +TEXT strategy
+        +TEXT signal_type
+        +REAL strength
+        +TEXT reason
+        +REAL futures_price
+        +REAL iv_avg
+        +REAL iv_percentile
+        +TEXT iv_level
+        +REAL net_delta
+        +REAL net_theta
+        +REAL net_vega
+        +REAL max_profit
+        +REAL max_loss
+        +REAL unified_score
+        +TEXT strategy_details
+        +TEXT created_at
+    }
+
+    class signal_push_log {
+        +INT id PK
+        +TEXT fingerprint
+        +TEXT symbol
+        +TEXT contract
+        +TEXT strategy_type
+        +TEXT strikes
+        +REAL score
+        +TEXT pushed_at
+    }
+
+    class system_config {
+        +TEXT key PK
+        +TEXT value
+        +TEXT updated_at
+    }
+
+    symbols "1" --o "N" futures_klines : symbol
+    symbols "1" --o "N" iv_history : symbol
+    symbols "1" --o "N" futures_signals : symbol
+    symbols "1" --o "N" options_signals : symbol
+    futures_klines "1" --o "N" futures_macd : (symbol,contract,timeframe)
+    futures_klines "1" --o "N" futures_swing_points : (symbol,contract,timeframe)
+    futures_swing_points "1" --o "N" futures_n_structures : swing→N
+    futures_n_structures "1" --o "N" futures_signals : N→signal
+
+    class ContractRegistry {
+        -Dict _symbols
+        +__init__(db_path)
+        +get(symbol) dict
+        +get_all() list
+        +get_with_options() list
+        +get_night_symbols() set
+        +get_option_name(symbol) str
+        +get_multiplier(symbol) int
+        +refresh_from_akshare() int
+    }
+
+    class Database {
+        -str db_path
+        +__init__(db_path)
+        +get_conn() Connection
+        +init_all_tables()
+    }
+
+    class KlineStore {
+        -Database db
+        +batch_insert(rows)
+        +get_last_timestamp(symbol,contract,tf) int
+        +get_klines(symbol,contract,tf,limit,offset) list
+        +get_contracts_with_data() list
+    }
+
+    class MACDStore {
+        -Database db
+        +batch_insert(rows)
+        +get_macd(symbol,contract,tf,limit) list
+        +get_recent_colors(symbol,contract,tf,n) list
+        +get_in_range(symbol,contract,tf,start,end) list
+    }
+
+    class SignalHub {
+        -Database db
+        +record_futures_signal(SignalResult) int
+        +record_options_signal(dict) int
+        +check_duplicate(fingerprint,hours) bool
+        +get_recent_futures(limit) list
+        +get_recent_options(limit) list
+        +get_push_log() list
+        +prune_old(days)
+    }
+
+    class FuturesCollector {
+        -ContractRegistry registry
+        -KlineStore store
+        +collect_symbol(symbol,contract,periods) dict
+        +collect_all(periods) dict
+        +aggregate_3m_from_1m(symbol,contract,rows) list
+    }
+
+    class OptionsCollector {
+        -ContractRegistry registry
+        +get_top40_futures() list
+        +get_option_chain(opt_name,contract,underlying) tuple
+    }
+
+    class FuturesPipeline {
+        -ContractRegistry registry
+        +collect_and_process(symbol,contract,collect) dict
+        +run_scan(all_contracts) list
+        +run_eod() dict
+    }
+
+    class OptionsPipeline {
+        -ContractRegistry registry
+        -RiskManager risk_mgr
+        +scan_symbol(futures,iv_map,risk_mgr,log) dict
+        +scan_all(limit,parallel) list
+        +format_wechat(results,scanned,mode) str
+    }
+
+    class Orchestrator {
+        -FuturesPipeline futures
+        -OptionsPipeline options
+        -SignalHub hub
+        +run(mode,args)
+        +run_all()
+        +run_eod()
+    }
+
+    class UnifiedFormatter {
+        +format_futures_signal(SignalResult) str
+        +format_options_strategy(dict) str
+        +format_daily_summary(futures,options) str
+        +format_iv_rank(iv_status_list) str
+    }
+
+    ContractRegistry --> Database
+    KlineStore --> Database
+    MACDStore --> Database
+    SignalHub --> Database
+    FuturesCollector --> ContractRegistry
+    FuturesCollector --> KlineStore
+    OptionsCollector --> ContractRegistry
+    FuturesPipeline --> ContractRegistry
+    FuturesPipeline --> FuturesCollector
+    OptionsPipeline --> ContractRegistry
+    OptionsPipeline --> OptionsCollector
+    Orchestrator --> FuturesPipeline
+    Orchestrator --> OptionsPipeline
+    Orchestrator --> SignalHub
+    Orchestrator --> UnifiedFormatter
