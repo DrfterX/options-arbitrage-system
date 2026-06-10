@@ -25,6 +25,7 @@ from data.iv_recorder import IVRecorder
 from signals.hub import SignalHub
 from signals.formatter import UnifiedFormatter
 from signals.dispatcher import dispatch
+from signals.smart_filter import SmartFilter
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +60,14 @@ class Orchestrator:
         self.iv_recorder: IVRecorder = IVRecorder(self.db)
         self.hub: SignalHub = SignalHub(self.db)
         self.formatter: UnifiedFormatter = UnifiedFormatter()
+        self._smart_filter: Optional["SmartFilter"] = None
+
+    @property
+    def smart_filter(self) -> "SmartFilter":
+        """懒初始化 SmartFilter 实例。"""
+        if self._smart_filter is None:
+            self._smart_filter = SmartFilter()
+        return self._smart_filter
 
     # ── 数据刷新 ──────────────────────────────────────────────
 
@@ -186,22 +195,49 @@ class Orchestrator:
                      sum(1 for r in results if getattr(r, "signal_type", "NONE") != "NONE"))
 
         pushed_count: int = 0
+        suppressed_count: int = 0
         for r in results:
             signal_type = getattr(r, "signal_type", "NONE")
             if signal_type == "NONE":
                 continue
 
-            # 写入信号表
+            # 写入信号表（始终写入，保证数据完整性）
             signal_id = self.hub.record_futures_signal(r)
             if signal_id < 0:
                 continue
 
-            # 去重并推送
+            # 去重检查
             fingerprint = f"{r.symbol}_{r.contract}_{signal_type}"
             if not self.hub.check_duplicate(fingerprint, hours=DEDUP_HOURS):
-                level = signal_type  # ENTRY / CANDIDATE / WATCH
+                # ── SmartFilter 回测驱动过滤 ──────────────────
+                level1_pass = (
+                    r.level1.get("passed", False)
+                    if isinstance(r.level1, dict) else False
+                )
+                level2_pass = (
+                    r.level2.get("passed", False)
+                    if isinstance(r.level2, dict) else False
+                )
+                decision = self.smart_filter.evaluate(
+                    symbol=r.symbol,
+                    score=r.overall_score,
+                    level1_pass=level1_pass,
+                    level2_pass=level2_pass,
+                    signal_type=signal_type,
+                    direction=getattr(r, "direction", ""),
+                )
+
+                if not decision.should_push:
+                    logger.info(
+                        "被过滤抑制: %s %s score=%.2f (reason: %s)",
+                        r.symbol, signal_type, r.overall_score, decision.reason,
+                    )
+                    suppressed_count += 1
+                    continue
+
+                # ── 推送 ──────────────────────────────────────
                 msg = self.formatter.format_futures_signal(r)
-                dispatch(msg, level=level, mode="stdout")
+                dispatch(msg, level=decision.push_level, mode="stdout")
 
                 # 记录推送
                 self.hub.record_push(
@@ -217,7 +253,7 @@ class Orchestrator:
                 if pushed_count > 1:
                     time_module.sleep(0.3)
 
-        logger.info("期货扫描完成: %d 条推送", pushed_count)
+        logger.info("期货扫描完成: %d 条推送, %d 条被过滤抑制", pushed_count, suppressed_count)
         return results
 
     # ── 期权策略扫描 ──────────────────────────────────────────
