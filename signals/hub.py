@@ -305,6 +305,132 @@ class SignalHub:
         finally:
             conn.close()
 
+    # ── 过滤决策日志 ──────────────────────────────────────────
+
+    def record_filter_decision(
+        self,
+        fingerprint: str,
+        symbol: str,
+        contract: str,
+        score: float,
+        level1_pass: bool,
+        level2_pass: bool,
+        signal_type: str,
+        direction: str,
+        should_push: bool,
+        push_level: str,
+        reason: str,
+        confidence: float,
+        boost_factor: float,
+    ) -> bool:
+        """记录 SmartFilter 过滤决策到 filter_decision_log 表。
+
+        Args:
+            fingerprint: 去重指纹。
+            symbol: 品种代码。
+            contract: 合约代码。
+            score: 信号评分。
+            level1_pass: L1 是否通过。
+            level2_pass: L2 是否通过。
+            signal_type: 信号类型 (WATCH/CANDIDATE/ENTRY)。
+            direction: 信号方向 (LONG/SHORT)。
+            should_push: 是否推送。
+            push_level: 推送等级 (HIGH/NORMAL/LOW/SUPPRESS)。
+            reason: 决策理由。
+            confidence: 综合置信度。
+            boost_factor: 板块加权系数。
+
+        Returns:
+            True 表示记录成功。
+        """
+        conn = self.db.get_conn()
+        try:
+            conn.execute(
+                """INSERT INTO filter_decision_log
+                   (fingerprint, symbol, contract, score,
+                    level1_pass, level2_pass, signal_type, direction,
+                    should_push, push_level, reason, confidence, boost_factor)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    fingerprint,
+                    symbol,
+                    contract,
+                    score,
+                    int(level1_pass),
+                    int(level2_pass),
+                    signal_type,
+                    direction,
+                    int(should_push),
+                    push_level,
+                    reason,
+                    confidence,
+                    boost_factor,
+                ),
+            )
+            conn.commit()
+            return True
+        except Exception as e:
+            logger.error("记录过滤决策失败 %s: %s", symbol, e)
+            return False
+        finally:
+            conn.close()
+
+    def get_filter_stats(self) -> dict:
+        """获取 SmartFilter 统计汇总。
+
+        Returns:
+            dict: 总评估数/推送数/抑制数/各等级分布。
+        """
+        conn = self.db.get_conn()
+        try:
+            total = conn.execute(
+                "SELECT COUNT(*) as c FROM filter_decision_log"
+            ).fetchone()["c"]
+
+            pushed = conn.execute(
+                "SELECT COUNT(*) as c FROM filter_decision_log WHERE should_push=1"
+            ).fetchone()["c"]
+
+            suppressed = conn.execute(
+                "SELECT COUNT(*) as c FROM filter_decision_log WHERE should_push=0"
+            ).fetchone()["c"]
+
+            levels = conn.execute(
+                """SELECT push_level, COUNT(*) as c
+                   FROM filter_decision_log
+                   GROUP BY push_level
+                   ORDER BY c DESC"""
+            ).fetchall()
+
+            return {
+                "total": total,
+                "pushed": pushed,
+                "suppressed": suppressed,
+                "levels": [dict(r) for r in levels],
+            }
+        finally:
+            conn.close()
+
+    def get_recent_filter_log(self, limit: int = 20) -> list:
+        """获取最近的过滤决策日志。
+
+        Args:
+            limit: 返回条数上限。
+
+        Returns:
+            过滤决策日志列表（按 created_at 降序）。
+        """
+        conn = self.db.get_conn()
+        try:
+            rows = conn.execute(
+                """SELECT * FROM filter_decision_log
+                   ORDER BY created_at DESC LIMIT ?""",
+                (limit,),
+            ).fetchall()
+            return [dict(r) for r in rows]
+        finally:
+            conn.close()
+
     # ── 清理 ──────────────────────────────────────────────────
 
     def prune_old(self, days: int = 30) -> int:

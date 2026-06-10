@@ -411,6 +411,23 @@ def api_summary():
     })
 
 
+@app.route("/api/filter-stats")
+def api_filter_stats():
+    """获取 SmartFilter 统计汇总。"""
+    hub = _get_hub()
+    stats = hub.get_filter_stats()
+    return jsonify(stats)
+
+
+@app.route("/api/filter-log")
+def api_filter_log():
+    """获取最近过滤决策日志。"""
+    limit = request.args.get("limit", 20, type=int)
+    hub = _get_hub()
+    log = hub.get_recent_filter_log(limit)
+    return jsonify(log)
+
+
 # ─── 回测 API ─────────────────────────────────────────────
 
 

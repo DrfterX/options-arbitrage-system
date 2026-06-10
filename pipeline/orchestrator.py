@@ -82,6 +82,7 @@ class Orchestrator:
         logger.info("=" * 50)
         logger.info("数据刷新: 采集 → 聚合 → MACD → 极值点 → N型结构")
         logger.info("=" * 50)
+        _t0 = time_module.time()
 
         from futures.aggregator import aggregate_all
         from futures.macd import calculate_all_timeframes
@@ -154,8 +155,9 @@ class Orchestrator:
             if idx % 10 == 0:
                 logger.info("  N型进度 [%d/%d]", idx, total)
 
-        logger.info("数据刷新完成: 品种=%d 聚合=%d MACD=%d 极值点=%d N型=%d",
-                    total, agg_total, macd_total, swing_total, n_total)
+        elapsed = time_module.time() - _t0
+        logger.info("数据刷新完成: 品种=%d 聚合=%d MACD=%d 极值点=%d N型=%d (耗时 %.1fs)",
+                    total, agg_total, macd_total, swing_total, n_total, elapsed)
 
         return {
             "collect_stats": collect_stats,
@@ -164,6 +166,7 @@ class Orchestrator:
             "macd": macd_total,
             "swing_points": swing_total,
             "n_structures": n_total,
+            "elapsed_seconds": round(elapsed, 1),
         }
 
     # ── 期货信号扫描 ──────────────────────────────────────────
@@ -225,6 +228,23 @@ class Orchestrator:
                     level2_pass=level2_pass,
                     signal_type=signal_type,
                     direction=getattr(r, "direction", ""),
+                )
+
+                # ── 记录过滤决策到数据库 ──────────────────────
+                self.hub.record_filter_decision(
+                    fingerprint=fingerprint,
+                    symbol=r.symbol,
+                    contract=r.contract,
+                    score=r.overall_score,
+                    level1_pass=level1_pass,
+                    level2_pass=level2_pass,
+                    signal_type=signal_type,
+                    direction=getattr(r, "direction", ""),
+                    should_push=decision.should_push,
+                    push_level=decision.push_level,
+                    reason=decision.reason,
+                    confidence=decision.confidence,
+                    boost_factor=decision.boost_factor,
                 )
 
                 if not decision.should_push:

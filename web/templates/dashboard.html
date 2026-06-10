@@ -26,6 +26,26 @@
   <div class="stat-item"><div class="label">总品种</div><div class="value" style="color:var(--brand)">{{ total_signals }}</div><div class="stat-glow"></div></div>
 </div>
 
+<!-- ── SmartFilter 过滤状态面板 ── -->
+<div class="filter-section">
+  <h2>🛡️ SmartFilter 防火墙 <span class="badge" id="fs-status">加载中…</span></h2>
+  <div class="filter-stats" id="filterStats">
+    <div class="fs-card total"><div class="fs-label">评估</div><div class="fs-value" id="fs-total">—</div></div>
+    <div class="fs-card pushed"><div class="fs-label">推送</div><div class="fs-value" id="fs-pushed">—</div></div>
+    <div class="fs-card suppressed"><div class="fs-label">抑制</div><div class="fs-value" id="fs-suppressed">—</div></div>
+    <div class="fs-card rate"><div class="fs-label">通过率</div><div class="fs-value" id="fs-rate">—</div></div>
+  </div>
+  <div class="filter-log" id="filterLog">
+    <h3>最近抑制信号</h3>
+    <table class="fs-table">
+      <thead><tr><th>时间</th><th>品种</th><th>评分</th><th>等级</th><th>原因</th></tr></thead>
+      <tbody id="fs-body">
+        <tr><td colspan="5" style="color:var(--text3);text-align:center">等待数据…</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
 <div class="sector-stats">
 {% for s in sector_stats %}
   <div class="sector-card">
@@ -175,6 +195,72 @@ if (AUTO_REFRESH) {
   // 每5分钟全页重载（保持N型结构等数据最新）
   setTimeout(function() { location.reload(); }, 300000);
 }
+
+// ── SmartFilter 过滤状态刷新 ──
+function loadFilterStats() {
+  fetch('/api/filter-stats', { cache: 'no-cache' })
+    .then(function(r) { return r.json(); })
+    .then(function(stats) {
+      var totalEl = document.getElementById('fs-total');
+      var pushedEl = document.getElementById('fs-pushed');
+      var suppressedEl = document.getElementById('fs-suppressed');
+      var rateEl = document.getElementById('fs-rate');
+      var statusEl = document.getElementById('fs-status');
+      if (!totalEl) return;
+      totalEl.textContent = stats.total || 0;
+      pushedEl.textContent = stats.pushed || 0;
+      suppressedEl.textContent = stats.suppressed || 0;
+      var rate = stats.total > 0 ? (stats.pushed / stats.total * 100).toFixed(1) : '—';
+      rateEl.textContent = rate !== '—' ? rate + '%' : '—';
+      if (statusEl) {
+        statusEl.textContent = stats.total + ' 条记录';
+        if (stats.total > 0) statusEl.style.color = 'var(--short)';
+      }
+    })
+    .catch(function(e) { /* silent */ });
+}
+
+function loadFilterLog() {
+  fetch('/api/filter-log?limit=15', { cache: 'no-cache' })
+    .then(function(r) { return r.json(); })
+    .then(function(log) {
+      var tbody = document.getElementById('fs-body');
+      if (!tbody) return;
+      if (!log || !log.length) {
+        tbody.innerHTML = '<tr><td colspan="5" style="color:var(--text3);text-align:center">暂无过滤记录</td></tr>';
+        return;
+      }
+      var html = '';
+      log.forEach(function(entry) {
+        var cls = entry.push_level === 'SUPPRESS' ? 'fs-suppressed'
+                : entry.push_level === 'LOW' ? 'fs-low'
+                : entry.push_level === 'NORMAL' ? 'fs-normal'
+                : 'fs-high';
+        var score = (entry.score || 0).toFixed(2);
+        var levelLabel = entry.push_level || '—';
+        var reason = entry.reason || '';
+        if (reason.length > 45) reason = reason.substring(0, 42) + '…';
+        html += '<tr><td style="color:var(--text3);font-size:.6rem">' + (entry.created_at || '') + '</td>'
+             + '<td>' + entry.symbol + '</td>'
+             + '<td>' + score + '</td>'
+             + '<td class="' + cls + '">' + levelLabel + '</td>'
+             + '<td style="color:var(--text3)">' + reason + '</td></tr>';
+      });
+      tbody.innerHTML = html;
+    })
+    .catch(function(e) { /* silent */ });
+}
+
+// 初始加载过滤状态
+loadFilterStats();
+loadFilterLog();
+
+// 加入 30 秒轮询（与 summary 刷新同步）
+setInterval(function() {
+  if (document.hidden) return;
+  loadFilterStats();
+  loadFilterLog();
+}, 30000);
 
 // IV Chart (lazy)
 var IV_DATA = JSON.parse('{{ iv_json|safe }}');

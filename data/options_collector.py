@@ -308,6 +308,9 @@ class OptionsCollector:
 
         对每个品种探测当前活跃的主力合约代码（如 RB2609），
         而非仅缓存品种名。通过 Sina 15m K线验证合约有效性。
+
+        ⚠ 关键：节流条件必须基于总 API 调用次数而非 resolved 计数，
+          否则非交易时段 resolved=0 时全部调用背靠背执行 → 限流 → 0/59。
         """
         try:
             import akshare as ak
@@ -331,13 +334,20 @@ class OptionsCollector:
                 month_order = ["05", "03", "01", "07", "09"]
 
             resolved: int = 0
+            call_count: int = 0  # 总 API 调用计数（不分成功/失败）
             for s in all_symbols:
                 symbol = s["symbol"].upper()
                 contract = None
 
-                # 遍历可能的合约月份（每个候选合约仅尝试1次以快速失败）
-                for m in month_order:
+                # 遍历可能的合约月份（最多尝试 3 个候选以快速失败）
+                for m in month_order[:3]:
                     candidate = f"{symbol}{year_suffix}{m}"
+                    call_count += 1
+                    # ★ 节流：每 3 次调用暂停，不依赖 resolved 计数
+                    if call_count % 3 == 0:
+                        time.sleep(0.5)
+                    elif call_count % 3 == 2:
+                        time.sleep(0.15)
                     try:
                         df = ak.futures_zh_minute_sina(
                             symbol=candidate, period="15"
@@ -349,14 +359,17 @@ class OptionsCollector:
                                 break
                     except Exception:
                         continue
-                    if contract:
-                        break
 
-                # 尝试下一年份月份
+                # 尝试下一年份月份（仅当月候选全失败时，限 2 个）
                 if contract is None:
                     next_year = str(now.year + 1)[2:]
-                    for m in ["01", "03", "05"]:
+                    for m in ["01", "03"]:
                         candidate = f"{symbol}{next_year}{m}"
+                        call_count += 1
+                        if call_count % 3 == 0:
+                            time.sleep(0.5)
+                        elif call_count % 3 == 2:
+                            time.sleep(0.15)
                         try:
                             df = ak.futures_zh_minute_sina(
                                 symbol=candidate, period="15"
@@ -368,8 +381,6 @@ class OptionsCollector:
                                     break
                         except Exception:
                             continue
-                        if contract:
-                            break
 
                 if contract:
                     OptionsCollector._contract_cache[symbol.lower()] = contract
@@ -378,13 +389,9 @@ class OptionsCollector:
                     # 回退到品种名本身
                     OptionsCollector._contract_cache[symbol.lower()] = symbol
 
-                # 每5个品种暂停一下避免被限流
-                if resolved > 0 and resolved % 5 == 0:
-                    time.sleep(1.0)
-
             logger.info(
-                "合约缓存已初始化: %d/%d 品种成功解析主力合约",
-                resolved, len(all_symbols),
+                "合约缓存已初始化: %d/%d 品种成功解析主力合约 (API调用总次数=%d)",
+                resolved, len(all_symbols), call_count,
             )
         except Exception as e:
             logger.warning("合约缓存初始化异常: %s (使用品种名回退)", e)

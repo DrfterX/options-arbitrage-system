@@ -6,6 +6,7 @@
   - 品种准确率 < 40% → 抑制（除非 L2 通过）
   - 能源化工板块 → 加权 + 优先推送
   - 评分 >= 0.60 → 提高推送优先级
+  - 兜底有效置信度门槛 55% → 低于此值的低分信号不推送
 
 用法:
     from signals.smart_filter import SmartFilter
@@ -253,7 +254,16 @@ class SmartFilter:
         # ─── 其余信号低优先级推送 ───
         boost = self.get_sector_boost(symbol)
         effective_conf = acc * boost
-        if effective_conf >= 50.0:
+        if effective_conf >= 55.0:
+            # WATCH 信号在低优先级区直接抑制（最低优先级信号，极少有价值）
+            if signal_type == "WATCH":
+                return FilterDecision(
+                    should_push=False,
+                    push_level="SUPPRESS",
+                    reason=f"WATCH 信号在低优先级区（有效置信度 {effective_conf:.1f}%），已抑制",
+                    confidence=effective_conf,
+                    boost_factor=boost,
+                )
             return FilterDecision(
                 should_push=True,
                 push_level="LOW",
@@ -265,7 +275,7 @@ class SmartFilter:
         return FilterDecision(
             should_push=False,
             push_level="SUPPRESS",
-            reason=f"综合置信度 {effective_conf:.1f}% < 50%，已抑制",
+            reason=f"综合置信度 {effective_conf:.1f}% < 55%，已抑制",
             confidence=effective_conf,
             boost_factor=boost,
         )

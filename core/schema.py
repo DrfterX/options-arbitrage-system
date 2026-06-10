@@ -177,6 +177,27 @@ ALL_TABLES: dict[str, str] = {
             updated_at  TEXT DEFAULT (datetime('now'))
         )
     """,
+
+    # ── 11. 过滤决策日志 ──────────────────────────────────────
+    "filter_decision_log": """
+        CREATE TABLE IF NOT EXISTS filter_decision_log (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            fingerprint       TEXT NOT NULL,
+            symbol            TEXT NOT NULL,
+            contract          TEXT NOT NULL,
+            score             REAL DEFAULT 0,
+            level1_pass       INTEGER DEFAULT 0,
+            level2_pass       INTEGER DEFAULT 0,
+            signal_type       TEXT NOT NULL,
+            direction         TEXT DEFAULT '',
+            should_push       INTEGER DEFAULT 0,
+            push_level        TEXT DEFAULT 'SUPPRESS',
+            reason            TEXT DEFAULT '',
+            confidence        REAL DEFAULT 0,
+            boost_factor      REAL DEFAULT 1.0,
+            created_at        TEXT DEFAULT (datetime('now'))
+        )
+    """,
 }
 
 # ============================================================
@@ -202,4 +223,7 @@ INDEXES: list[str] = [
     "CREATE INDEX IF NOT EXISTS idx_options_signals_created ON options_signals(created_at)",
     "CREATE INDEX IF NOT EXISTS idx_signal_push_log_fp ON signal_push_log(fingerprint)",
     "CREATE INDEX IF NOT EXISTS idx_signal_push_log_pushed ON signal_push_log(pushed_at)",
+    "CREATE INDEX IF NOT EXISTS idx_filter_log_created ON filter_decision_log(created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_filter_log_symbol ON filter_decision_log(symbol)",
+    "CREATE INDEX IF NOT EXISTS idx_filter_log_push_level ON filter_decision_log(push_level)",
 ]

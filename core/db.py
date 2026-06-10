@@ -34,21 +34,26 @@ class Database:
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         self.db_path = str(db_path)
 
-    def get_conn(self) -> sqlite3.Connection:
+    def get_conn(self, timeout: float = 30.0) -> sqlite3.Connection:
         """获取数据库连接。
 
         每次调用返回新连接，已配置：
         - ``row_factory = sqlite3.Row``（返回 dict-like 对象）
         - ``PRAGMA journal_mode=WAL``（写前日志模式）
         - ``PRAGMA foreign_keys=ON``（外键约束）
+        - ``PRAGMA busy_timeout``（等待锁释放超时，默认 5 秒）
+
+        Args:
+            timeout: 连接超时秒数，默认 30 秒。
 
         Returns:
             配置好的 sqlite3.Connection 对象。
         """
-        conn = sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_path, timeout=timeout)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA foreign_keys=ON")
+        conn.execute("PRAGMA busy_timeout=5000")
         return conn
 
     def init_all_tables(self) -> None:

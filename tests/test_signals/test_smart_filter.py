@@ -168,19 +168,20 @@ class TestRule5EntrySignal:
         assert d.push_level == "NORMAL"
 
     def test_generic_signal_suppressed(self):
-        """XXX 默认准确率 50% + 低评分 + 非 ENTRY → 低优先级推送。"""
+        """XXX 默认准确率 50% + 低评分 + 非 ENTRY → 抑制。"""
         f = make_filter()
         d = f.evaluate("XX", score=0.3, level1_pass=False, level2_pass=False)
-        # 有效置信度 50% * 1.0 = 50% ≥ 50% → LOW
-        assert d.should_push is True
-        assert d.push_level == "LOW"
+        # effective_conf = 50% * 1.0 = 50% < 55% → SUPPRESS
+        assert d.should_push is False
+        assert d.push_level == "SUPPRESS"
 
     def test_unknown_very_low(self):
-        """XX 默认 50% 的准确率，不开箱即用"""
+        """ZZ 默认 50% 准确率，有效置信度 50% < 55% → 抑制。"""
         f = make_filter()
         d = f.evaluate("ZZ", score=0.1, level1_pass=False, level2_pass=False)
-        # default_accuracy=50%, boost=1.0, effective=50% → LOW
-        assert d.should_push is True
+        # default_accuracy=50%, boost=1.0, effective=50% < 55% → SUPPRESS
+        assert d.should_push is False
+        assert d.push_level == "SUPPRESS"
 
 
 # ── 边界条件 ────────────────────────────────────────────

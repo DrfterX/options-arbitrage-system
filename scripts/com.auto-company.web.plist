@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.auto-company.web</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/ayong/options_arbitrage_system/scripts/pm2-resurrect.sh</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <false/>
+    <key>StandardOutPath</key>
+    <string>/Users/ayong/.hermes/logs/web-launchd.stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/ayong/.hermes/logs/web-launchd.stderr.log</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/Users/ayong/.workbuddy/binaries/node/versions/22.22.2/bin:/Users/ayong/.local/bin:/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+</dict>
+</plist>

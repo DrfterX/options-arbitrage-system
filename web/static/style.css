@@ -197,6 +197,144 @@ body {
 .stat-item.brand .value { color: var(--brand); }
 
 /* ═══════════════════════════════════════════════════════════════
+   SMARTFILTER 防火墙面板
+   ═══════════════════════════════════════════════════════════════ */
+
+.filter-section {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px 16px;
+  margin-bottom: 12px;
+  transition: border-color .3s, background .3s;
+}
+
+.filter-section h2 {
+  font-size: .74rem;
+  font-weight: 600;
+  letter-spacing: .04em;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.filter-section h2 .badge {
+  font-size: .6rem;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--brand-bg);
+  color: var(--brand);
+  font-family: var(--font-mono);
+}
+
+/* ── 统计卡片行 ── */
+
+.filter-stats {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.fs-card {
+  flex: 1;
+  min-width: 90px;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: rgba(14, 17, 24, .5);
+  text-align: center;
+  transition: border-color .2s;
+}
+
+.fs-card:hover {
+  border-color: var(--border-light);
+}
+
+.fs-card .fs-label {
+  font-size: .62rem;
+  color: var(--text3);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+
+.fs-card .fs-value {
+  font-size: 1.1rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  letter-spacing: -.02em;
+}
+
+/* 各卡片色 */
+.fs-card.total .fs-value { color: var(--brand); }
+.fs-card.pushed .fs-value { color: #22c55e; }
+.fs-card.suppressed .fs-value { color: #f04438; }
+.fs-card.rate .fs-value { color: #3b82f6; }
+
+/* ── 抑制信号表格 ── */
+
+.filter-log {
+  margin-top: 4px;
+}
+
+.filter-log h3 {
+  font-size: .68rem;
+  font-weight: 500;
+  color: var(--text2);
+  margin-bottom: 6px;
+  letter-spacing: .04em;
+}
+
+.fs-table {
+  border-collapse: collapse;
+  font-size: .68rem;
+  width: 100%;
+}
+
+.fs-table th {
+  padding: 4px 8px;
+  color: var(--text3);
+  font-weight: 500;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  font-size: .6rem;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+.fs-table td {
+  padding: 3px 8px;
+  border-bottom: 1px solid rgba(30, 38, 50, .2);
+  font-family: var(--font-mono);
+  font-size: .65rem;
+  vertical-align: middle;
+}
+
+.fs-table tbody tr:hover {
+  background: rgba(240, 180, 41, .03);
+}
+
+.fs-table .fs-suppressed {
+  color: #f04438;
+  font-weight: 600;
+}
+
+.fs-table .fs-low {
+  color: var(--brand);
+}
+
+.fs-table .fs-normal {
+  color: #22c55e;
+}
+
+.fs-table .fs-high {
+  color: #3b82f6;
+}
+
+/* ═══════════════════════════════════════════════════════════════
    SECTOR STATS
    ═══════════════════════════════════════════════════════════════ */
 
