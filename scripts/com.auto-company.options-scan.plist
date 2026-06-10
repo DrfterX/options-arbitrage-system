@@ -6,7 +6,7 @@
     <string>com.auto-company.options-scan</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/ayong/projects/options_arbitrage_system/scripts/auto_scan.sh</string>
+        <string>/Users/ayong/options_arbitrage_system/scripts/auto_scan.sh</string>
         <string>all</string>
     </array>
     <key>StartInterval</key>
