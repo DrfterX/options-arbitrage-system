@@ -13,13 +13,10 @@ Flask Web 看板应用 — 期货期权统一信号平台。
 """
 
 import logging
-import sys
-import os
+import json
 import sqlite3
 from datetime import datetime
 from flask import Flask, render_template, jsonify, request
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from core.db import Database
 from config.settings import DB_PATH
@@ -57,7 +54,7 @@ SECTORS = {
 KLINE_COUNT = 24
 
 def _get_hub():
-    from signal.hub import SignalHub
+    from signals.hub import SignalHub
     return SignalHub(db)
 
 
@@ -69,7 +66,6 @@ def _get_iv_recorder():
 @app.route("/")
 def index() -> str:
     """统一看板首页 — 服务端渲染，数据嵌入HTML。"""
-    import json
     conn = db.get_conn()
     try:
         # 1. 信号矩阵数据

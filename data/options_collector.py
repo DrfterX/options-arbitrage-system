@@ -534,27 +534,88 @@ class OptionsCollector:
     # ── 期权链获取 ───────────────────────────────────────────
 
     def get_option_chain(
-        self, symbol_name: str, contract: str, futures_price: float
+        self, symbol_name: str, contract: str, futures_price: float, symbol: str = ""
     ) -> Tuple[List[dict], List[dict]]:
-        """获取期权链原始数据（含 IV + Greeks）。
+        """获取期权链原始数据（含 IV + Greeks），多策略回退。
 
-        调用 AKShare 获取期权合约表，对每档计算 Black-76 IV 和 Greeks，
-        返回持仓量最大的 Top5 看涨和看跌。
+        策略顺序：
+        1. Sina table API（主力月份，失败则试相邻月份 ±1/±2）
+        2. SHFE exchange API（当品种为 SHFE 时）
+        3. CZCE exchange API（当品种为 CZCE 时，用当日或前一日）
 
         Args:
             symbol_name: 期权名称（如 ``'螺纹钢期权'``）。
             contract: 合约代码（如 ``'RB2609'``）。
             futures_price: 标的价格。
+            symbol: 品种代码（如 ``'RB'``），用于交易所判断。
 
         Returns:
-            ``(calls, puts)`` 元组，每项为 Top5 期权字典列表，
-            每项含 type / code / strike / price / oi / iv / delta /
-            gamma / theta / vega / intrinsic / time_value。
+            ``(calls, puts)`` 元组，每项为 Top5 期权字典列表。
         """
-        r = 0.02  # 无风险利率
+        # 获取交易所
+        exchange = self._get_exchange_from_symbol(symbol)
+
+        # 策略1: Sina table API — 多月份迭代
+        contract_variants = self._expand_contract_months(contract)
+        for cv in contract_variants:
+            calls, puts = self._try_sina_table(symbol_name, cv, futures_price)
+            if calls or puts:
+                return calls, puts
+
+        # 策略2: SHFE exchange API
+        if exchange == "SHFE":
+            calls, puts = self._try_shfe_api(symbol_name, futures_price, contract)
+            if calls or puts:
+                return calls, puts
+
+        # 策略3: CZCE exchange API（用当日或前一日）
+        if exchange == "CZCE":
+            calls, puts = self._try_czce_api(symbol_name, futures_price, contract)
+            if calls or puts:
+                return calls, puts
+
+        return [], []
+
+    def _get_exchange_from_symbol(self, symbol: str) -> str:
+        """通过品种代码获取交易所代码。"""
+        if not symbol:
+            return ""
+        info = self.registry.get(symbol)
+        return info.get("exchange", "") if info else ""
+
+    def _expand_contract_months(self, contract: str) -> List[str]:
+        """扩展合约月份：先原月份，再尝试相邻月份。
+
+        如 ``'AG2609'`` → ``['AG2609', 'AG2610', 'AG2608', 'AG2611', 'AG2607']``
+        """
+        sym = contract[:-4]  # 'AG'
+        try:
+            year = int(contract[-4:-2])  # 26
+            month = int(contract[-2:])  # 9
+        except ValueError:
+            return [contract]
+
+        variants = [contract]
+        for offset in [1, -1, 2, -2]:
+            m = month + offset
+            y = year
+            if m > 12:
+                m -= 12
+                y += 1
+            elif m < 1:
+                m += 12
+                y -= 1
+            if 1 <= m <= 12:
+                variants.append(f"{sym}{y:02d}{m:02d}")
+        return variants
+
+    def _try_sina_table(
+        self, symbol_name: str, contract: str, futures_price: float
+    ) -> Tuple[List[dict], List[dict]]:
+        """尝试通过 Sina option_commodity_contract_table_sina 获取期权链。"""
+        r = 0.02
         expiry = estimate_expiry(contract)
         T = max((expiry - date.today()).days, 1) / 365.0
-
         try:
             df = ak.option_commodity_contract_table_sina(
                 symbol=symbol_name, contract=contract
@@ -562,28 +623,31 @@ class OptionsCollector:
             if df is None or df.empty:
                 return [], []
         except Exception as e:
-            logger.debug("get_option_chain: %s %s → %s", symbol_name, contract, e)
+            logger.debug("_try_sina_table: %s %s → %s", symbol_name, contract, e)
             return [], []
 
+        return self._parse_sina_table(df, futures_price, T, r)
+
+    @staticmethod
+    def _parse_sina_table(
+        df, futures_price: float, T: float, r: float
+    ) -> Tuple[List[dict], List[dict]]:
+        """解析 Sina 期权合约表 DataFrame 为 calls/puts 列表。"""
         opts: List[dict] = []
         for _, row in df.iterrows():
             strike = float(row["行权价"])
-            for ot, cp, ic in [
-                ("C", "看涨合约", True),
-                ("P", "看跌合约", False),
-            ]:
+            for ot, cp, ic in [("C", "看涨合约", True), ("P", "看跌合约", False)]:
                 oi = float(row.get(f"{cp}-持仓量", 0))
                 price = float(row.get(f"{cp}-最新价", 0))
                 code = row.get(f"{cp}-{cp}期权合约", "")
                 if oi > 0 and price > 0:
                     iv = calc_iv(price, futures_price, strike, T, r, ic)
                     g = black_greeks(futures_price, strike, T, r, iv, ic)
-                    iv_val = (
+                    intrinsic = (
                         max(0, futures_price - strike)
                         if ic
                         else max(0, strike - futures_price)
                     )
-                    tv = max(price - iv_val, 0)
                     opts.append({
                         "type": ot,
                         "code": code,
@@ -595,9 +659,191 @@ class OptionsCollector:
                         "gamma": g["gamma"],
                         "theta": g["theta"],
                         "vega": g["vega"],
-                        "intrinsic": iv_val,
-                        "time_value": tv,
+                        "intrinsic": intrinsic,
+                        "time_value": max(price - intrinsic, 0),
                     })
+
+        calls = sorted(
+            [o for o in opts if o["type"] == "C"],
+            key=lambda x: x["oi"],
+            reverse=True,
+        )[:5]
+        puts = sorted(
+            [o for o in opts if o["type"] == "P"],
+            key=lambda x: x["oi"],
+            reverse=True,
+        )[:5]
+        return calls, puts
+
+    def _try_shfe_api(
+        self, symbol_name: str, futures_price: float, contract: str
+    ) -> Tuple[List[dict], List[dict]]:
+        """通过 SHFE option_hist_shfe 获取期权链（含交易所计算的德尔塔值）。"""
+        today_str = date.today().strftime("%Y%m%d")
+        try:
+            df = ak.option_hist_shfe(symbol=symbol_name, trade_date=today_str)
+            if df is None or df.empty:
+                return [], []
+        except Exception as e:
+            logger.debug("_try_shfe_api: %s → %s", symbol_name, e)
+            return [], []
+
+        # 判断日期是否非交易日（数据全零或极少行）
+        if len(df) < 50:
+            return [], []
+
+        return self._parse_exchange_options(df, futures_price, contract, exchange="SHFE")
+
+    def _try_czce_api(
+        self, symbol_name: str, futures_price: float, contract: str
+    ) -> Tuple[List[dict], List[dict]]:
+        """通过 CZCE option_hist_czce 获取期权链（含交易所计算的隐含波动率与德尔塔）。
+
+        先尝试当日，失败则用前一日。
+        """
+        today_str = date.today().strftime("%Y%m%d")
+        yesterday_str = (date.today().day - 1).__str__()  # 备用
+        from datetime import timedelta
+        yesterday_str = (date.today() - timedelta(days=1)).strftime("%Y%m%d")
+
+        for dt in [today_str, yesterday_str]:
+            try:
+                df = ak.option_hist_czce(symbol=symbol_name, trade_date=dt)
+                if df is not None and not df.empty and len(df) > 50:
+                    return self._parse_exchange_options(df, futures_price, contract, exchange="CZCE")
+            except Exception as e:
+                logger.debug("_try_czce_api: %s %s → %s", symbol_name, dt, e)
+        return [], []
+
+    @staticmethod
+    def _parse_exchange_options(
+        df, futures_price: float, contract: str, exchange: str = "SHFE"
+    ) -> Tuple[List[dict], List[dict]]:
+        """解析交易所 API（SHFE/CZCE）返回的 DataFrame。
+
+        SHFE 列: 合约代码, 收盘价, 持仓量, 德尔塔, 结算价, 行权量
+        CZCE 列: 合约代码, 今收盘, 持仓量, DELTA, 隐含波动率
+
+        Args:
+            contract: 主力合约代码（如 AG2609），用于月份过滤。
+        """
+        r = 0.02
+        opts: List[dict] = []
+
+        # 提取目标月份（合约代码后缀，如 '2609'）
+        target_month_suffix = contract[-4:] if len(contract) >= 4 else ""
+
+        # 列名映射
+        price_col = "收盘价" if exchange == "SHFE" else "今收盘"
+        delta_col = "德尔塔" if exchange == "SHFE" else "DELTA"
+        iv_col = None if exchange == "SHFE" else "隐含波动率"
+
+        for _, row in df.iterrows():
+            code = str(row.get("合约代码", ""))
+            if not code:
+                continue
+
+            # 合约月份过滤 — 只保留与主力合约月份相关的合约
+            if exchange == "SHFE":
+                # SHFE: 'cu2607C76000' → code[2:6] = '2607'
+                code_month = code[2:6]
+            else:
+                # CZCE: 'SA607C1000' → 6='2026', '07'='July' → '2607'
+                code_month = f"{'2' if not code.isupper() else '2'}{code[2:4]}{code[4:6]}"
+
+            if target_month_suffix and len(code_month) == 4:
+                # 放宽月份匹配：允许 ±1 个月的偏差（期权月份可能略晚于主力合约月份）
+                try:
+                    target_m = int(target_month_suffix[2:])
+                    code_m = int(code_month[2:])
+                    diff = abs(code_m - target_m)
+                    if diff > 0 and diff > 1 and min(diff, 12 - diff) > 1:
+                        continue
+                except ValueError:
+                    pass
+
+            # 解析期权类型和行权价
+            cp_idx = -1
+            for j, ch in enumerate(code):
+                if ch in ("C", "P"):
+                    cp_idx = j
+                    break
+            if cp_idx < 0:
+                continue
+
+            ot = code[cp_idx]
+            try:
+                strike = float(code[cp_idx + 1:])
+            except (ValueError, TypeError):
+                continue
+
+            oi = float(row.get("持仓量", 0))
+            price = float(row.get(price_col, 0))
+            if oi <= 0 or price <= 0:
+                continue
+
+            # 估算 T
+            try:
+                opt_month = int(code_month[2:])
+                opt_year = int("20" + code_month[:2])
+                expiry_d = date(opt_year, opt_month, 25)
+                if expiry_d <= date.today():
+                    # 已到期 → 移入下个月
+                    if opt_month == 12:
+                        expiry_d = date(opt_year + 1, 1, 25)
+                    else:
+                        expiry_d = date(opt_year, opt_month + 1, 25)
+                T = max((expiry_d - date.today()).days, 1) / 365.0
+            except Exception:
+                T = 30 / 365.0
+
+            iv_val: float = 0.0
+            # CZCE 带隐含波动率列
+            if iv_col and iv_col in df.columns:
+                raw_iv = row.get(iv_col)
+                if raw_iv is not None:
+                    try:
+                        iv_val = float(raw_iv) / 100.0  # 百分比转小数
+                    except (ValueError, TypeError):
+                        iv_val = calc_iv(price, futures_price, strike, T, r, ot == "C")
+                else:
+                    iv_val = calc_iv(price, futures_price, strike, T, r, ot == "C")
+            else:
+                iv_val = calc_iv(price, futures_price, strike, T, r, ot == "C")
+
+            if iv_val <= 0:
+                continue
+
+            g = black_greeks(futures_price, strike, T, r, iv_val, ot == "C")
+
+            # 使用交易所计算的德尔塔（更精确）
+            if delta_col in df.columns:
+                raw_delta = row.get(delta_col)
+                if raw_delta is not None:
+                    try:
+                        g["delta"] = float(raw_delta)
+                    except (ValueError, TypeError):
+                        pass
+
+            intrinsic = (
+                max(0, futures_price - strike)
+                if ot == "C"
+                else max(0, strike - futures_price)
+            )
+            opts.append({
+                "type": ot,
+                "code": code,
+                "strike": strike,
+                "price": price,
+                "oi": oi,
+                "iv": iv_val,
+                "delta": g["delta"],
+                "gamma": g["gamma"],
+                "theta": g["theta"],
+                "vega": g["vega"],
+                "intrinsic": intrinsic,
+                "time_value": max(price - intrinsic, 0),
+            })
 
         calls = sorted(
             [o for o in opts if o["type"] == "C"],

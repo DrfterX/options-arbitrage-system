@@ -48,11 +48,11 @@ def _get_active_n_structure(
     now = int(time_module.time())
 
     freshness: Dict[str, int] = {
-        "3m": 2 * 86400,
-        "15m": 2 * 86400,
-        "1h": 7 * 86400,
-        "1d": 30 * 86400,
-        "1w": 60 * 86400,
+        "3m": 5 * 86400,
+        "15m": 5 * 86400,
+        "1h": 14 * 86400,
+        "1d": 45 * 86400,
+        "1w": 90 * 86400,
     }
 
     with db.get_conn() as conn:

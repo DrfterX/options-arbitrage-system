@@ -22,9 +22,9 @@ from config.contracts import ContractRegistry
 from data.futures_collector import FuturesCollector
 from data.options_collector import OptionsCollector
 from data.iv_recorder import IVRecorder
-from signal.hub import SignalHub
-from signal.formatter import UnifiedFormatter
-from signal.dispatcher import dispatch
+from signals.hub import SignalHub
+from signals.formatter import UnifiedFormatter
+from signals.dispatcher import dispatch
 
 logger = logging.getLogger(__name__)
 
@@ -172,7 +172,7 @@ class Orchestrator:
             # 3. 获取期权链
             try:
                 calls, puts = self.options_collector.get_option_chain(
-                    opt_name, contract, futures_price
+                    opt_name, contract, futures_price, symbol=symbol
                 )
             except Exception as e:
                 logger.warning("  获取期权链失败 %s: %s", symbol, e)

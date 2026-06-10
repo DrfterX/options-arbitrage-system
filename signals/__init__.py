@@ -7,9 +7,9 @@
     dispatch: 分级推送调度函数
 """
 
-from signal.hub import SignalHub
-from signal.formatter import UnifiedFormatter
-from signal.dispatcher import dispatch
+from signals.hub import SignalHub
+from signals.formatter import UnifiedFormatter
+from signals.dispatcher import dispatch
 
 __all__ = [
     "SignalHub",
