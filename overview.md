@@ -25,7 +25,7 @@
 pipeline/orchestrator.py --mode=futures|options|all|eod  ← 唯一入口
 ├── futures/ (7 files)     N型状态机 + 三级评分 + MACD轨迹
 ├── options/ (5 files)     Black-76 + 比例价差 + 多策略 + 风控
-├── signal/ (4 files)      统一信号中心 + 格式化 + 分级推送
+├── signals/ (4 files)     统一信号中心 + 格式化 + 分级推送
 ├── web/ (4 files)         Flask看板 (localhost:5100)
 ├── data/ (4 files)        K线采集 + 期权链 + IV记录
 ├── core/ (3 files)        DB连接工厂 + 10表Schema

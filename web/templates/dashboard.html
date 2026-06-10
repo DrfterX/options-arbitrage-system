@@ -129,6 +129,16 @@
   </div>
 </div>
 
+<!-- ── 回测面板 ── -->
+<div class="cards-section" id="backtest-panel">
+  <h2>📊 信号回测验证 <span class="badge" id="bt-status">加载中…</span></h2>
+  <div id="bt-summary" class="bt-summary"></div>
+  <div id="bt-levels" class="bt-section"></div>
+  <div id="bt-bands" class="bt-section"></div>
+  <div id="bt-sectors" class="bt-section"></div>
+  <div id="bt-symbols" class="bt-section"></div>
+</div>
+
 </div><!-- /.main -->
 
 <div class="footer">Auto Company · 期权期货交易信号平台 · v0.1.0</div>
@@ -145,6 +155,27 @@
 </div>
 
 <script>
+// ── 自动刷新：30秒轮询，仅在可见时刷新（避免非活动标签页浪费）──
+var AUTO_REFRESH = true;
+if (AUTO_REFRESH) {
+  setInterval(function() {
+    if (document.hidden) return;
+    fetch('/api/summary', { cache: 'no-cache' })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        var now = new Date();
+        var ts = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0') + ' ' + String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+        var timeEl = document.querySelector('.topbar-time');
+        if (timeEl) timeEl.textContent = ts;
+        var badge = document.querySelector('.data-badge');
+        if (badge && d.futures_count != null) badge.textContent = d.futures_count + ' 品种';
+      })
+      .catch(function(e) { /* silent */ });
+  }, 30000);
+  // 每5分钟全页重载（保持N型结构等数据最新）
+  setTimeout(function() { location.reload(); }, 300000);
+}
+
 // IV Chart (lazy)
 var IV_DATA = JSON.parse('{{ iv_json|safe }}');
 (function initIV() {
@@ -256,6 +287,89 @@ document.addEventListener('click', function(e) {
     }
 });
 document.getElementById('kpClose').addEventListener('click', function(e) { e.stopPropagation(); hidePopup(); _currentCell = null; });
+
+// ── 回测面板 ──
+(function loadBacktest() {
+  var statusEl = document.getElementById('bt-status');
+  fetch('/api/backtest', { cache: 'no-cache' })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.error) { statusEl.textContent = '错误: ' + d.error; return; }
+      statusEl.textContent = d.valid_trades + '/' + d.total_signals + ' 笔有效 | ' + d.elapsed_seconds + 's';
+
+      // summary
+      var s = d.summary;
+      var sumHtml = '<div class="bt-summary-row">';
+      var days = [1,2,5,10];
+      days.forEach(function(dd) {
+        var k = dd + 'd';
+        var v = s[k];
+        if (!v || !v.total) return;
+        var pct = v.accuracy;
+        var cls = pct >= 60 ? 'bt-good' : (pct >= 50 ? 'bt-mid' : 'bt-bad');
+        sumHtml += '<div class="bt-stat"><span class="bt-label">' + dd + '日</span>' +
+          '<span class="bt-val ' + cls + '">' + pct.toFixed(1) + '%</span>' +
+          '<span class="bt-sub">' + v.correct + '/' + v.total + '</span></div>';
+      });
+      sumHtml += '</div>';
+      document.getElementById('bt-summary').innerHTML = sumHtml;
+
+      // by level
+      var lvlHtml = '<h3>按验证等级</h3><table class="bt-table"><tr><th>等级</th>';
+      days.forEach(function(dd) { lvlHtml += '<th>' + dd + 'd</th>'; });
+      lvlHtml += '<th>样本</th></tr>';
+      (d.by_level || []).forEach(function(l) {
+        lvlHtml += '<tr><td class="bt-lvl">' + l.level + '</td>';
+        days.forEach(function(dd) {
+          var k = dd + 'd_acc';
+          var v = l[k] || 0;
+          var cls = v >= 60 ? 'bt-good' : (v >= 50 ? 'bt-mid' : 'bt-bad');
+          var tot = l[dd + 'd_total'] || 0;
+          lvlHtml += '<td class="' + cls + '">' + v.toFixed(1) + '% <span class="bt-n">(' + tot + ')</span></td>';
+        });
+        lvlHtml += '<td>' + l.count + '</td></tr>';
+      });
+      lvlHtml += '</table>';
+      document.getElementById('bt-levels').innerHTML = lvlHtml;
+
+      // by score band
+      var bandHtml = '<h3>按评分区间</h3><table class="bt-table"><tr><th>评分</th>';
+      days.forEach(function(dd) { bandHtml += '<th>' + dd + 'd</th>'; });
+      bandHtml += '<th>样本</th></tr>';
+      (d.by_score_band || []).forEach(function(b) {
+        bandHtml += '<tr><td class="bt-lvl">' + b.band + '</td>';
+        days.forEach(function(dd) {
+          var k = dd + 'd_acc';
+          var v = b[k] || 0;
+          var cls = v >= 60 ? 'bt-good' : (v >= 50 ? 'bt-mid' : 'bt-bad');
+          var tot = b[dd + 'd_total'] || 0;
+          bandHtml += '<td class="' + cls + '">' + v.toFixed(1) + '% <span class="bt-n">(' + tot + ')</span></td>';
+        });
+        bandHtml += '<td>' + b.count + '</td></tr>';
+      });
+      bandHtml += '</table>';
+      document.getElementById('bt-bands').innerHTML = bandHtml;
+
+      // by sector (top)
+      var secHtml = '<h3>板块 1日准确率</h3><table class="bt-table"><tr><th>板块</th>';
+      days.forEach(function(dd) { secHtml += '<th>' + dd + 'd</th>'; });
+      secHtml += '<th>品种数</th></tr>';
+      (d.by_sector || []).slice(0, 8).forEach(function(x) {
+        secHtml += '<tr><td class="bt-lvl">' + x.sector + '</td>';
+        days.forEach(function(dd) {
+          var k = dd + 'd_acc';
+          var v = x[k] || 0;
+          var cls = v >= 60 ? 'bt-good' : (v >= 50 ? 'bt-mid' : 'bt-bad');
+          var tot = x[dd + 'd_total'] || 0;
+          secHtml += '<td class="' + cls + '">' + v.toFixed(1) + '% <span class="bt-n">(' + tot + ')</span></td>';
+        });
+        secHtml += '<td>' + x.count + '</td></tr>';
+      });
+      secHtml += '</table>';
+      document.getElementById('bt-sectors').innerHTML = secHtml;
+    })
+    .catch(function(e) { statusEl.textContent = '加载失败'; console.error(e); });
+})();
 </script>
 </body>
 </html>

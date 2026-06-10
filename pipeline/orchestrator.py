@@ -60,20 +60,123 @@ class Orchestrator:
         self.hub: SignalHub = SignalHub(self.db)
         self.formatter: UnifiedFormatter = UnifiedFormatter()
 
+    # ── 数据刷新 ──────────────────────────────────────────────
+
+    def data_refresh(self) -> dict:
+        """刷新所有品种数据：采集K线 → 聚合 → MACD → 极值点 → N型结构。
+
+        在期货评分前执行，确保信号基于最新数据。
+
+        Returns:
+            刷新统计字典。
+        """
+        logger.info("=" * 50)
+        logger.info("数据刷新: 采集 → 聚合 → MACD → 极值点 → N型结构")
+        logger.info("=" * 50)
+
+        from futures.aggregator import aggregate_all
+        from futures.macd import calculate_all_timeframes
+        from futures.swing_points import update_all_timeframes
+        from futures.n_structure import detect_and_save
+
+        # 1. 采集K线
+        logger.info("[1/5] 采集K线数据...")
+        collect_stats = self.futures_collector.collect_all()
+
+        # 2. 获取已采集的合约
+        with self.db.get_conn() as conn:
+            contracts = conn.execute(
+                "SELECT DISTINCT symbol, contract FROM futures_klines ORDER BY symbol"
+            ).fetchall()
+
+        total = len(contracts)
+        if total == 0:
+            logger.warning("无品种数据，跳过数据刷新")
+            return {}
+
+        logger.info("[2/5] 聚合K线 (%d 品种)...", total)
+        agg_total = 0
+        for idx, row in enumerate(contracts, 1):
+            sym, contract = row["symbol"], row["contract"]
+            try:
+                c = aggregate_all(sym, contract, self.db)
+                agg_total += sum(c.values())
+            except Exception as e:
+                logger.warning("  聚合失败 %s: %s", sym, e)
+            if idx % 10 == 0:
+                logger.info("  聚合进度 [%d/%d]", idx, total)
+
+        logger.info("[3/5] 计算MACD (%d 品种)...", total)
+        macd_total = 0
+        for idx, row in enumerate(contracts, 1):
+            sym, contract = row["symbol"], row["contract"]
+            try:
+                c = calculate_all_timeframes(sym, contract, self.db)
+                macd_total += sum(c.values())
+            except Exception as e:
+                logger.warning("  MACD失败 %s: %s", sym, e)
+            if idx % 10 == 0:
+                logger.info("  MACD进度 [%d/%d]", idx, total)
+
+        logger.info("[4/5] 更新极值点 (%d 品种)...", total)
+        swing_total = 0
+        for idx, row in enumerate(contracts, 1):
+            sym, contract = row["symbol"], row["contract"]
+            try:
+                c = update_all_timeframes(sym, contract, self.db)
+                swing_total += sum(c.values())
+            except Exception as e:
+                logger.warning("  极值点失败 %s: %s", sym, e)
+            if idx % 10 == 0:
+                logger.info("  极值点进度 [%d/%d]", idx, total)
+
+        logger.info("[5/5] 检测N型结构 (%d 品种)...", total)
+        n_total = 0
+        timeframes = ["3m", "15m", "1h", "1d", "1w"]
+        for idx, row in enumerate(contracts, 1):
+            sym, contract = row["symbol"], row["contract"]
+            for tf in timeframes:
+                try:
+                    ns = detect_and_save(sym, contract, tf, self.db)
+                    if ns.get("is_active"):
+                        n_total += 1
+                except Exception as e:
+                    logger.warning("  N型失败 %s %s: %s", sym, tf, e)
+            if idx % 10 == 0:
+                logger.info("  N型进度 [%d/%d]", idx, total)
+
+        logger.info("数据刷新完成: 品种=%d 聚合=%d MACD=%d 极值点=%d N型=%d",
+                    total, agg_total, macd_total, swing_total, n_total)
+
+        return {
+            "collect_stats": collect_stats,
+            "contracts": total,
+            "aggregated": agg_total,
+            "macd": macd_total,
+            "swing_points": swing_total,
+            "n_structures": n_total,
+        }
+
     # ── 期货信号扫描 ──────────────────────────────────────────
 
-    def run_futures_scan(self) -> list:
+    def run_futures_scan(self, refresh: bool = True) -> list:
         """运行期货信号扫描。
 
         流程：
+            0. （新增）``data_refresh()`` 刷新K线 → N型结构数据
             1. 调用 ``futures.scorer.scan_all_contracts`` 扫描所有主力合约
             2. 对信号类型非 NONE 的结果写入 futures_signals
             3. 生成去重指纹，检查是否已推送
             4. ENTRY/CANDIDATE 信号分级推送
 
+        Args:
+            refresh: 是否在扫描前刷新数据，默认 True。
+
         Returns:
             SignalResult 列表（按评分降序）。
         """
+        if refresh:
+            self.data_refresh()
         from futures.scorer import scan_all_contracts
 
         logger.info("开始期货信号扫描...")

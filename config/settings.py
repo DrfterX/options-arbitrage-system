@@ -151,6 +151,13 @@ PUSH_CONFIG = {
 DEDUP_HOURS = 12
 PUSHED_LOG = os.path.expanduser("~/.hermes/options_pushed.json")
 
+# ── Telegram Bot 配置（推送实时信号用）─────────────────────
+# 参考：https://core.telegram.org/bots/api
+# 创建 Bot: @BotFather → /newbot → 获取 token
+# 获取 chat_id: 给 bot 发消息后访问 https://api.telegram.org/bot<token>/getUpdates
+TELEGRAM_BOT_TOKEN = ""  # 例: "123456:ABC-DEF1234..."
+TELEGRAM_CHAT_ID = ""    # 例: "-1001234567890"
+
 # ============================================================
 # 监控配置
 # ============================================================

@@ -1,7 +1,7 @@
 """
 Flask Web 看板应用 — 期货期权统一信号平台。
 
-提供：
+提供:
   - ``/`` — 统一看板首页。
   - ``/api/matrix`` — 多周期信号矩阵（品种×周期色块+共振）。
   - ``/api/klines`` — K线数据（用于浮窗蜡烛图）。
@@ -10,17 +10,20 @@ Flask Web 看板应用 — 期货期权统一信号平台。
   - ``/api/signals/options`` — 最近期权信号 JSON。
   - ``/api/iv/status`` — 所有品种 IV 状态 JSON。
   - ``/api/summary`` — 汇总概览 JSON。
+  - ``/api/backtest`` — 全量回测结果 JSON。
 """
 
 import logging
 import json
 import sqlite3
 from datetime import datetime
+from functools import wraps
 from flask import Flask, render_template, jsonify, request
 
 from core.db import Database
 from config.settings import DB_PATH
 from web.iron_ore_api import _build_bp
+from futures.backtest import run_backtest as _run_backtest
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +93,7 @@ def index() -> str:
             SELECT symbol, timeframe, direction, state,
                    point_a_price, point_b_price, point_c_price, updated_at
             FROM futures_n_structures
-            WHERE updated_at > datetime('now', '-2 days')
+            WHERE updated_at > datetime('now', '-30 days')
             ORDER BY symbol, timeframe
         ''').fetchall()
         structures = {}
@@ -100,7 +103,7 @@ def index() -> str:
                 "dir": d["direction"], "state": d["state"],
                 "a": d["point_a_price"], "b": d["point_b_price"], "c": d["point_c_price"],
             }
-        
+
         TIMEFRAMES = ["15m", "1h", "1d", "1w"]
         matrix = []
         for sector_name, symbols in SECTORS.items():
@@ -209,7 +212,7 @@ def api_matrix():
             SELECT symbol, timeframe, direction, state,
                    point_a_price, point_b_price, point_c_price, updated_at
             FROM futures_n_structures
-            WHERE updated_at > datetime('now', '-2 days')
+            WHERE updated_at > datetime('now', '-30 days')
             ORDER BY symbol, timeframe
         ''').fetchall()
 
@@ -406,6 +409,35 @@ def api_summary():
         "options_count": len(options),
         "iv_status": iv_status[:10],
     })
+
+
+# ─── 回测 API ─────────────────────────────────────────────
+
+
+_BACKTEST_CACHE: dict = {"result": None, "timestamp": 0}
+
+
+@app.route("/api/backtest")
+def api_backtest():
+    """获取全量信号回测结果（带 300 秒缓存）。"""
+    import time as time_module
+
+    now = time_module.time()
+    force = request.args.get("force", "").lower() == "true"
+
+    if not force and _BACKTEST_CACHE["result"] and (now - _BACKTEST_CACHE["timestamp"]) < 300:
+        return jsonify(_BACKTEST_CACHE["result"])
+
+    try:
+        result = _run_backtest(db)
+    except Exception as e:
+        logger.error("回测异常: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+    printable = {k: v for k, v in result.items() if k != "trades"}
+    _BACKTEST_CACHE["result"] = printable
+    _BACKTEST_CACHE["timestamp"] = now
+    return jsonify(printable)
 
 
 if __name__ == "__main__":
