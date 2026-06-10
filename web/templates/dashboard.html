@@ -3,103 +3,27 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>期货+期权交易信号平台</title>
+<title>期权期货交易信号平台</title>
+<link rel="stylesheet" href="/static/style.css">
 <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
-<style>
-*{margin:0;padding:0;box-sizing:border-box}
-:root{--bg:#0b1120;--card:#131c31;--t:#e2e8f0;--t2:#94a3b8;--t3:#64748b;--b:#1e293b;--red:#ef4444;--green:#22c55e;--yellow:#f59e0b}
-body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;background:var(--bg);color:var(--t);min-height:100vh;padding:16px}
-.hd{max-width:1600px;margin:0 auto 12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
-.hd h1{font-size:1.1rem;font-weight:700}.hd .up{color:var(--t3);font-size:.75rem}
-.ct{max-width:1600px;margin:0 auto}
-
-.stats-bar{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap}
-.stat-item{background:var(--card);border:1px solid var(--b);border-radius:6px;padding:8px 14px;flex:1;min-width:100px}
-.stat-item .label{font-size:.68rem;color:var(--t3);margin-bottom:2px}
-.stat-item .value{font-size:1.2rem;font-weight:700}
-.value.long{color:var(--red)}.value.short{color:var(--green)}
-
-.sector-stats{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
-.sector-card{background:var(--card);border:1px solid var(--b);border-radius:6px;padding:8px 12px;flex:1;min-width:110px;text-align:center}
-.sc-name{font-size:.75rem;font-weight:600;margin-bottom:4px}
-.sc-stats{display:flex;justify-content:center;gap:8px;font-size:.7rem;margin-bottom:2px}
-.sc-long{color:var(--red)}.sc-short{color:var(--green)}
-.sc-bias{font-size:.8rem;font-weight:700}.sc-score{font-size:.65rem;color:var(--t3)}
-
-.main-grid{display:grid;grid-template-columns:3fr 1fr;gap:14px;margin-bottom:14px}
-
-.matrix-section{background:var(--card);border:1px solid var(--b);border-radius:8px;padding:14px;overflow-x:auto}
-.matrix-section h2{font-size:.9rem;font-weight:600;margin-bottom:10px}
-.matrix-table{border-collapse:collapse;font-size:.75rem;width:100%;min-width:520px}
-.matrix-table th{padding:6px 8px;color:var(--t3);font-weight:500;text-align:center;border-bottom:1px solid var(--b);white-space:nowrap}
-.matrix-table th:first-child,.matrix-table td:first-child{text-align:left}
-.matrix-table td{padding:3px;text-align:center;border-bottom:1px solid rgba(30,41,59,0.3)}
-.signal-cell{width:100%;height:28px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:.68rem;font-weight:700;color:#fff;cursor:default;transition:opacity .2s}
-.signal-cell.kline-trigger{cursor:pointer}
-.signal-cell.kline-trigger:hover{opacity:1!important;box-shadow:0 0 8px rgba(255,255,255,0.2)}
-.signal-cell.empty{background:var(--bg);color:var(--t3);font-weight:400}
-.sector-row td{padding:6px 8px;background:rgba(30,41,59,0.3)}
-.sector-label{color:var(--t3);font-size:.72rem;font-weight:600}
-.resonance-high{background:rgba(34,197,94,0.05)}
-.resonance-mid{background:rgba(245,158,11,0.03)}
-.sym-name{font-weight:600;font-size:.78rem;white-space:nowrap;padding-left:8px!important}
-.res-cell{min-width:60px;padding:4px 8px!important}
-.res-track{width:100%;height:4px;background:var(--bg);border-radius:2px;margin-bottom:2px}
-.res-bar{height:100%;border-radius:2px}
-.res-val{font-size:.65rem;font-weight:600}
-
-.right-panel{display:flex;flex-direction:column;gap:14px}
-.iv-section{background:var(--card);border:1px solid var(--b);border-radius:8px;padding:14px}
-.iv-section h2{font-size:.9rem;font-weight:600;margin-bottom:10px}
-.options-section{background:var(--card);border:1px solid var(--b);border-radius:8px;padding:14px;max-height:500px;overflow-y:auto}
-.options-section h2{font-size:.9rem;font-weight:600;margin-bottom:10px}
-.option-card{padding:8px 10px;margin-bottom:6px;border-radius:4px;background:rgba(30,41,59,0.3);border-left:3px solid var(--b);font-size:.72rem}
-.option-card.极端高{border-left-color:var(--red);background:rgba(239,68,68,0.08)}
-.option-card.偏高{border-left-color:var(--yellow);background:rgba(245,158,11,0.08)}
-
-.cards-section{background:var(--card);border:1px solid var(--b);border-radius:8px;padding:14px;margin-bottom:14px}
-.cards-section h2{font-size:.9rem;font-weight:600;margin-bottom:10px}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px}
-.card{background:rgba(30,41,59,0.5);border-radius:6px;padding:10px;border:1px solid var(--b)}
-.ch{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
-.cn{font-weight:600;font-size:.82rem}.cc{color:var(--t3);font-size:.68rem;font-family:monospace}
-.cb{display:flex;align-items:center;gap:5px}
-.dg{color:#fff;padding:2px 5px;border-radius:3px;font-size:.65rem;font-weight:600}
-.lv{font-size:.72rem;letter-spacing:1px}.scv{font-weight:700;font-size:.78rem;margin-left:auto}
-
-.kline-popup{position:fixed;z-index:9999;background:rgba(11,17,32,0.97);border:1px solid var(--b);border-radius:10px;padding:12px;box-shadow:0 8px 32px rgba(0,0,0,0.6);display:none;min-width:280px;max-width:360px;pointer-events:auto}
-.kline-popup.show{display:block;animation:fadeIn .15s ease}
-@keyframes fadeIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
-.kp-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--b)}
-.kp-title{font-size:.85rem;font-weight:700}
-.kp-tf{font-size:.7rem;color:var(--t3);background:var(--bg);padding:2px 6px;border-radius:3px}
-.kp-dir{font-size:.75rem;font-weight:600;padding:2px 8px;border-radius:3px;color:#fff}
-.kp-dir.long{background:rgba(239,68,68,0.8)}
-.kp-dir.short{background:rgba(34,197,94,0.8)}
-.kp-chart-wrap{position:relative;margin:8px 0}
-.kp-chart-wrap canvas{width:100%;border-radius:4px}
-.kp-info{display:flex;justify-content:space-between;font-size:.65rem;color:var(--t3);margin-top:6px}
-.kp-state{color:var(--yellow);font-weight:600}
-.kp-close{position:absolute;top:8px;right:10px;font-size:1rem;color:var(--t3);cursor:pointer}
-
-@media(max-width:900px){
-  .main-grid{grid-template-columns:1fr}
-  .stats-bar,.sector-stats{flex-direction:column}
-  .grid{grid-template-columns:1fr}
-  .kline-popup{position:fixed!important;left:50%!important;bottom:0!important;top:auto!important;transform:translateX(-50%)!important;width:95vw!important;border-radius:12px 12px 0 0!important;max-height:60vh;overflow-y:auto}
-  .kp-close{display:block}
-}
-</style>
 </head>
 <body>
-<div class="hd"><h1>📊 期货+期权交易信号平台</h1><span class="up">更新于 {{ now }}</span></div>
-<div class="ct">
+<div class="app">
+<div class="topbar">
+  <h1><span class="dot"></span><span class="accent">▣</span> 信号矩阵 <span class="data-badge">期货 × 期权</span></h1>
+  <div class="topbar-right">
+    <span class="data-badge">{{ total_signals }} 品种</span>
+    <span class="topbar-time">{{ now }}</span>
+  </div>
+</div>
+
+<div class="main">
 
 <div class="stats-bar">
-  <div class="stat-item"><div class="label">做多品种</div><div class="value long">{{ long_count }}</div></div>
-  <div class="stat-item"><div class="label">做空品种</div><div class="value short">{{ short_count }}</div></div>
-  <div class="stat-item"><div class="label">总品种</div><div class="value">{{ total_signals }}</div></div>
-  <div class="stat-item"><div class="label">最高评分</div><div class="value" style="color:var(--yellow)">{{ "%.1f"|format(max_score) }}</div></div>
+  <div class="stat-item brand"><div class="label">最高评分</div><div class="value">{{ "%.1f"|format(max_score) }}</div><div class="stat-glow"></div></div>
+  <div class="stat-item long"><div class="label">做多</div><div class="value">{{ long_count }}</div><div class="stat-glow"></div></div>
+  <div class="stat-item short"><div class="label">做空</div><div class="value">{{ short_count }}</div><div class="stat-glow"></div></div>
+  <div class="stat-item"><div class="label">总品种</div><div class="value" style="color:var(--brand)">{{ total_signals }}</div><div class="stat-glow"></div></div>
 </div>
 
 <div class="sector-stats">
@@ -108,11 +32,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;backg
     <div class="sc-name">{{ s.name }}</div>
     <div class="sc-stats"><span class="sc-long">多 {{ s.long }}</span><span class="sc-short">空 {{ s.short }}</span></div>
     {% if s.bias == '多' %}
-    <div class="sc-bias" style="color:var(--red)">多偏</div>
+    <div class="sc-bias" style="color:var(--long)">多偏</div>
     {% elif s.bias == '空' %}
-    <div class="sc-bias" style="color:var(--green)">空偏</div>
+    <div class="sc-bias" style="color:var(--short)">空偏</div>
     {% else %}
-    <div class="sc-bias" style="color:var(--t3)">平</div>
+    <div class="sc-bias" style="color:var(--text3)">平</div>
     {% endif %}
     <div class="sc-score">均分 {{ "%.2f"|format(s.avg_score) }}</div>
   </div>
@@ -121,7 +45,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;backg
 
 <div class="main-grid">
   <div class="matrix-section">
-    <h2>🔥 多周期信号矩阵 <span style="color:var(--t3);font-weight:400;font-size:.75rem">(悬停色块查看K线)</span></h2>
+    <h2>🔥 多周期信号矩阵 <span class="badge">点击色块查看K线</span></h2>
     <table class="matrix-table">
       <thead><tr><th>品种</th><th>15m</th><th>1h</th><th>1d</th><th>1w</th><th>共振</th></tr></thead>
       <tbody>
@@ -138,7 +62,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;backg
         {% else %}
         <tr>
         {% endif %}
-          <td class="sym-name">{{ item.name }} <span style="color:var(--t3);font-size:.65rem;font-weight:400">{{ item.contract }}</span></td>
+          <td class="sym-name">{{ item.name }} <span class="sub">{{ item.contract }}</span></td>
           {% for cell in item.cells %}
             {% if cell.dir %}
             {% set is_long = cell.dir == 'LONG' %}
@@ -146,12 +70,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;backg
             {% if cell.a %}
             {% set alpha = [0.9, item.score * 1.2]|min %}
             {% if alpha < 0.25 %}{% set alpha = 0.25 %}{% endif %}
-            <td><div class="signal-cell kline-trigger" style="background:{{ color }};opacity:{{ alpha }}" onclick="showKlinePopup(this)" data-sym="{{ item.sym }}" data-tf="{{ cell.tf }}" data-dir="{{ cell.dir }}" data-a="{{ cell.a }}" data-b="{{ cell.b }}" data-c="{{ cell.c }}" title="N型结构: {{ cell.state or '' }}">{{ '多' if is_long else '空' }}</div></td>
+            <td><div class="signal-cell kline-trigger" style="opacity:{{ alpha }}" onclick="showKlinePopup(this)" data-sym="{{ item.sym }}" data-tf="{{ cell.tf }}" data-dir="{{ cell.dir }}" data-a="{{ cell.a }}" data-b="{{ cell.b }}" data-c="{{ cell.c }}" title="N型结构: {{ cell.state or '' }}"><span class="inner-text">{{ '多' if is_long else '空' }}</span></div></td>
             {% else %}
-            <td><div class="signal-cell kline-trigger" style="background:{{ color }};opacity:0.45" onclick="showKlinePopup(this)" data-sym="{{ item.sym }}" data-tf="{{ cell.tf }}" data-dir="{{ cell.dir }}" data-a="" data-b="" data-c="" title="信号方向（待N型确认）">{{ '多' if is_long else '空' }}</div></td>
+            <td><div class="signal-cell kline-trigger" style="opacity:0.45" onclick="showKlinePopup(this)" data-sym="{{ item.sym }}" data-tf="{{ cell.tf }}" data-dir="{{ cell.dir }}" data-a="" data-b="" data-c="" title="信号方向（待N型确认）"><span class="inner-text">{{ '多' if is_long else '空' }}</span></div></td>
             {% endif %}
             {% else %}
-            <td><div class="signal-cell empty">-</div></td>
+            <td><div class="signal-cell empty"><span class="inner-text">-</span></div></td>
             {% endif %}
           {% endfor %}
           {% set res_color = '#22c55e' if item.resonance >= 3 else ('#f59e0b' if item.resonance >= 2 else '#64748b') %}
@@ -174,13 +98,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;backg
       {% if options %}
       {% for s in options[:15] %}
       <div class="option-card {{ s.iv_level or '' }}">
-        <strong>{{ s.symbol }} {{ s.contract or '' }}</strong> <span style="color:var(--t3)">{{ s.strategy or '' }}</span>
-        <div>IV: {{ "%.1f"|format((s.iv_avg or 0)*100) }}% | 百分位: {{ "%.0f"|format(s.iv_percentile or 0) }}% | {{ s.iv_level or '' }}</div>
-        <div style="font-size:.7rem;color:var(--t3)">Δ:{{ "%.4f"|format(s.net_delta or 0) }} Θ:{{ "%.4f"|format(s.net_theta or 0) }}</div>
+        <span class="sym">{{ s.symbol }} {{ s.contract or '' }}</span> <span class="strat">{{ s.strategy or '' }}</span>
+        <div class="detail-row">IV: {{ "%.1f"|format((s.iv_avg or 0)*100) }}% | 百分位: {{ "%.0f"|format(s.iv_percentile or 0) }}% | {{ s.iv_level or '' }}</div>
+        <div class="greeks-row">Δ:{{ "%.4f"|format(s.net_delta or 0) }} Θ:{{ "%.4f"|format(s.net_theta or 0) }}</div>
       </div>
       {% endfor %}
       {% else %}
-      <p style="color:var(--t3)">暂无期权策略信号</p>
+      <p style="color:var(--text3)">暂无期权策略信号</p>
       {% endif %}
     </div>
   </div>
@@ -190,9 +114,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;backg
   <h2>🔔 最新信号</h2>
   <div class="grid">
 {% for s in cards %}
-  {% set dc = '#ef4444' if s.dir == 'LONG' else '#22c55e' %}
+  {% set dc = '#f04438' if s.dir == 'LONG' else '#22c55e' %}
   {% set dt = '多' if s.dir == 'LONG' else '空' %}
-  {% set sc = '#22c55e' if s.score >= 0.7 else ('#f59e0b' if s.score >= 0.5 else '#64748b') %}
+  {% set sc = '#22c55e' if s.score >= 0.7 else ('#f0b429' if s.score >= 0.5 else '#5a6173') %}
   <div class="card" style="border-left:3px solid {{ dc }}">
     <div class="ch"><span class="cn">{{ s.name }}</span><span class="cc">{{ s.contract }}</span></div>
     <div class="cb">
@@ -205,7 +129,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;backg
   </div>
 </div>
 
-</div>
+</div><!-- /.main -->
+
+<div class="footer">Auto Company · 期权期货交易信号平台 · v0.1.0</div>
+</div><!-- /.app -->
 
 <div class="kline-popup" id="klinePopup">
   <span class="kp-close" id="kpClose">&times;</span>
@@ -228,13 +155,12 @@ var IV_DATA = JSON.parse('{{ iv_json|safe }}');
     chart.setOption({
         backgroundColor:'transparent',
         grid:{top:20,right:20,bottom:30,left:45},
-        xAxis:{type:'category',data:IV_DATA.map(function(d){return d.symbol}),axisLabel:{color:'#94a3b8',fontSize:10}},
-        yAxis:{type:'value',max:100,axisLabel:{color:'#64748b',fontSize:10},splitLine:{lineStyle:{color:'rgba(100,116,139,0.1)'}}},
-        series:[{type:'bar',data:IV_DATA.map(function(d){return {value:d.percentile,itemStyle:{color:d.level==='极端高'?'#ef4444':d.level==='偏高'?'#f59e0b':d.level==='偏低'?'#06b6d4':d.level==='极端低'?'#3b82f6':d.level==='数据不足'?'#94a3b8':'#64748b'}}})}]
+        xAxis:{type:'category',data:IV_DATA.map(function(d){return d.symbol}),axisLabel:{color:'#8b92a5',fontSize:10}},
+        yAxis:{type:'value',max:100,axisLabel:{color:'#5a6173',fontSize:10},splitLine:{lineStyle:{color:'rgba(90,97,115,0.08)'}}},
+        series:[{type:'bar',data:IV_DATA.map(function(d){return {value:d.percentile,itemStyle:{color:d.level==='极端高'?'#f04438':d.level==='偏高'?'#f0b429':d.level==='偏低'?'#0ea5e9':d.level==='极端低'?'#3b82f6':d.level==='数据不足'?'#5a6173':'#5a6173'}}})}]
     });
 })();
 
-// K-line popup (JS needed for interactivity)
 var popup = document.getElementById('klinePopup');
 var canvas = document.getElementById('kpCanvas');
 var ctx = canvas.getContext('2d');
@@ -253,34 +179,27 @@ function drawKline(bars) {
     var prange = pmax - pmin;
     var priceToY = function(p) { return 10 + (1 - (p - pmin) / prange) * (H - 30); };
     var chartLeft = 40, chartRight = W - 8, chartW = chartRight - chartLeft;
-    var barW = Math.max(3, Math.min(10, chartW / bars.length * 0.7));
     var gap = chartW / bars.length;
-    ctx.strokeStyle = 'rgba(100,116,139,0.15)'; ctx.lineWidth = 0.5;
+    var barW = Math.max(3, Math.min(10, chartW / bars.length * 0.7));
+    ctx.strokeStyle = 'rgba(90,97,115,0.12)'; ctx.lineWidth = 0.5;
     for (var i = 0; i <= 4; i++) {
         var y = 10 + i * (H - 30) / 4;
         ctx.beginPath(); ctx.moveTo(chartLeft, y); ctx.lineTo(chartRight, y); ctx.stroke();
-        ctx.fillStyle = '#64748b'; ctx.font = '9px sans-serif'; ctx.textAlign = 'right';
+        ctx.fillStyle = '#5a6173'; ctx.font = '9px sans-serif'; ctx.textAlign = 'right';
         ctx.fillText((pmax - (i / 4) * prange).toFixed(1), chartLeft - 4, y + 3);
     }
     var prevX = 0;
     bars.forEach(function(bar, i) {
-        // 计算X位置：不等距排列，交易断档处留空白
         var x;
         if (i > 0 && bar.t && bars[i-1].t) {
             var timeGap = bar.t - bars[i-1].t;
             var normalGap = (i > 1 && bars[i-1].t && bars[i-2].t) ? (bars[i-1].t - bars[i-2].t) : gap * 5;
-            if (timeGap > normalGap * 2.5) {
-                // 交易断档 → 额外留空
-                x = prevX + gap + Math.min(barW * 3, gap * 0.3);
-            } else {
-                x = prevX + gap;
-            }
+            x = (timeGap > normalGap * 2.5) ? prevX + gap + Math.min(barW * 3, gap * 0.3) : prevX + gap;
         } else {
             x = chartLeft + gap / 2;
         }
         prevX = x;
-
-        var color = bar.up ? '#ef4444' : '#22c55e';
+        var color = bar.up ? '#f04438' : '#22c55e';
         ctx.strokeStyle = color; ctx.lineWidth = 1;
         ctx.beginPath(); ctx.moveTo(x, priceToY(bar.h)); ctx.lineTo(x, priceToY(bar.l)); ctx.stroke();
         var yO = priceToY(bar.o), yC = priceToY(bar.c);
@@ -288,28 +207,26 @@ function drawKline(bars) {
         ctx.fillStyle = color; ctx.fillRect(x - barW/2, bodyTop, barW, bodyH);
         if (bar.v > 0 && vmax > 0) {
             var volH = (bar.v / vmax) * 15;
-            ctx.fillStyle = bar.up ? 'rgba(239,68,68,0.3)' : 'rgba(34,197,94,0.3)';
+            ctx.fillStyle = bar.up ? 'rgba(240,68,56,0.25)' : 'rgba(34,197,94,0.25)';
             ctx.fillRect(x - barW/2, H - volH, barW, volH);
         }
     });
     var last = bars[bars.length - 1];
     var lastY = priceToY(last.c);
     ctx.setLineDash([3,3]);
-    ctx.strokeStyle = last.up ? 'rgba(239,68,68,0.5)' : 'rgba(34,197,94,0.5)';
+    ctx.strokeStyle = last.up ? 'rgba(240,68,56,0.4)' : 'rgba(34,197,94,0.4)';
     ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(chartLeft, lastY); ctx.lineTo(chartRight, lastY); ctx.stroke();
     ctx.setLineDash([]);
 }
 
 function hidePopup() { popup.classList.remove('show'); }
 
-// K线弹窗 — 内联onclick调用，最可靠
 var _currentCell = null;
 async function showKlinePopup(el) {
     if (_currentCell === el) { hidePopup(); _currentCell = null; return; }
     _currentCell = el;
     var sym = el.dataset.sym, tf = el.dataset.tf, dir = el.dataset.dir;
     var a = el.dataset.a, b = el.dataset.b, c_val = el.dataset.c;
-    // 定位
     var rect = el.getBoundingClientRect();
     var left = rect.right + 10, top = rect.top - 20;
     if (left + 360 > window.innerWidth) left = rect.left - 370;
@@ -317,7 +234,6 @@ async function showKlinePopup(el) {
     if (top < 10) top = 10; if (left < 10) left = 10;
     popup.style.left = left + 'px'; popup.style.top = top + 'px';
     popup.style.bottom = 'auto'; popup.style.transform = 'none';
-    // 加载数据
     try {
         var resp = await fetch('/api/klines?symbol=' + sym + '&timeframe=' + tf);
         var data = await resp.json();
@@ -333,7 +249,7 @@ async function showKlinePopup(el) {
         requestAnimationFrame(function() { drawKline(data.bars); });
     } catch(err) { console.error('Kline popup error:', err); }
 }
-// 点击空白处关闭
+
 document.addEventListener('click', function(e) {
     if (_currentCell && !popup.contains(e.target) && !e.target.closest('.kline-trigger')) {
         hidePopup(); _currentCell = null;
