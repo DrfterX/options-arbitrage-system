@@ -256,6 +256,8 @@ ALL_TABLES: dict[str, str] = {
             alert_reason     TEXT DEFAULT '',
             alert_count      INTEGER DEFAULT 0,
             next_check_time  INTEGER DEFAULT 0,
+            auto_execute     INTEGER DEFAULT 1,
+            execute_at       INTEGER DEFAULT 0,
             created_at       TEXT DEFAULT (datetime('now')),
             updated_at       TEXT DEFAULT (datetime('now')),
             FOREIGN KEY (position_id) REFERENCES positions(id) ON DELETE CASCADE

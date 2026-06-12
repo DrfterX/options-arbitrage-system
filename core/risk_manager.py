@@ -14,12 +14,26 @@
 """
 
 import logging
+from enum import IntEnum
 from typing import Any, Optional
 
 from .db import Database
 from .position_tracker import PositionTracker
 
 logger = logging.getLogger(__name__)
+
+
+class AlertLevel(IntEnum):
+    """告警级别（IntEnum，支持安全的 >= / <= 比较）。
+
+    数值越大告警越严重。用于替代字符串比较，防止字典序陷阱。
+    对应 DB 中的 'none'/'info'/'warning'/'critical' 文本。
+    """
+
+    NONE = 0
+    INFO = 1
+    WARNING = 2
+    CRITICAL = 3
 
 
 class RiskCheckTriggerResult:
@@ -32,8 +46,9 @@ class RiskCheckTriggerResult:
         action: 触发动作类型。
         current_price: 检查时的当前价格。
         trigger_price: 触发条件价格（SL/TP/Trail 价格）。
-        alert_level: 告警级别。
+        alert_level: 告警级别（字符串，与 DB 一致: none/info/warning/critical）。
         alert_count: 累计触发次数。
+        auto_execute: 该持仓是否允许自动执行（来自 risk_management.auto_execute）。
         reason: 触发原因描述。
         direction: 持仓方向。
     """
@@ -49,6 +64,7 @@ class RiskCheckTriggerResult:
         trigger_price: float = 0,
         alert_level: str = "none",
         alert_count: int = 0,
+        auto_execute: bool = False,
         reason: str = "",
     ) -> None:
         """初始化触发结果。"""
@@ -61,6 +77,7 @@ class RiskCheckTriggerResult:
         self.trigger_price = trigger_price
         self.alert_level = alert_level
         self.alert_count = alert_count
+        self.auto_execute = auto_execute
         self.reason = reason
 
     def is_triggered(self) -> bool:
@@ -83,15 +100,18 @@ class RiskCheckTriggerResult:
             "trigger_price": self.trigger_price,
             "alert_level": self.alert_level,
             "alert_count": self.alert_count,
+            "auto_execute": self.auto_execute,
             "reason": self.reason,
         }
 
     def __repr__(self) -> str:
         status = "⚡" if self.is_triggered() else "✓"
+        exec_mark = "×" if self.auto_execute else "🔒"  # auto_execute=0 → locked
         return (
             f"<RiskCheck #{self.position_id} {self.contract} "
             f"{self.direction} {status} "
-            f"action={self.action} alert={self.alert_level}[{self.alert_count}]>"
+            f"action={self.action} alert={self.alert_level}[{self.alert_count}] "
+            f"auto_exec={exec_mark}>"
         )
 
 
@@ -220,8 +240,9 @@ class PositionRiskManager:
         )
 
         # 4. 更新告警状态
-        alert_level = rm_dict.get("alert_level", "none") or "none"
+        alert_level = AlertLevel.NONE
         alert_count = rm_dict.get("alert_count", 0) or 0
+        auto_execute = bool(rm_dict.get("auto_execute", 1))  # 默认 1=True
 
         if result["action"] != "none":
             # 有触发：升级告警
@@ -231,15 +252,15 @@ class PositionRiskManager:
         else:
             # 无触发：重置告警
             alert_count = 0
-            alert_level = "none"
+            alert_level = AlertLevel.NONE
             reason = "正常"
 
-        # 5. 持久化到数据库
+        # 5. 持久化到数据库（alert_level 存为小写字符串）
         self._update_risk_record(
             conn=conn,
             position_id=position_id,
             current_price=current_price,
-            alert_level=alert_level,
+            alert_level=alert_level.name.lower(),
             alert_count=alert_count,
             alert_reason=reason,
             is_triggered=(result["action"] != "none"),
@@ -253,8 +274,10 @@ class PositionRiskManager:
             action=result["action"],
             current_price=current_price,
             trigger_price=result.get("trigger_price", 0),
-            alert_level=alert_level,
+            # RiskCheckTriggerResult 使用 str 类型，兼容外部通知/日志代码
+            alert_level=alert_level.name.lower(),
             alert_count=alert_count,
+            auto_execute=auto_execute,
             reason=reason,
         )
 
@@ -428,20 +451,20 @@ class PositionRiskManager:
         return {"action": "none", "trigger_price": 0, "reason": ""}
 
     @staticmethod
-    def _escalate_alert(alert_count: int) -> str:
+    def _escalate_alert(alert_count: int) -> AlertLevel:
         """根据连续触发次数升级告警级别。
 
         Args:
             alert_count: 连续触发次数。
 
         Returns:
-            告警级: 'info' / 'warning' / 'critical'。
+            AlertLevel 枚举成员。
         """
         if alert_count >= ALERT_THRESHOLDS["critical"]:
-            return "critical"
+            return AlertLevel.CRITICAL
         if alert_count >= ALERT_THRESHOLDS["warning"]:
-            return "warning"
-        return "info"
+            return AlertLevel.WARNING
+        return AlertLevel.INFO
 
     def _update_risk_record(
         self,

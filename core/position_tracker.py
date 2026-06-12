@@ -49,6 +49,9 @@ class PositionTracker:
           1. positions 表添加 remaining_quantity 列（部分平仓支持）。
           2. positions 表添加 unrealized_pnl 列（持久化浮动盈亏）。
           3. 创建 risk_management 表并初始化已有持仓的风控记录。
+          4. risk_management 表添加 auto_execute 列（风控 V2 自动执行）。
+          5. risk_management 表添加 execute_at 列（执行时间戳记录）。
+          6. 初始化 system_config 表（含 kill_switch 全局开关）。
         """
         conn = self.db.get_conn()
         try:
@@ -117,6 +120,8 @@ class PositionTracker:
                         alert_reason     TEXT DEFAULT '',
                         alert_count      INTEGER DEFAULT 0,
                         next_check_time  INTEGER DEFAULT 0,
+                        auto_execute     INTEGER DEFAULT 1,
+                        execute_at       INTEGER DEFAULT 0,
                         created_at       TEXT DEFAULT (datetime('now')),
                         updated_at       TEXT DEFAULT (datetime('now')),
                         FOREIGN KEY (position_id) REFERENCES positions(id) ON DELETE CASCADE
@@ -148,6 +153,52 @@ class PositionTracker:
                 if missing:
                     conn.commit()
                     logger.info("DB迁移: 为 %d 个已有持仓补全风控记录", len(missing))
+
+            # 迁移 4: risk_management 表添加 auto_execute 列
+            rm_cols = [r["name"] for r in conn.execute("PRAGMA table_info(risk_management)").fetchall()]
+            if "auto_execute" not in rm_cols:
+                logger.info("DB迁移: risk_management 表添加 auto_execute 列")
+                conn.execute(
+                    "ALTER TABLE risk_management ADD COLUMN auto_execute "
+                    "INTEGER DEFAULT 1"
+                )
+                conn.commit()
+                logger.info("DB迁移完成: auto_execute 列已添加（默认启用）")
+
+            # 迁移 5: risk_management 表添加 execute_at 列
+            if "execute_at" not in rm_cols:
+                logger.info("DB迁移: risk_management 表添加 execute_at 列")
+                conn.execute(
+                    "ALTER TABLE risk_management ADD COLUMN execute_at "
+                    "INTEGER DEFAULT 0"
+                )
+                conn.commit()
+                logger.info("DB迁移完成: execute_at 列已添加")
+
+            # 迁移 6: 初始化 system_config 表（全局 Kill Switch 等配置）
+            if "system_config" not in [r["name"] for r in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()]:
+                logger.info("DB迁移: 创建 system_config 表")
+                conn.execute("""
+                    CREATE TABLE system_config (
+                        key         TEXT PRIMARY KEY,
+                        value       TEXT NOT NULL,
+                        updated_at  TEXT DEFAULT (datetime('now'))
+                    )
+                """)
+                conn.commit()
+                logger.info("DB迁移完成: system_config 表已创建")
+            # 确保 kill_switch 记录存在（无论表是否新建）
+            ks = conn.execute(
+                "SELECT value FROM system_config WHERE key='kill_switch'"
+            ).fetchone()
+            if ks is None:
+                conn.execute(
+                    "INSERT INTO system_config (key, value) VALUES ('kill_switch', '1')"
+                )
+                conn.commit()
+                logger.info("DB迁移: system_config kill_switch=1 已初始化")
         except Exception as e:
             logger.warning("DB迁移异常(可忽略): %s", e)
             conn.rollback()
@@ -441,6 +492,7 @@ class PositionTracker:
         trail_step: Optional[float] = None,
         alert_level: Optional[str] = None,
         alert_reason: str = "",
+        auto_execute: Optional[bool] = None,
     ) -> bool:
         """更新指定持仓的风控参数。
 
@@ -456,6 +508,7 @@ class PositionTracker:
             trail_step: 移动止损步进。
             alert_level: 告警级别。
             alert_reason: 告警原因说明。
+            auto_execute: 是否允许自动执行平仓（False=锁定，不自动执行）。
 
         Returns:
             True 更新成功，False 持仓不存在。
@@ -491,6 +544,9 @@ class PositionTracker:
             if alert_reason:
                 fields.append("alert_reason=?")
                 values.append(alert_reason)
+            if auto_execute is not None:
+                fields.append("auto_execute=?")
+                values.append(1 if auto_execute else 0)
             fields.append("updated_at=datetime('now')")
 
             if fields:

@@ -196,6 +196,122 @@ class Orchestrator:
                 msg = UnifiedFormatter.format_risk_alert(r)
                 dispatch(msg, level="URGENT", mode="telegram")
 
+    # ── 风控自动执行 ──────────────────────────────────────────
+
+    def _execute_single_trigger(
+        self,
+        result: RiskCheckTriggerResult,
+        close_time: int,
+    ) -> bool:
+        """执行单个持仓的自动平仓，失败时重试一次。
+
+        Args:
+            result: 风控触发结果（含 position_id/action/current_price）。
+            close_time: 平仓时间戳（Unix 秒）。
+
+        Returns:
+            True 平仓成功，False 失败（重试耗尽）。
+        """
+        position_id = result.position_id
+        close_price = result.current_price
+
+        for attempt in range(2):  # 最多 2 次（首次 + 1 次重试）
+            try:
+                ok = self.position_tracker.close_position(
+                    position_id=position_id,
+                    close_price=close_price,
+                    close_time=close_time,
+                    reason=result.action,  # 'stop_loss' / 'take_profit' / 'trailing_stop'
+                )
+                if ok:
+                    logger.info(
+                        "风控自动平仓成功 #%d: %s %s action=%s price=%.2f (attempt=%d)",
+                        position_id, result.contract, result.direction,
+                        result.action, close_price, attempt + 1,
+                    )
+                    # 设置 auto_execute=0 + execute_at 防重入（audit trail）
+                    conn = self.db.get_conn()
+                    conn.execute(
+                        "UPDATE risk_management SET auto_execute=0, "
+                        "execute_at=?, updated_at=datetime('now') "
+                        "WHERE position_id=?",
+                        (close_time, position_id),
+                    )
+                    conn.commit()
+                    return True
+                else:
+                    logger.warning(
+                        "风控自动平仓返回失败 #%d (attempt=%d): 持仓可能已平仓",
+                        position_id, attempt + 1,
+                    )
+                    # 返回 False 但非异常 → 不重试，可能是已平仓
+                    return False
+            except Exception as e:
+                logger.error(
+                    "风控自动平仓异常 #%d (attempt=%d): %s",
+                    position_id, attempt + 1, e,
+                )
+
+        # 重试耗尽 → 紧急通知（macOS + Telegram）
+        logger.critical(
+            "风控自动平仓失败(重试耗尽) #%d: %s %s action=%s price=%.2f — 请手动处理！",
+            position_id, result.contract, result.direction, result.action, close_price,
+        )
+
+        from signals.macos_notifier import notify
+        notify(
+            title="⚠️ 风控平仓失败",
+            subtitle=f"#{position_id} {result.contract} {result.action}",
+            text=f"自动平仓失败，请手动处理！",
+            sound=True,
+        )
+
+        if self._enable_telegram:
+            dispatch(
+                f"⚠️ **风控平仓失败**\n"
+                f"持仓 #{position_id} {result.contract} {result.direction}\n"
+                f"动作: {result.action} @ {close_price}\n"
+                f"请手动处理！",
+                level="URGENT",
+                mode="telegram",
+            )
+        return False
+
+    def _execute_risk_triggers(self, results: list[RiskCheckTriggerResult]) -> None:
+        """执行风控触发的自动平仓。
+
+        流程:
+            1. 检查全局 kill_switch（system_config 表，关闭时跳过所有执行）
+            2. 过滤 is_triggered() == True 且 auto_execute == True 的持仓
+            3. 逐一调用 _execute_single_trigger 平仓
+            4. 失败自动重试 1 次 + 紧急通知
+
+        Args:
+            results: check_all_positions() 的完整返回列表。
+        """
+        # 1. 检查全局 kill_switch
+        conn = self.db.get_conn()
+        ks = conn.execute(
+            "SELECT value FROM system_config WHERE key='kill_switch'"
+        ).fetchone()
+        if ks is None or ks["value"] != "1":
+            logger.info("风控自动执行: kill_switch 已关闭，跳过自动平仓")
+            return
+
+        # 2. 过滤可执行持仓
+        executable = [r for r in results if r.is_triggered() and r.auto_execute]
+        if not executable:
+            return
+
+        logger.info(
+            "风控自动执行: %d/%d 持仓需平仓",
+            len(executable), len(results),
+        )
+
+        now_ts = int(time_module.time())
+        for r in executable:
+            self._execute_single_trigger(r, now_ts)
+
     # ── 数据刷新 ──────────────────────────────────────────────
 
     def data_refresh(self) -> dict:
@@ -429,12 +545,13 @@ class Orchestrator:
 
         logger.info("期货扫描完成: %d 条推送, %d 条被过滤抑制", pushed_count, suppressed_count)
 
-        # ── 风控检查：为 open 持仓检查 SL/TP/Trailing ────────
+        # ── 风控检查 + 自动执行：为 open 持仓检查 SL/TP/Trailing ────────
         try:
             price_map = self._build_risk_price_map()
             if price_map:
                 risk_results = self.risk_manager.check_all_positions(price_map)
                 self._handle_risk_results(risk_results)
+                self._execute_risk_triggers(risk_results)
         except Exception as e:
             logger.error("风控检查异常(已跳过): %s", e)
 
@@ -842,12 +959,13 @@ class Orchestrator:
         logger.info("全量扫描完成: 期货ENTRY=%d CANDIDATE=%d, 期权ENTRY=%d CANDIDATE=%d",
                      futures_entry, futures_candidate, options_entry, options_candidate)
 
-        # ── 风控检查：为 open 持仓检查 SL/TP/Trailing ────────
+        # ── 风控检查 + 自动执行：为 open 持仓检查 SL/TP/Trailing ────────
         try:
             price_map = self._build_risk_price_map()
             if price_map:
                 risk_results = self.risk_manager.check_all_positions(price_map)
                 self._handle_risk_results(risk_results)
+                self._execute_risk_triggers(risk_results)
         except Exception as e:
             logger.error("风控检查异常(已跳过): %s", e)
 
