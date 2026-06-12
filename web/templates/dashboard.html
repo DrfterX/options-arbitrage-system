@@ -574,15 +574,16 @@ document.getElementById('kpClose').addEventListener('click', function(e) { e.sto
         // 使用后端计算好的 unrealized_pnl（含合约乘数），兜底前端自算
         var pnlVal = (p.unrealized_pnl !== undefined) ? p.unrealized_pnl
           : ((p.current_price && p.current_price > 0)
-            ? (p.direction === 'LONG' ? p.current_price - p.entry_price : p.entry_price - p.current_price) * (p.quantity || 1)
+            ? (p.direction === 'LONG' ? p.current_price - p.entry_price : p.entry_price - p.current_price) * (p.remaining_quantity || p.quantity || 1)
             : 0);
         var pnlCls = pnlVal > 0 ? 'profit' : (pnlVal < 0 ? 'loss' : 'flat');
         var pnlStr = pnlVal > 0 ? '+' + pnlVal.toFixed(2) : (pnlVal < 0 ? pnlVal.toFixed(2) : '0.00');
-        // PnL bar: clamp percentage display (fallback ratio for old data)
+        // PnL bar: clamp percentage display
         var costBasis = p.entry_price * (p.quantity || 1);
         var pnlPct = costBasis > 0 ? (pnlVal / costBasis) * 100 : 0;
         var barPct = Math.min(Math.abs(pnlPct) * 3, 100);
         var barColor = pnlVal > 0 ? '#22c55e' : (pnlVal < 0 ? '#f04438' : 'rgba(90,97,115,.3)');
+        var rq = p.remaining_quantity !== undefined ? p.remaining_quantity : null;
 
         html += '<div class="pos-card">'
           + '<div class="pc-header">'
@@ -592,7 +593,7 @@ document.getElementById('kpClose').addEventListener('click', function(e) { e.sto
           + '<div class="pc-body">'
           + '<div class="pc-row"><span class="pc-key">入场</span><span class="pc-val">' + p.entry_price.toFixed(1) + '</span></div>'
           + '<div class="pc-row"><span class="pc-key">现价</span><span class="pc-val">' + (currPrice !== '—' ? currPrice.toFixed(1) : '—') + '</span></div>'
-          + '<div class="pc-row"><span class="pc-key">数量</span><span class="pc-val">' + (p.quantity || 1) + ' 手</span></div>'
+          + '<div class="pc-row"><span class="pc-key">数量</span><span class="pc-val">' + (rq !== null ? rq + '/' + (p.quantity || 1) : (p.quantity || 1)) + ' 手</span></div>'
           + '<div class="pc-row"><span class="pc-key">入场</span><span class="pc-val">' + entryTime + '</span></div>'
           + '</div>'
           + '<div class="pc-pnl">'
@@ -701,7 +702,7 @@ setInterval(function() {
           var currPrice = p.current_price && p.current_price > 0 ? p.current_price : '—';
           var pnlVal = (p.unrealized_pnl !== undefined) ? p.unrealized_pnl
             : ((p.current_price && p.current_price > 0)
-              ? (p.direction === 'LONG' ? p.current_price - p.entry_price : p.entry_price - p.current_price) * (p.quantity || 1)
+              ? (p.direction === 'LONG' ? p.current_price - p.entry_price : p.entry_price - p.current_price) * (p.remaining_quantity || p.quantity || 1)
               : 0);
           var pnlCls = pnlVal > 0 ? 'profit' : (pnlVal < 0 ? 'loss' : 'flat');
           var pnlStr = pnlVal > 0 ? '+' + pnlVal.toFixed(2) : (pnlVal < 0 ? pnlVal.toFixed(2) : '0.00');
@@ -709,6 +710,7 @@ setInterval(function() {
           var pnlPct = costBasis > 0 ? (pnlVal / costBasis) * 100 : 0;
           var barPct = Math.min(Math.abs(pnlPct) * 3, 100);
           var barColor = pnlVal > 0 ? '#22c55e' : (pnlVal < 0 ? '#f04438' : 'rgba(90,97,115,.3)');
+          var rq = p.remaining_quantity !== undefined ? p.remaining_quantity : null;
 
           html += '<div class="pos-card">'
             + '<div class="pc-header">'
@@ -718,7 +720,7 @@ setInterval(function() {
             + '<div class="pc-body">'
             + '<div class="pc-row"><span class="pc-key">入场</span><span class="pc-val">' + p.entry_price.toFixed(1) + '</span></div>'
             + '<div class="pc-row"><span class="pc-key">现价</span><span class="pc-val">' + (currPrice !== '—' ? currPrice.toFixed(1) : '—') + '</span></div>'
-            + '<div class="pc-row"><span class="pc-key">数量</span><span class="pc-val">' + (p.quantity || 1) + ' 手</span></div>'
+            + '<div class="pc-row"><span class="pc-key">数量</span><span class="pc-val">' + (rq !== null ? rq + '/' + (p.quantity || 1) : (p.quantity || 1)) + ' 手</span></div>'
             + '<div class="pc-row"><span class="pc-key">入场</span><span class="pc-val">' + entryTime + '</span></div>'
             + '</div>'
             + '<div class="pc-pnl">'

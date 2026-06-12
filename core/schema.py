@@ -210,6 +210,7 @@ ALL_TABLES: dict[str, str] = {
             entry_price   REAL NOT NULL,
             entry_time    INTEGER NOT NULL,
             quantity      INTEGER DEFAULT 1,
+            remaining_quantity INTEGER DEFAULT 0,
             status        TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','closed')),
             signal_id     INTEGER DEFAULT 0,
             signal_type   TEXT NOT NULL DEFAULT 'futures' CHECK(signal_type IN ('futures','options')),

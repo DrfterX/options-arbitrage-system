@@ -40,6 +40,34 @@ class PositionTracker:
         self.db = db
         self.registry = ContractRegistry(str(db.db_path))
         self._multiplier_cache: dict[str, int] = {}
+        self._ensure_migration()
+
+    def _ensure_migration(self) -> None:
+        """确保数据库 schema 已迁至最新版本。
+
+        当前迁移:
+          1. positions 表添加 remaining_quantity 列（部分平仓支持）。
+        """
+        conn = self.db.get_conn()
+        try:
+            # 检查 remaining_quantity 列是否存在
+            cols = [r["name"] for r in conn.execute("PRAGMA table_info(positions)").fetchall()]
+            if "remaining_quantity" not in cols:
+                logger.info("DB迁移: positions 表添加 remaining_quantity 列")
+                conn.execute(
+                    "ALTER TABLE positions ADD COLUMN remaining_quantity "
+                    "INTEGER DEFAULT 0"
+                )
+                # 已有 open 持仓的 remaining_quantity = quantity
+                conn.execute(
+                    "UPDATE positions SET remaining_quantity = quantity "
+                    "WHERE remaining_quantity IS NULL OR remaining_quantity = 0"
+                )
+                conn.commit()
+                logger.info("DB迁移完成: remaining_quantity 列已添加并初始化")
+        except Exception as e:
+            logger.warning("DB迁移异常(可忽略): %s", e)
+            conn.rollback()
 
     # ════════════════════════════════════════════════════════════
     # 建仓
@@ -88,11 +116,12 @@ class PositionTracker:
                 """
                 INSERT INTO positions
                     (symbol, contract, direction, entry_price, entry_time,
-                     quantity, signal_id, signal_type, stop_loss, take_profit)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     quantity, remaining_quantity, signal_id, signal_type,
+                     stop_loss, take_profit)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (symbol, contract, direction, entry_price, entry_time,
-                 quantity, signal_id, signal_type, stop_loss, take_profit),
+                 quantity, quantity, signal_id, signal_type, stop_loss, take_profit),
             )
             position_id = cursor.lastrowid
 
@@ -104,8 +133,8 @@ class PositionTracker:
             logger.error("建仓失败: %s %s @ %.2f, 已回滚", contract, direction, entry_price)
             raise
 
-        logger.info("新建持仓 #%d: %s %s @ %.2f (signal_id=%d)",
-                     position_id, contract, direction, entry_price, signal_id)
+        logger.info("新建持仓 #%d: %s %s @ %.2f (signal_id=%d, remaining=%d)",
+                     position_id, contract, direction, entry_price, signal_id, quantity)
         return position_id
 
     # ════════════════════════════════════════════════════════════
@@ -118,8 +147,9 @@ class PositionTracker:
         close_price: float,
         close_time: int,
         reason: str = "manual",
+        partial_quantity: Optional[int] = None,
     ) -> bool:
-        """平仓：关闭持仓并记录交易流水。
+        """平仓：关闭持仓（或部分平仓）并记录交易流水。
 
         Args:
             position_id: 持仓 ID。
@@ -130,6 +160,7 @@ class PositionTracker:
                 - 'take_profit' — 止盈
                 - 'signal_expired' — 信号消失
                 - 'manual' — 手动平仓
+            partial_quantity: 部分平仓手数。None 或 >= remaining_quantity 时为全量平仓。
 
         Returns:
             True 平仓成功，False 持仓不存在或已平仓。
@@ -142,27 +173,50 @@ class PositionTracker:
             logger.warning("持仓 #%d 已平仓", position_id)
             return False
 
-        # 计算 PnL（含合约乘数）
+        remaining = position.get("remaining_quantity", position["quantity"])
+        qty_to_close = remaining if partial_quantity is None else min(partial_quantity, remaining)
+
+        # 计算 PnL（使用实际平仓手数）
         multiplier = self._get_multiplier(position["symbol"], position.get("signal_type", "futures"))
         pnl = self._calculate_pnl(
             position["direction"],
             position["entry_price"],
             close_price,
-            position["quantity"],
+            qty_to_close,
             multiplier,
         )
 
         conn = self.db.get_conn()
         try:
-            conn.execute(
-                """
-                UPDATE positions
-                SET status='closed', current_price=?, closed_at=datetime('now'),
-                    updated_at=datetime('now')
-                WHERE id=?
-                """,
-                (close_price, position_id),
-            )
+            new_remaining = remaining - qty_to_close
+            if new_remaining <= 0:
+                # 全量平仓
+                conn.execute(
+                    """
+                    UPDATE positions
+                    SET status='closed', current_price=?, remaining_quantity=0,
+                        closed_at=datetime('now'), updated_at=datetime('now')
+                    WHERE id=?
+                    """,
+                    (close_price, position_id),
+                )
+                logger.info("全量平仓 #%d: %s %s, qty=%d, PnL=%.2f, 原因=%s",
+                             position_id, position["contract"], position["direction"],
+                             qty_to_close, pnl, reason)
+            else:
+                # 部分平仓：减少 remaining_quantity，保持 status='open'
+                conn.execute(
+                    """
+                    UPDATE positions
+                    SET current_price=?, remaining_quantity=?,
+                        updated_at=datetime('now')
+                    WHERE id=?
+                    """,
+                    (close_price, new_remaining, position_id),
+                )
+                logger.info("部分平仓 #%d: %s %s, qty=%d/%d, PnL=%.2f, 原因=%s",
+                             position_id, position["contract"], position["direction"],
+                             qty_to_close, qty_to_close + new_remaining, pnl, reason)
 
             # 同一事务内记录平仓流水
             self._record_trade(position_id, "close", close_price, close_time, reason, pnl)
@@ -172,9 +226,6 @@ class PositionTracker:
             logger.error("平仓失败 #%d: %s %s, 已回滚",
                          position_id, position["contract"], position["direction"])
             raise
-        logger.info("平仓 #%d: %s %s, PnL=%.2f, 原因=%s",
-                     position_id, position["contract"], position["direction"],
-                     pnl, reason)
         return True
 
     # ════════════════════════════════════════════════════════════
@@ -202,11 +253,14 @@ class PositionTracker:
         positions = [dict(r) for r in rows]
         # 计算 unrealized_pnl（含合约乘数），供前端直接使用
         for pos in positions:
+            # remaining_quantity 兜底：旧数据可能为 0 → 用 quantity
+            act_qty = pos.get("remaining_quantity", pos["quantity"]) or pos["quantity"]
+            pos["remaining_quantity"] = act_qty
             if pos.get("current_price") and pos["current_price"] > 0:
                 multiplier = self._get_multiplier(pos["symbol"], pos.get("signal_type", "futures"))
                 pos["unrealized_pnl"] = self._calculate_pnl(
                     pos["direction"], pos["entry_price"],
-                    pos["current_price"], pos["quantity"], multiplier,
+                    pos["current_price"], act_qty, multiplier,
                 )
             else:
                 pos["unrealized_pnl"] = 0.0
@@ -281,12 +335,14 @@ class PositionTracker:
         if position is None:
             return 0.0
 
+        # 使用 remaining_quantity 计算浮动盈亏（部分平仓后剩余仓位）
+        act_qty = position.get("remaining_quantity", position["quantity"]) or position["quantity"]
         multiplier = self._get_multiplier(position["symbol"], position.get("signal_type", "futures"))
         pnl = self._calculate_pnl(
             position["direction"],
             position["entry_price"],
             current_price,
-            position["quantity"],
+            act_qty,
             multiplier,
         )
 

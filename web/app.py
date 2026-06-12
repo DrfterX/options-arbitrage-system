@@ -505,16 +505,21 @@ def api_position_close():
     if reason not in ("stop_loss", "take_profit", "signal_expired", "manual"):
         return jsonify({"error": f"无效的平仓原因: {reason}"}), 400
 
+    partial_qty = data.get("partial_quantity")
+    if partial_qty is not None:
+        partial_qty = int(partial_qty)
+
     tracker = _get_position_tracker()
     success = tracker.close_position(
         position_id=int(data["position_id"]),
         close_price=float(data["close_price"]),
         close_time=int(data["close_time"]),
         reason=reason,
+        partial_quantity=partial_qty,
     )
     if not success:
         return jsonify({"error": "持仓不存在或已平仓"}), 404
-    return jsonify({"status": "closed"})
+    return jsonify({"status": "closed", "partial": partial_qty is not None})
 
 
 @app.route("/api/positions/stats")
