@@ -80,23 +80,29 @@ class PositionTracker:
             return None
 
         conn = self.db.get_conn()
-        cursor = conn.execute(
-            """
-            INSERT INTO positions
+        try:
+            cursor = conn.execute(
+                """
+                INSERT INTO positions
+                    (symbol, contract, direction, entry_price, entry_time,
+                     quantity, signal_id, signal_type, stop_loss, take_profit)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
                 (symbol, contract, direction, entry_price, entry_time,
-                 quantity, signal_id, signal_type, stop_loss, take_profit)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (symbol, contract, direction, entry_price, entry_time,
-             quantity, signal_id, signal_type, stop_loss, take_profit),
-        )
-        conn.commit()
-        position_id = cursor.lastrowid
+                 quantity, signal_id, signal_type, stop_loss, take_profit),
+            )
+            position_id = cursor.lastrowid
+
+            # 同一事务内写入 trade 流水
+            self._record_trade(position_id, "open", entry_price, entry_time, "signal_entry")
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            logger.error("建仓失败: %s %s @ %.2f, 已回滚", contract, direction, entry_price)
+            raise
+
         logger.info("新建持仓 #%d: %s %s @ %.2f (signal_id=%d)",
                      position_id, contract, direction, entry_price, signal_id)
-
-        # 同时写入 trade 流水
-        self._record_trade(position_id, "open", entry_price, entry_time, "signal_entry")
         return position_id
 
     # ════════════════════════════════════════════════════════════
@@ -142,19 +148,25 @@ class PositionTracker:
         )
 
         conn = self.db.get_conn()
-        conn.execute(
-            """
-            UPDATE positions
-            SET status='closed', current_price=?, closed_at=datetime('now'),
-                updated_at=datetime('now')
-            WHERE id=?
-            """,
-            (close_price, position_id),
-        )
-        conn.commit()
+        try:
+            conn.execute(
+                """
+                UPDATE positions
+                SET status='closed', current_price=?, closed_at=datetime('now'),
+                    updated_at=datetime('now')
+                WHERE id=?
+                """,
+                (close_price, position_id),
+            )
 
-        # 记录平仓流水
-        self._record_trade(position_id, "close", close_price, close_time, reason, pnl)
+            # 同一事务内记录平仓流水
+            self._record_trade(position_id, "close", close_price, close_time, reason, pnl)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            logger.error("平仓失败 #%d: %s %s, 已回滚",
+                         position_id, position["contract"], position["direction"])
+            raise
         logger.info("平仓 #%d: %s %s, PnL=%.2f, 原因=%s",
                      position_id, position["contract"], position["direction"],
                      pnl, reason)
@@ -373,13 +385,16 @@ class PositionTracker:
         reason: str = "",
         pnl: float = 0,
     ) -> int:
-        """记录一笔交易流水。"""
+        """记录一笔交易流水。
+
+        注意：此方法**不执行 conn.commit()**，由调用方（open_position / close_position）
+        在原子事务的 try 块中统一 commit。切勿在此处添加独立 commit，否则会破坏事务原子性。
+        """
         conn = self.db.get_conn()
         cursor = conn.execute(
             "INSERT INTO trades (position_id, action, price, time, reason, pnl) VALUES (?, ?, ?, ?, ?, ?)",
             (position_id, action, price, time, reason, pnl),
         )
-        conn.commit()
         return cursor.lastrowid
 
     @staticmethod
