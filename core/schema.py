@@ -269,6 +269,7 @@ INDEXES: list[str] = [
     "CREATE INDEX IF NOT EXISTS idx_positions_status ON positions(status)",
     "CREATE INDEX IF NOT EXISTS idx_positions_signal ON positions(signal_id)",
     "CREATE INDEX IF NOT EXISTS idx_positions_symbol ON positions(symbol)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_positions_open_uniq ON positions(contract, direction) WHERE status='open'",
     "CREATE INDEX IF NOT EXISTS idx_trades_position ON trades(position_id)",
     "CREATE INDEX IF NOT EXISTS idx_trades_action ON trades(action)",
 ]
