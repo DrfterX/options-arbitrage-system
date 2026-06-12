@@ -12,7 +12,10 @@
 
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from core.risk_manager import RiskCheckTriggerResult
 
 logger = logging.getLogger(__name__)
 
@@ -416,3 +419,110 @@ class UnifiedFormatter:
             )
 
         return "\n".join(lines)
+
+    # ── 风控告警 ───────────────────────────────────────────────
+
+    _RISK_LEVEL_EMOJI: Dict[str, str] = {
+        "critical": "🔴",
+        "warning": "🟡",
+        "info": "🟢",
+        "none": "⚪",
+    }
+
+    _ACTION_CN: Dict[str, str] = {
+        "stop_loss": "止损触发",
+        "take_profit": "止盈触发",
+        "trailing_stop": "移动止损触发",
+        "none": "正常",
+    }
+
+    _DIRECTION_ARROW: Dict[str, str] = {
+        "LONG": "📈 多头",
+        "SHORT": "📉 空头",
+        "NONE": "—",
+    }
+
+    _ACTION_SUGGESTION: Dict[str, str] = {
+        "stop_loss": "⚠️ 建议评估是否手动平仓或调整止损位",
+        "take_profit": "✅ 建议考虑部分或全部止盈，锁定利润",
+        "trailing_stop": "👀 移动止损已触发，建议关注后续走势",
+    }
+
+    @staticmethod
+    def format_risk_alert(r: "RiskCheckTriggerResult") -> str:
+        """格式化单条风控触发告警消息。
+
+        生成结构化的告警文本，包含持仓详情、价格对比、偏离幅度和建议操作。
+        统一用于 Telegram / macOS 通知。
+
+        Args:
+            r: RiskCheckTriggerResult 实例（来自 core.risk_manager）。
+
+        Returns:
+            格式化后的多行告警消息字符串。
+        """
+        level_emoji = UnifiedFormatter._RISK_LEVEL_EMOJI.get(r.alert_level, "⚪")
+        action_cn = UnifiedFormatter._ACTION_CN.get(r.action, r.action)
+        dir_arrow = UnifiedFormatter._DIRECTION_ARROW.get(r.direction, r.direction)
+        suggestion = UnifiedFormatter._ACTION_SUGGESTION.get(r.action, "")
+
+        # 价格偏离计算
+        if r.trigger_price > 0 and r.current_price > 0:
+            delta = r.current_price - r.trigger_price
+            delta_pct = (delta / r.trigger_price) * 100
+            delta_sign = "+" if delta >= 0 else ""
+            delta_str = f"{delta_sign}{delta:.2f} ({delta_sign}{delta_pct:.1f}%)"
+        else:
+            delta_str = "—"
+
+        lines: List[str] = [
+            f"{level_emoji} **风控触发 #{r.position_id} {r.contract}** {dir_arrow}",
+            f"  动作: {action_cn}  |  告警: {r.alert_level}[{r.alert_count}]",
+            f"  当前价: {r.current_price:.2f}  |  触发价: {r.trigger_price:.2f}",
+            f"  偏离: {delta_str}",
+            f"  原因: {r.reason}",
+        ]
+        if suggestion:
+            lines.append(f"  {suggestion}")
+
+        return "\n".join(lines)
+
+    @staticmethod
+    def format_risk_group_summary(
+        results: list,
+    ) -> str:
+        """格式化风控触发分组摘要（用于通知标题/副标题）。
+
+        按告警级别统计触发数量，生成紧凑摘要。
+
+        Args:
+            results: RiskCheckTriggerResult 列表（仅 is_triggered()==True 的项）。
+
+        Returns:
+            摘要字符串，如 "🔴1 🔸 止损触发  |  🟡2 🔸 止盈触发"。
+        """
+        from collections import Counter
+        action_counts: Counter = Counter()
+        level_counts: Counter = Counter()
+        for r in results:
+            action_counts[r.action] += 1
+            level_counts[r.alert_level] += 1
+
+        level_parts: list[str] = []
+        for level in ("critical", "warning", "info"):
+            if level_counts.get(level, 0) > 0:
+                emoji = UnifiedFormatter._RISK_LEVEL_EMOJI.get(level, "⚪")
+                level_parts.append(f"{emoji}{level_counts[level]}")
+
+        action_parts: list[str] = []
+        for action in ("stop_loss", "take_profit", "trailing_stop"):
+            cnt = action_counts.get(action, 0)
+            if cnt > 0:
+                cn = UnifiedFormatter._ACTION_CN.get(action, action)
+                action_parts.append(f"{cnt} 🔸 {cn}")
+
+        summary = " | ".join(level_parts) if level_parts else "触发"
+        details = "  |  ".join(action_parts) if action_parts else ""
+        if details:
+            summary = f"{summary}  |  {details}"
+        return summary

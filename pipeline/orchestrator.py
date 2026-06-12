@@ -19,6 +19,7 @@ from typing import Any, Dict, List, Optional
 
 from core.db import Database
 from core.position_tracker import PositionTracker
+from core.risk_manager import PositionRiskManager, RiskCheckTriggerResult
 from config.settings import DB_PATH, DEDUP_HOURS, SCAN_LIMIT
 from config.contracts import ContractRegistry
 from data.futures_collector import FuturesCollector
@@ -63,6 +64,7 @@ class Orchestrator:
         self.iv_recorder: IVRecorder = IVRecorder(self.db)
         self.hub: SignalHub = SignalHub(self.db)
         self.position_tracker: PositionTracker = PositionTracker(self.db)
+        self.risk_manager: PositionRiskManager = PositionRiskManager(self.db, self.position_tracker)
         self.formatter: UnifiedFormatter = UnifiedFormatter()
         self._smart_filter: Optional["SmartFilter"] = None
         # ── Telegram 推送模式自动检测 ──────────────────────────
@@ -103,6 +105,96 @@ class Orchestrator:
         if self._smart_filter is None:
             self._smart_filter = SmartFilter()
         return self._smart_filter
+
+    # ── 风控检查 ──────────────────────────────────────────────
+
+    def _build_risk_price_map(self) -> dict[str, float]:
+        """为当前 Open 持仓构建 {contract: current_price} 价格映射。
+
+        从 futures_klines 表查询每个持仓合约的最新收盘价。
+        若某合约无 K 线数据，跳过该持仓（风控检查会记录为"无价格数据"）。
+
+        Returns:
+            {contract: current_price} 字典，可能为空。
+        """
+        conn = self.db.get_conn()
+        open_positions = conn.execute(
+            "SELECT DISTINCT contract FROM positions WHERE status='open'"
+        ).fetchall()
+        if not open_positions:
+            return {}
+
+        price_map: dict[str, float] = {}
+        for row in open_positions:
+            contract = row["contract"]
+            latest = conn.execute(
+                "SELECT close FROM futures_klines "
+                "WHERE contract=? ORDER BY timestamp DESC LIMIT 1",
+                (contract,),
+            ).fetchone()
+            if latest:
+                price_map[contract] = latest["close"]
+        return price_map
+
+    def _handle_risk_results(self, results: list[RiskCheckTriggerResult]) -> None:
+        """处理风控检查结果：记录日志 + 发送桌面/Telegram 通知。
+
+        只处理 is_triggered() == True 的结果。
+        Telegram 推送最多 5 条防刷屏；仅 critical/warning 级别推送。
+
+        Args:
+            results: check_all_positions() 的完整返回列表。
+        """
+        triggered = [r for r in results if r.is_triggered()]
+        if not triggered:
+            logger.info("风控检查: %d 持仓全部正常，无触发", len(results))
+            return
+
+        # 1. 日志（所有触发）
+        for r in triggered:
+            logger.warning(
+                "风控触发 #%d %s %s: action=%s price=%.2f trigger=%.2f alert=%s[%d] %s",
+                r.position_id, r.contract, r.direction,
+                r.action, r.current_price, r.trigger_price,
+                r.alert_level, r.alert_count, r.reason,
+            )
+
+        # 2. macOS 桌面通知（更详细信息）
+        critical = [r for r in triggered if r.alert_level == "critical"]
+        warning = [r for r in triggered if r.alert_level == "warning"]
+        info_level = [r for r in triggered if r.alert_level == "info"]
+
+        # 标题：显示最严重持仓 + 统计
+        top = triggered[0]
+        subtitle = f"#{top.position_id} {top.contract} {UnifiedFormatter._ACTION_CN.get(top.action, top.action)}"
+        # 正文：分组摘要
+        summary = UnifiedFormatter.format_risk_group_summary(triggered)
+
+        from signals.macos_notifier import notify
+        notify(
+            title="风控告警",
+            subtitle=subtitle,
+            text=summary,
+            sound=True,
+        )
+
+        # 3. Telegram 推送（仅 critical/warning，最多 5 条）
+        #    每条使用结构化格式，多条时加汇总头
+        if self._enable_telegram:
+            push_list = (critical + warning)[:5]
+            if len(push_list) > 1:
+                # 多条：先发送一条汇总消息
+                group_summary = UnifiedFormatter.format_risk_group_summary(push_list)
+                header = (
+                    f"🚨 **风控批量告警 ({len(push_list)} 条)**\n"
+                    f"{group_summary}\n"
+                    f"{'─' * 20}"
+                )
+                dispatch(header, level="URGENT", mode="telegram")
+
+            for r in push_list:
+                msg = UnifiedFormatter.format_risk_alert(r)
+                dispatch(msg, level="URGENT", mode="telegram")
 
     # ── 数据刷新 ──────────────────────────────────────────────
 
@@ -336,6 +428,16 @@ class Orchestrator:
                     time_module.sleep(0.3)
 
         logger.info("期货扫描完成: %d 条推送, %d 条被过滤抑制", pushed_count, suppressed_count)
+
+        # ── 风控检查：为 open 持仓检查 SL/TP/Trailing ────────
+        try:
+            price_map = self._build_risk_price_map()
+            if price_map:
+                risk_results = self.risk_manager.check_all_positions(price_map)
+                self._handle_risk_results(risk_results)
+        except Exception as e:
+            logger.error("风控检查异常(已跳过): %s", e)
+
         return results
 
     # ── 期权策略扫描 ──────────────────────────────────────────
@@ -739,6 +841,15 @@ class Orchestrator:
 
         logger.info("全量扫描完成: 期货ENTRY=%d CANDIDATE=%d, 期权ENTRY=%d CANDIDATE=%d",
                      futures_entry, futures_candidate, options_entry, options_candidate)
+
+        # ── 风控检查：为 open 持仓检查 SL/TP/Trailing ────────
+        try:
+            price_map = self._build_risk_price_map()
+            if price_map:
+                risk_results = self.risk_manager.check_all_positions(price_map)
+                self._handle_risk_results(risk_results)
+        except Exception as e:
+            logger.error("风控检查异常(已跳过): %s", e)
 
         # macOS 本地通知（无需配置，后台 launchd 也能弹窗）
         notify_signal_summary(
