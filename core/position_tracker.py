@@ -47,11 +47,13 @@ class PositionTracker:
 
         当前迁移:
           1. positions 表添加 remaining_quantity 列（部分平仓支持）。
+          2. positions 表添加 unrealized_pnl 列（持久化浮动盈亏）。
         """
         conn = self.db.get_conn()
         try:
-            # 检查 remaining_quantity 列是否存在
             cols = [r["name"] for r in conn.execute("PRAGMA table_info(positions)").fetchall()]
+
+            # 迁移 1: remaining_quantity 列
             if "remaining_quantity" not in cols:
                 logger.info("DB迁移: positions 表添加 remaining_quantity 列")
                 conn.execute(
@@ -65,6 +67,33 @@ class PositionTracker:
                 )
                 conn.commit()
                 logger.info("DB迁移完成: remaining_quantity 列已添加并初始化")
+
+            # 迁移 2: unrealized_pnl 列
+            if "unrealized_pnl" not in cols:
+                logger.info("DB迁移: positions 表添加 unrealized_pnl 列")
+                conn.execute(
+                    "ALTER TABLE positions ADD COLUMN unrealized_pnl "
+                    "REAL DEFAULT 0"
+                )
+                # 初始化已有 open 持仓的 unrealized_pnl
+                for pos in conn.execute(
+                    "SELECT id, direction, entry_price, current_price, "
+                    "       quantity, remaining_quantity, signal_type, symbol "
+                    "FROM positions WHERE status='open' AND current_price > 0"
+                ).fetchall():
+                    pos = dict(pos)
+                    act_qty = pos.get("remaining_quantity", pos["quantity"]) or pos["quantity"]
+                    multiplier = self._get_multiplier(pos["symbol"], pos.get("signal_type", "futures"))
+                    pnl = self._calculate_pnl(
+                        pos["direction"], pos["entry_price"],
+                        pos["current_price"], act_qty, multiplier,
+                    )
+                    conn.execute(
+                        "UPDATE positions SET unrealized_pnl=? WHERE id=?",
+                        (pnl, pos["id"]),
+                    )
+                conn.commit()
+                logger.info("DB迁移完成: unrealized_pnl 列已添加并初始化")
         except Exception as e:
             logger.warning("DB迁移异常(可忽略): %s", e)
             conn.rollback()
@@ -251,12 +280,15 @@ class PositionTracker:
             """,
         ).fetchall()
         positions = [dict(r) for r in rows]
-        # 计算 unrealized_pnl（含合约乘数），供前端直接使用
+        # 使用 DB 存储的 unrealized_pnl，旧记录（值为 0）则实时计算
         for pos in positions:
             # remaining_quantity 兜底：旧数据可能为 0 → 用 quantity
             act_qty = pos.get("remaining_quantity", pos["quantity"]) or pos["quantity"]
             pos["remaining_quantity"] = act_qty
-            if pos.get("current_price") and pos["current_price"] > 0:
+            stored_pnl = pos.get("unrealized_pnl", 0) or 0
+            if stored_pnl != 0:
+                pos["unrealized_pnl"] = stored_pnl
+            elif pos.get("current_price") and pos["current_price"] > 0:
                 multiplier = self._get_multiplier(pos["symbol"], pos.get("signal_type", "futures"))
                 pos["unrealized_pnl"] = self._calculate_pnl(
                     pos["direction"], pos["entry_price"],
@@ -348,8 +380,9 @@ class PositionTracker:
 
         conn = self.db.get_conn()
         conn.execute(
-            "UPDATE positions SET current_price=?, updated_at=datetime('now') WHERE id=?",
-            (current_price, position_id),
+            "UPDATE positions SET current_price=?, unrealized_pnl=?, "
+            "updated_at=datetime('now') WHERE id=?",
+            (current_price, pnl, position_id),
         )
         conn.commit()
         return pnl

@@ -219,7 +219,8 @@ ALL_TABLES: dict[str, str] = {
             take_profit   REAL DEFAULT 0,
             opened_at     TEXT DEFAULT (datetime('now')),
             updated_at    TEXT DEFAULT (datetime('now')),
-            closed_at     TEXT DEFAULT ''
+            closed_at     TEXT DEFAULT '',
+            unrealized_pnl REAL DEFAULT 0
         )
     """,
 

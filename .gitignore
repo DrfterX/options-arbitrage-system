@@ -8,6 +8,8 @@ __pycache__/
 # Database (large binary, not for git)
 *.db
 *.db.bak
+*.db-wal
+*.db-shm
 
 # Logs
 *.log
