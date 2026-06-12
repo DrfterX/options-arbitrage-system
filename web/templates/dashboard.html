@@ -149,6 +149,35 @@
   </div>
 </div>
 
+<!-- ── 持仓看板 ── -->
+<div class="cards-section" id="positions-panel">
+  <h2>📦 持仓看板 <span class="badge" id="pos-badge">加载中…</span></h2>
+
+  <div class="pos-stats" id="posStats">
+    <div class="ps-card winrate"><div class="ps-label">胜率</div><div class="ps-value" id="ps-winrate">—</div></div>
+    <div class="ps-card pnl"><div class="ps-label">总盈亏</div><div class="ps-value mono" id="ps-pnl">—</div></div>
+    <div class="ps-card open"><div class="ps-label">持仓</div><div class="ps-value" id="ps-open">—</div></div>
+    <div class="ps-card closed"><div class="ps-label">已平仓</div><div class="ps-value" id="ps-closed">—</div></div>
+    <div class="ps-card wins"><div class="ps-label">盈利</div><div class="ps-value" id="ps-wins">—</div></div>
+    <div class="ps-card losses"><div class="ps-label">亏损</div><div class="ps-value" id="ps-losses">—</div></div>
+  </div>
+
+  <h3 class="pos-subtitle">📌 当前持仓</h3>
+  <div class="pos-open-grid" id="posOpenGrid">
+    <div class="pos-empty"><span class="pos-empty-icon">📭</span><span>暂无持仓</span></div>
+  </div>
+
+  <h3 class="pos-subtitle" style="margin-top:14px">📜 平仓记录</h3>
+  <div class="pos-history-wrap">
+    <table class="pos-table">
+      <thead><tr><th>品种</th><th>方向</th><th>入场/平仓</th><th>盈亏</th><th>原因</th><th>时间</th></tr></thead>
+      <tbody id="posHistoryBody">
+        <tr><td colspan="6" style="color:var(--text3);text-align:center;padding:16px">暂无平仓记录</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
 <!-- ── 回测面板 ── -->
 <div class="cards-section" id="backtest-panel">
   <h2>📊 信号回测验证 <span class="badge" id="bt-status">加载中…</span></h2>
@@ -495,6 +524,209 @@ document.getElementById('kpClose').addEventListener('click', function(e) { e.sto
     })
     .catch(function(e) { statusEl.textContent = '加载失败'; console.error(e); });
 })();
+
+// ── 持仓看板 ──
+(function loadPositions() {
+  var badge = document.getElementById('pos-badge');
+
+  // 加载持仓统计
+  fetch('/api/positions/stats', { cache: 'no-cache' })
+    .then(function(r) { return r.json(); })
+    .then(function(s) {
+      var wr = document.getElementById('ps-winrate');
+      var pnl = document.getElementById('ps-pnl');
+      var open = document.getElementById('ps-open');
+      var closed = document.getElementById('ps-closed');
+      var wins = document.getElementById('ps-wins');
+      var losses = document.getElementById('ps-losses');
+      if (!wr) return;
+      wr.textContent = s.win_rate ? (s.win_rate * 100).toFixed(1) + '%' : '0%';
+      pnl.textContent = s.total_pnl >= 0 ? '+' + s.total_pnl.toFixed(2) : s.total_pnl.toFixed(2);
+      pnl.style.color = s.total_pnl > 0 ? '#22c55e' : (s.total_pnl < 0 ? '#f04438' : 'var(--text3)');
+      open.textContent = s.open_positions || 0;
+      closed.textContent = s.closed_positions || 0;
+      wins.textContent = s.wins || 0;
+      losses.textContent = s.losses || 0;
+      if (badge) {
+        badge.textContent = (s.open_positions || 0) + ' 持仓 / ' + (s.closed_positions || 0) + ' 已平';
+        badge.style.color = 'var(--brand)';
+      }
+    })
+    .catch(function(e) { /* silent */ });
+
+  // 加载当前持仓
+  fetch('/api/positions', { cache: 'no-cache' })
+    .then(function(r) { return r.json(); })
+    .then(function(positions) {
+      var grid = document.getElementById('posOpenGrid');
+      if (!grid) return;
+      if (!positions || !positions.length) {
+        grid.innerHTML = '<div class="pos-empty"><span class="pos-empty-icon">📭</span><span>暂无持仓</span></div>';
+        return;
+      }
+      var html = '';
+      positions.forEach(function(p) {
+        var dir = p.direction === 'LONG' ? '多' : '空';
+        var dirClass = p.direction === 'LONG' ? 'long' : 'short';
+        var entryTime = p.entry_time ? formatPosTime(p.entry_time) : '—';
+        var currPrice = p.current_price && p.current_price > 0 ? p.current_price : '—';
+        var pnlVal = (p.current_price && p.current_price > 0)
+          ? (p.direction === 'LONG' ? p.current_price - p.entry_price : p.entry_price - p.current_price) * (p.quantity || 1)
+          : 0;
+        var pnlCls = pnlVal > 0 ? 'profit' : (pnlVal < 0 ? 'loss' : 'flat');
+        var pnlStr = pnlVal > 0 ? '+' + pnlVal.toFixed(2) : (pnlVal < 0 ? pnlVal.toFixed(2) : '0.00');
+        // PnL bar: clamp percentage display
+        var pnlPct = p.entry_price > 0 ? (pnlVal / (p.entry_price * (p.quantity || 1))) * 100 : 0;
+        var barPct = Math.min(Math.abs(pnlPct) * 3, 100);
+        var barColor = pnlVal > 0 ? '#22c55e' : (pnlVal < 0 ? '#f04438' : 'rgba(90,97,115,.3)');
+
+        html += '<div class="pos-card">'
+          + '<div class="pc-header">'
+          + '<div><span class="pc-sym">' + (p.symbol || '—') + '</span><span class="pc-contract">' + (p.contract || '') + '</span></div>'
+          + '<span class="pc-dir ' + dirClass + '">' + dir + '</span>'
+          + '</div>'
+          + '<div class="pc-body">'
+          + '<div class="pc-row"><span class="pc-key">入场</span><span class="pc-val">' + p.entry_price.toFixed(1) + '</span></div>'
+          + '<div class="pc-row"><span class="pc-key">现价</span><span class="pc-val">' + (currPrice !== '—' ? currPrice.toFixed(1) : '—') + '</span></div>'
+          + '<div class="pc-row"><span class="pc-key">数量</span><span class="pc-val">' + (p.quantity || 1) + ' 手</span></div>'
+          + '<div class="pc-row"><span class="pc-key">入场</span><span class="pc-val">' + entryTime + '</span></div>'
+          + '</div>'
+          + '<div class="pc-pnl">'
+          + '<span class="pc-pnl-label">浮动盈亏</span>'
+          + '<span class="pc-pnl-val ' + pnlCls + '">' + pnlStr + '</span>'
+          + '</div>'
+          + '<div class="pc-pnl-bar-bg"><div class="pc-pnl-bar" style="width:' + barPct + '%;background:' + barColor + '"></div></div>'
+          + '</div>';
+      });
+      grid.innerHTML = html;
+    })
+    .catch(function(e) { /* silent */ });
+
+  // 加载平仓记录
+  fetch('/api/positions/history?limit=20', { cache: 'no-cache' })
+    .then(function(r) { return r.json(); })
+    .then(function(history) {
+      var tbody = document.getElementById('posHistoryBody');
+      if (!tbody) return;
+      if (!history || !history.length) {
+        tbody.innerHTML = '<tr><td colspan="6" style="color:var(--text3);text-align:center;padding:16px">暂无平仓记录</td></tr>';
+        return;
+      }
+      var html = '';
+      function reasonLabel(r) {
+        return r === 'take_profit' ? '🎯 止盈' : r === 'stop_loss' ? '🛑 止损' : r === 'signal_expired' ? '⏳ 信号消失' : '🔧 手动';
+      }
+      history.forEach(function(p) {
+        var dir = p.direction === 'LONG' ? '多' : '空';
+        var dirClass = p.direction === 'LONG' ? 'long' : 'short';
+        var pnl = (p.realized_pnl || 0);
+        var pnlCls = pnl > 0 ? 'pt-profit' : (pnl < 0 ? 'pt-loss' : 'pt-flat');
+        var pnlStr = pnl > 0 ? '+' + pnl.toFixed(2) : pnl.toFixed(2);
+        var closeTime = p.closed_at || '—';
+        var entryStr = p.entry_price ? p.entry_price.toFixed(1) : '—';
+        html += '<tr>'
+          + '<td style="text-align:left">' + (p.symbol || '—') + ' <span style="color:var(--text3);font-size:.6rem">' + (p.contract || '') + '</span></td>'
+          + '<td><span class="pt-dir ' + dirClass + '">' + dir + '</span></td>'
+          + '<td style="color:var(--text3);font-size:.62rem">' + entryStr + '</td>'
+          + '<td class="' + pnlCls + '">' + pnlStr + '</td>'
+          + '<td class="pt-reason">' + reasonLabel(p.close_reason || 'manual') + '</td>'
+          + '<td class="pt-time">' + closeTime + '</td>'
+          + '</tr>';
+      });
+      tbody.innerHTML = html;
+    })
+    .catch(function(e) { /* silent */ });
+})();
+
+// 工具函数: Unix 时间戳 → 可读时间
+function formatPosTime(ts) {
+  var d = new Date(ts * 1000);
+  var Y = d.getFullYear();
+  var M = String(d.getMonth() + 1).padStart(2, '0');
+  var D = String(d.getDate()).padStart(2, '0');
+  var h = String(d.getHours()).padStart(2, '0');
+  var m = String(d.getMinutes()).padStart(2, '0');
+  return Y + '-' + M + '-' + D + ' ' + h + ':' + m;
+}
+
+// 持仓看板 30 秒轮询
+setInterval(function() {
+  if (document.hidden) return;
+  var badge = document.getElementById('pos-badge');
+  if (!badge) return;
+  // 重新加载持仓数据
+  (function refreshPositions() {
+    fetch('/api/positions/stats', { cache: 'no-cache' })
+      .then(function(r) { return r.json(); })
+      .then(function(s) {
+        var wr = document.getElementById('ps-winrate');
+        var pnl = document.getElementById('ps-pnl');
+        var open = document.getElementById('ps-open');
+        var closed = document.getElementById('ps-closed');
+        var wins = document.getElementById('ps-wins');
+        var losses = document.getElementById('ps-losses');
+        if (!wr) return;
+        wr.textContent = s.win_rate ? (s.win_rate * 100).toFixed(1) + '%' : '0%';
+        pnl.textContent = s.total_pnl >= 0 ? '+' + s.total_pnl.toFixed(2) : s.total_pnl.toFixed(2);
+        pnl.style.color = s.total_pnl > 0 ? '#22c55e' : (s.total_pnl < 0 ? '#f04438' : 'var(--text3)');
+        open.textContent = s.open_positions || 0;
+        closed.textContent = s.closed_positions || 0;
+        wins.textContent = s.wins || 0;
+        losses.textContent = s.losses || 0;
+        if (badge) {
+          badge.textContent = (s.open_positions || 0) + ' 持仓 / ' + (s.closed_positions || 0) + ' 已平';
+        }
+      })
+      .catch(function(e) { /* silent */ });
+
+    // 刷新当前持仓（PnL 浮动）
+    fetch('/api/positions', { cache: 'no-cache' })
+      .then(function(r) { return r.json(); })
+      .then(function(positions) {
+        var grid = document.getElementById('posOpenGrid');
+        if (!grid) return;
+        if (!positions || !positions.length) {
+          grid.innerHTML = '<div class="pos-empty"><span class="pos-empty-icon">📭</span><span>暂无持仓</span></div>';
+          return;
+        }
+        var html = '';
+        positions.forEach(function(p) {
+          var dir = p.direction === 'LONG' ? '多' : '空';
+          var dirClass = p.direction === 'LONG' ? 'long' : 'short';
+          var entryTime = p.entry_time ? formatPosTime(p.entry_time) : '—';
+          var currPrice = p.current_price && p.current_price > 0 ? p.current_price : '—';
+          var pnlVal = (p.current_price && p.current_price > 0)
+            ? (p.direction === 'LONG' ? p.current_price - p.entry_price : p.entry_price - p.current_price) * (p.quantity || 1)
+            : 0;
+          var pnlCls = pnlVal > 0 ? 'profit' : (pnlVal < 0 ? 'loss' : 'flat');
+          var pnlStr = pnlVal > 0 ? '+' + pnlVal.toFixed(2) : (pnlVal < 0 ? pnlVal.toFixed(2) : '0.00');
+          var pnlPct = p.entry_price > 0 ? (pnlVal / (p.entry_price * (p.quantity || 1))) * 100 : 0;
+          var barPct = Math.min(Math.abs(pnlPct) * 3, 100);
+          var barColor = pnlVal > 0 ? '#22c55e' : (pnlVal < 0 ? '#f04438' : 'rgba(90,97,115,.3)');
+
+          html += '<div class="pos-card">'
+            + '<div class="pc-header">'
+            + '<div><span class="pc-sym">' + (p.symbol || '—') + '</span><span class="pc-contract">' + (p.contract || '') + '</span></div>'
+            + '<span class="pc-dir ' + dirClass + '">' + dir + '</span>'
+            + '</div>'
+            + '<div class="pc-body">'
+            + '<div class="pc-row"><span class="pc-key">入场</span><span class="pc-val">' + p.entry_price.toFixed(1) + '</span></div>'
+            + '<div class="pc-row"><span class="pc-key">现价</span><span class="pc-val">' + (currPrice !== '—' ? currPrice.toFixed(1) : '—') + '</span></div>'
+            + '<div class="pc-row"><span class="pc-key">数量</span><span class="pc-val">' + (p.quantity || 1) + ' 手</span></div>'
+            + '<div class="pc-row"><span class="pc-key">入场</span><span class="pc-val">' + entryTime + '</span></div>'
+            + '</div>'
+            + '<div class="pc-pnl">'
+            + '<span class="pc-pnl-label">浮动盈亏</span>'
+            + '<span class="pc-pnl-val ' + pnlCls + '">' + pnlStr + '</span>'
+            + '</div>'
+            + '<div class="pc-pnl-bar-bg"><div class="pc-pnl-bar" style="width:' + barPct + '%;background:' + barColor + '"></div></div>'
+            + '</div>';
+        });
+        grid.innerHTML = html;
+      })
+      .catch(function(e) { /* silent */ });
+  })();
+}, 30000);
 
 // ── 健康面板 ──
 (function loadHealth() {

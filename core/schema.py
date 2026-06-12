@@ -107,6 +107,7 @@ ALL_TABLES: dict[str, str] = {
             take_profit  REAL DEFAULT 0,
             score        REAL DEFAULT 0,
             detail       TEXT DEFAULT '',
+            fingerprint  TEXT DEFAULT '',
             created_at   TEXT DEFAULT (datetime('now'))
         )
     """,
@@ -198,6 +199,43 @@ ALL_TABLES: dict[str, str] = {
             created_at        TEXT DEFAULT (datetime('now'))
         )
     """,
+
+    # ── 12. Paper Trading 持仓表 ──────────────────────────────
+    "positions": """
+        CREATE TABLE IF NOT EXISTS positions (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            symbol        TEXT NOT NULL,
+            contract      TEXT NOT NULL,
+            direction     TEXT NOT NULL CHECK(direction IN ('LONG','SHORT')),
+            entry_price   REAL NOT NULL,
+            entry_time    INTEGER NOT NULL,
+            quantity      INTEGER DEFAULT 1,
+            status        TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','closed')),
+            signal_id     INTEGER DEFAULT 0,
+            signal_type   TEXT NOT NULL DEFAULT 'futures' CHECK(signal_type IN ('futures','options')),
+            current_price REAL DEFAULT 0,
+            stop_loss     REAL DEFAULT 0,
+            take_profit   REAL DEFAULT 0,
+            opened_at     TEXT DEFAULT (datetime('now')),
+            updated_at    TEXT DEFAULT (datetime('now')),
+            closed_at     TEXT DEFAULT ''
+        )
+    """,
+
+    # ── 13. Paper Trading 交易流水表 ──────────────────────────
+    "trades": """
+        CREATE TABLE IF NOT EXISTS trades (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            position_id  INTEGER NOT NULL,
+            action       TEXT NOT NULL CHECK(action IN ('open','close')),
+            price        REAL NOT NULL,
+            time         INTEGER NOT NULL,
+            reason       TEXT DEFAULT '',
+            pnl          REAL DEFAULT 0,
+            created_at   TEXT DEFAULT (datetime('now')),
+            FOREIGN KEY (position_id) REFERENCES positions(id) ON DELETE CASCADE
+        )
+    """,
 }
 
 # ============================================================
@@ -217,6 +255,7 @@ INDEXES: list[str] = [
     "CREATE INDEX IF NOT EXISTS idx_futures_n_struct_state ON futures_n_structures(state)",
     "CREATE INDEX IF NOT EXISTS idx_futures_signals_sym ON futures_signals(symbol)",
     "CREATE INDEX IF NOT EXISTS idx_futures_signals_created ON futures_signals(created_at)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_futures_signals_fp ON futures_signals(fingerprint) WHERE fingerprint != ''",
     "CREATE INDEX IF NOT EXISTS idx_iv_history_sym ON iv_history(symbol)",
     "CREATE INDEX IF NOT EXISTS idx_iv_history_date ON iv_history(date)",
     "CREATE INDEX IF NOT EXISTS idx_options_signals_sym ON options_signals(symbol)",
@@ -226,4 +265,9 @@ INDEXES: list[str] = [
     "CREATE INDEX IF NOT EXISTS idx_filter_log_created ON filter_decision_log(created_at)",
     "CREATE INDEX IF NOT EXISTS idx_filter_log_symbol ON filter_decision_log(symbol)",
     "CREATE INDEX IF NOT EXISTS idx_filter_log_push_level ON filter_decision_log(push_level)",
+    "CREATE INDEX IF NOT EXISTS idx_positions_status ON positions(status)",
+    "CREATE INDEX IF NOT EXISTS idx_positions_signal ON positions(signal_id)",
+    "CREATE INDEX IF NOT EXISTS idx_positions_symbol ON positions(symbol)",
+    "CREATE INDEX IF NOT EXISTS idx_trades_position ON trades(position_id)",
+    "CREATE INDEX IF NOT EXISTS idx_trades_action ON trades(action)",
 ]

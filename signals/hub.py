@@ -41,6 +41,8 @@ class SignalHub:
     def record_futures_signal(self, result) -> int:
         """将 SignalResult 写入 ``futures_signals`` 表。
 
+        自动计算去重指纹并跳过完全相同的已存在信号。
+
         Args:
             result: ``futures.scorer.SignalResult`` dataclass 实例，
                 包含 symbol / contract / direction / signal_type /
@@ -48,7 +50,8 @@ class SignalHub:
                 overall_score 及 detail(JSON) 等字段。
 
         Returns:
-            新插入记录的 signal_id（整数），写入失败返回 -1。
+            新插入记录的 signal_id（整数），或已有信号的 ID（去重命中），
+            写入失败返回 -1。
         """
         detail: Dict[str, Any] = {}
         if hasattr(result, "level1"):
@@ -74,16 +77,32 @@ class SignalHub:
         take_profit = getattr(result, "take_profit", None)
         score = getattr(result, "overall_score", 0.0)
 
+        # ── 计算去重指纹 ──────────────────────────────────
+        entry_str = f"{entry_price:.2f}" if entry_price else "0.00"
+        fingerprint = f"{result.symbol}_{result.contract}_{direction}_{signal_type}_{entry_str}"
+
         now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
         conn = self.db.get_conn()
         try:
+            # 去重检查：同一指纹的信号已存在则不重复插入
+            existing = conn.execute(
+                "SELECT id FROM futures_signals WHERE fingerprint = ? LIMIT 1",
+                (fingerprint,),
+            ).fetchone()
+            if existing:
+                logger.debug(
+                    "期货信号去重命中: id=%d %s", existing["id"], fingerprint
+                )
+                return existing["id"]
+
             cur = conn.execute(
                 """INSERT INTO futures_signals
                    (symbol, contract, direction, signal_type,
                     level1_pass, level2_pass, level3_pass,
-                    entry_price, stop_loss, take_profit, score, detail, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    entry_price, stop_loss, take_profit, score, detail,
+                    fingerprint, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     result.symbol,
                     result.contract,
@@ -97,14 +116,15 @@ class SignalHub:
                     take_profit,
                     score,
                     detail_json,
+                    fingerprint,
                     now_utc,
                 ),
             )
             conn.commit()
             signal_id: int = cur.lastrowid or -1
             logger.info(
-                "期货信号已记录: id=%d %s %s %s score=%.2f",
-                signal_id, result.symbol, result.contract, signal_type, score,
+                "期货信号已记录: id=%d %s %s %s score=%.2f fp=%s",
+                signal_id, result.symbol, result.contract, signal_type, score, fingerprint,
             )
             return signal_id
         except Exception as e:

@@ -25,6 +25,12 @@ echo "=== [$TIMESTAMP] 开始 $MODE 扫描 ===" >> "$LOG_FILE"
 EXIT_CODE=$?
 echo "=== 扫描完成 (exit=$EXIT_CODE) ===" >> "$LOG_FILE"
 
+# macOS 本地通知（无 Telegram 时的桌面提醒补充）
+if [ $EXIT_CODE -eq 0 ]; then
+    SIGNAL_COUNT=$(grep -c "🚨\|ENTRY\|CANDIDATE" "$LOG_FILE" 2>/dev/null || echo 0)
+    osascript -e "display notification \"${MODE}扫描完成 (exit=$EXIT_CODE)\" with title \"期权期货系统\" subtitle \"$SIGNAL_COUNT 条信号\"" 2>/dev/null || true
+fi
+
 # 清理7天前的扫描日志
 find "$LOG_DIR" -name "scan_*.log" -mtime +7 -delete 2>/dev/null || true
 

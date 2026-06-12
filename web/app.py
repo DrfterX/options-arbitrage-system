@@ -20,6 +20,7 @@ from datetime import datetime
 from functools import wraps
 from flask import Flask, render_template, jsonify, request
 
+from core import PositionTracker
 from core.db import Database
 from config.settings import DB_PATH
 from web.iron_ore_api import _build_bp
@@ -64,6 +65,11 @@ def _get_hub():
 def _get_iv_recorder():
     from data.iv_recorder import IVRecorder
     return IVRecorder(db)
+
+
+def _get_position_tracker():
+    """创建 Paper Trading 持仓追踪器实例。"""
+    return PositionTracker(db)
 
 
 @app.route("/")
@@ -428,6 +434,97 @@ def api_filter_log():
     return jsonify(log)
 
 
+# ─── Paper Trading 持仓 API ─────────────────────────────────
+
+
+@app.route("/api/positions")
+def api_positions():
+    """获取当前持仓列表（status='open'）。"""
+    tracker = _get_position_tracker()
+    positions = tracker.get_open_positions()
+    return jsonify(positions)
+
+
+@app.route("/api/positions/history")
+def api_positions_history():
+    """获取历史平仓记录（status='closed'）。"""
+    limit = request.args.get("limit", 50, type=int)
+    offset = request.args.get("offset", 0, type=int)
+    tracker = _get_position_tracker()
+    positions = tracker.get_closed_positions(limit=limit, offset=offset)
+    return jsonify(positions)
+
+
+@app.route("/api/positions/open", methods=["POST"])
+def api_position_open():
+    """手动建仓。"""
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "请求体为空"}), 400
+
+    required = ["symbol", "contract", "direction", "entry_price", "entry_time"]
+    missing = [k for k in required if k not in data]
+    if missing:
+        return jsonify({"error": f"缺少必填字段: {', '.join(missing)}"}), 400
+
+    direction = data["direction"].upper()
+    if direction not in ("LONG", "SHORT"):
+        return jsonify({"error": "direction 必须为 LONG 或 SHORT"}), 400
+
+    tracker = _get_position_tracker()
+    position_id = tracker.open_position(
+        symbol=data["symbol"],
+        contract=data["contract"],
+        direction=direction,
+        entry_price=float(data["entry_price"]),
+        entry_time=int(data["entry_time"]),
+        signal_id=int(data.get("signal_id", 0)),
+        signal_type=data.get("signal_type", "futures"),
+        quantity=int(data.get("quantity", 1)),
+        stop_loss=float(data.get("stop_loss", 0)),
+        take_profit=float(data.get("take_profit", 0)),
+    )
+    if position_id is None:
+        return jsonify({"error": "持仓已存在（同一合约+方向已有未平仓）"}), 409
+    return jsonify({"position_id": position_id}), 201
+
+
+@app.route("/api/positions/close", methods=["POST"])
+def api_position_close():
+    """平仓。"""
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "请求体为空"}), 400
+
+    required = ["position_id", "close_price", "close_time"]
+    missing = [k for k in required if k not in data]
+    if missing:
+        return jsonify({"error": f"缺少必填字段: {', '.join(missing)}"}), 400
+
+    reason = data.get("reason", "manual")
+    if reason not in ("stop_loss", "take_profit", "signal_expired", "manual"):
+        return jsonify({"error": f"无效的平仓原因: {reason}"}), 400
+
+    tracker = _get_position_tracker()
+    success = tracker.close_position(
+        position_id=int(data["position_id"]),
+        close_price=float(data["close_price"]),
+        close_time=int(data["close_time"]),
+        reason=reason,
+    )
+    if not success:
+        return jsonify({"error": "持仓不存在或已平仓"}), 404
+    return jsonify({"status": "closed"})
+
+
+@app.route("/api/positions/stats")
+def api_positions_stats():
+    """获取 Paper Trading 综合统计（胜率/总盈亏等）。"""
+    tracker = _get_position_tracker()
+    stats = tracker.get_stats()
+    return jsonify(stats)
+
+
 # ─── 健康检查 API ────────────────────────────────────────────
 
 _APP_START_TIME = None  # set at module init below
@@ -457,6 +554,7 @@ def api_health():
             "futures_klines", "futures_signals", "futures_n_structures",
             "futures_macd", "futures_swing_points", "options_signals",
             "iv_history", "filter_decision_log", "signal_push_log",
+            "positions", "trades",
         ]:
             count = conn.execute(
                 f"SELECT COUNT(*) FROM {table_name}"

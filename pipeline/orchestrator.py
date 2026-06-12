@@ -18,6 +18,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from core.db import Database
+from core.position_tracker import PositionTracker
 from config.settings import DB_PATH, DEDUP_HOURS, SCAN_LIMIT
 from config.contracts import ContractRegistry
 from data.futures_collector import FuturesCollector
@@ -27,6 +28,7 @@ from signals.hub import SignalHub
 from signals.formatter import UnifiedFormatter
 from signals.dispatcher import dispatch
 from signals.smart_filter import SmartFilter
+from signals.macos_notifier import notify_signal_summary
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +62,7 @@ class Orchestrator:
         self.options_collector: OptionsCollector = OptionsCollector(self.registry)
         self.iv_recorder: IVRecorder = IVRecorder(self.db)
         self.hub: SignalHub = SignalHub(self.db)
+        self.position_tracker: PositionTracker = PositionTracker(self.db)
         self.formatter: UnifiedFormatter = UnifiedFormatter()
         self._smart_filter: Optional["SmartFilter"] = None
         # ── Telegram 推送模式自动检测 ──────────────────────────
@@ -301,6 +304,30 @@ class Orchestrator:
                     score=getattr(r, "overall_score", 0.0),
                 )
                 pushed_count += 1
+
+                # ── Paper Trading 自动建仓（仅 ENTRY 信号） ──
+                if signal_type == "ENTRY":
+                    entry_price = getattr(r, "entry_price", 0) or 0
+                    direction = getattr(r, "direction", "")
+                    if entry_price > 0 and direction in ("LONG", "SHORT"):
+                        pos_id = self.position_tracker.open_position(
+                            symbol=r.symbol,
+                            contract=r.contract,
+                            direction=direction,
+                            entry_price=entry_price,
+                            entry_time=int(time_module.time()),
+                            signal_id=signal_id,
+                            signal_type="futures",
+                            quantity=1,
+                            stop_loss=getattr(r, "stop_loss", 0) or 0,
+                            take_profit=getattr(r, "take_profit", 0) or 0,
+                        )
+                        if pos_id:
+                            logger.info("自动建仓 #%d: %s %s @ %.2f (ENTRY futures)",
+                                        pos_id, r.contract, direction, entry_price)
+                            # 初始化浮动盈亏
+                            self.position_tracker.update_pnl(pos_id, entry_price)
+
                 # 避免 API 过载
                 if pushed_count > 1:
                     time_module.sleep(0.3)
@@ -624,6 +651,38 @@ class Orchestrator:
                             score=score_val,
                         )
                         pushed_count += 1
+
+                        # ── Paper Trading 自动建仓（仅策略方向明确的 ENTRY 期权信号） ──
+                        strategy_name = sig.get("strategy", "")
+                        direction = ""
+                        if strategy_name == "ratio_spread":
+                            sd = sig.get("strategy_details", {})
+                            if isinstance(sd, dict):
+                                side = sd.get("side", "")
+                                direction = "LONG" if side == "call" else (
+                                    "SHORT" if side == "put" else ""
+                                )
+                        # short_strangle / iron_condor 为中性策略，跳过自动建仓
+                        if direction and sig.get("futures_price", 0) > 0:
+                            opt_entry_price = sig["futures_price"]
+                            opt_pos_id = self.position_tracker.open_position(
+                                symbol=symbol,
+                                contract=contract,
+                                direction=direction,
+                                entry_price=opt_entry_price,
+                                entry_time=int(time_module.time()),
+                                signal_id=signal_id,
+                                signal_type="options",
+                                quantity=1,
+                            )
+                            if opt_pos_id:
+                                logger.info(
+                                    "自动建仓 #%d: %s %s @ %.2f (ENTRY option %s)",
+                                    opt_pos_id, contract, direction,
+                                    opt_entry_price, strategy_name,
+                                )
+                                self.position_tracker.update_pnl(opt_pos_id, opt_entry_price)
+
                         time_module.sleep(0.3)
 
             # 品种间隔
@@ -662,8 +721,26 @@ class Orchestrator:
             1 for o in options_results if o.get("signal_type") == "ENTRY"
         )
 
-        logger.info("全量扫描完成: 期货ENTRY=%d, 期权ENTRY=%d",
-                     futures_entry, options_entry)
+        futures_candidate = sum(
+            1 for r in futures_results
+            if getattr(r, "signal_type", "NONE") == "CANDIDATE"
+        )
+        options_candidate = sum(
+            1 for o in options_results if o.get("signal_type") == "CANDIDATE"
+        )
+
+        logger.info("全量扫描完成: 期货ENTRY=%d CANDIDATE=%d, 期权ENTRY=%d CANDIDATE=%d",
+                     futures_entry, futures_candidate, options_entry, options_candidate)
+
+        # macOS 本地通知（无需配置，后台 launchd 也能弹窗）
+        notify_signal_summary(
+            futures_entry=futures_entry,
+            futures_candidate=futures_candidate,
+            options_entry=options_entry,
+            options_candidate=options_candidate,
+            total_scanned=len(futures_results),
+            sound=(futures_entry + options_entry > 0),
+        )
 
         return {
             "futures": futures_results,
