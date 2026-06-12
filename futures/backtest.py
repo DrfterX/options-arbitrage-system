@@ -245,7 +245,7 @@ def run_backtest(
         return result
 
     finally:
-        conn.close()
+        pass  # 连接由 Database 管理生命周期
 
 
 # ─── 聚合函数 ────────────────────────────────────────────

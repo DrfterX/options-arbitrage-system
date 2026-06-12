@@ -111,7 +111,7 @@ class SignalHub:
             logger.error("记录期货信号失败 %s %s: %s", result.symbol, result.contract, e)
             return -1
         finally:
-            conn.close()
+            pass  # 连接由 Database 管理生命周期
 
     # ── 期权信号 ──────────────────────────────────────────────
 
@@ -183,7 +183,7 @@ class SignalHub:
             )
             return -1
         finally:
-            conn.close()
+            pass  # 连接由 Database 管理生命周期
 
     # ── 去重 ──────────────────────────────────────────────────
 
@@ -219,7 +219,7 @@ class SignalHub:
             logger.warning("去重查询失败: %s", e)
             return False
         finally:
-            conn.close()
+            pass  # 连接由 Database 管理生命周期
 
     def record_push(
         self,
@@ -261,7 +261,7 @@ class SignalHub:
             logger.error("记录推送失败 %s: %s", fingerprint, e)
             return False
         finally:
-            conn.close()
+            pass  # 连接由 Database 管理生命周期
 
     # ── 查询 ──────────────────────────────────────────────────
 
@@ -283,7 +283,7 @@ class SignalHub:
             ).fetchall()
             return [dict(r) for r in rows]
         finally:
-            conn.close()
+            pass  # 连接由 Database 管理生命周期
 
     def get_recent_options(self, limit: int = 50) -> list:
         """获取最近期权信号。
@@ -303,7 +303,7 @@ class SignalHub:
             ).fetchall()
             return [dict(r) for r in rows]
         finally:
-            conn.close()
+            pass  # 连接由 Database 管理生命周期
 
     # ── 过滤决策日志 ──────────────────────────────────────────
 
@@ -373,7 +373,7 @@ class SignalHub:
             logger.error("记录过滤决策失败 %s: %s", symbol, e)
             return False
         finally:
-            conn.close()
+            pass  # 连接由 Database 管理生命周期
 
     def get_filter_stats(self) -> dict:
         """获取 SmartFilter 统计汇总。
@@ -409,7 +409,7 @@ class SignalHub:
                 "levels": [dict(r) for r in levels],
             }
         finally:
-            conn.close()
+            pass  # 连接由 Database 管理生命周期
 
     def get_recent_filter_log(self, limit: int = 20) -> list:
         """获取最近的过滤决策日志。
@@ -429,7 +429,7 @@ class SignalHub:
             ).fetchall()
             return [dict(r) for r in rows]
         finally:
-            conn.close()
+            pass  # 连接由 Database 管理生命周期
 
     # ── 清理 ──────────────────────────────────────────────────
 
@@ -468,4 +468,4 @@ class SignalHub:
             logger.error("清理旧数据失败: %s", e)
             return 0
         finally:
-            conn.close()
+            pass  # 连接由 Database 管理生命周期

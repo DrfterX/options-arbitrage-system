@@ -14,6 +14,7 @@ import pandas as pd
 
 from config.settings import (
     AKSHARE_PERIODS,
+    AKSHARE_RETRY,
     MARKET_TZ,
 )
 from core.db import Database
@@ -161,53 +162,81 @@ def fetch_klines(
     """
     _ensure_akshare()
 
-    try:
-        if period == "D":
-            # 日线用主力连续合约
-            df = ak.futures_zh_daily_sina(symbol=f"{symbol}0")
-            date_col = "date"
-            timeframe = "1d"
-        else:
-            # 分钟线用具体合约
-            df = ak.futures_zh_minute_sina(symbol=contract, period=period)
-            date_col = "datetime"
-            timeframe = _period_to_timeframe(period)
-
-        if df is None or df.empty:
-            logger.warning("%s period=%s: 无数据", contract, period)
-            return []
-
-        results: List[dict] = []
-        for _, row in df.iterrows():
-            ts = _parse_akshare_timestamp(row.get(date_col))
-            if ts is None:
-                continue
-
-            volume_raw = row.get("volume", 0)
-            try:
-                volume = int(float(volume_raw))
-            except (ValueError, TypeError):
-                volume = 0
-
-            results.append({
-                "symbol": symbol,
-                "contract": contract,
-                "timeframe": timeframe,
-                "timestamp": ts,
-                "open": float(row["open"]),
-                "high": float(row["high"]),
-                "low": float(row["low"]),
-                "close": float(row["close"]),
-                "volume": volume,
-            })
-
-        results.sort(key=lambda r: r["timestamp"])
-        logger.info("%s period=%s: 获取 %d 条K线", contract, period, len(results))
-        return results
-
-    except Exception as e:
-        logger.error("fetch_klines %s/%s period=%s: %s", symbol, contract, period, e)
+    # ── 分钟线需真实合约代码（含年月后缀，如 "RB2610"）───────────
+    if period != "D" and not any(c.isdigit() for c in contract):
+        logger.warning(
+            "%s/%s period=%s: 合约代码无效(缺少年月数字后缀)，跳过分钟线采集",
+            symbol, contract, period,
+        )
         return []
+
+    # ── 重试采集 ────────────────────────────────────────────────
+    max_retries = AKSHARE_RETRY
+    for attempt in range(max_retries + 1):
+        try:
+            if period == "D":
+                # 日线用主力连续合约
+                df = ak.futures_zh_daily_sina(symbol=f"{symbol}0")
+                date_col = "date"
+                timeframe = "1d"
+            else:
+                # 分钟线用具体合约
+                df = ak.futures_zh_minute_sina(symbol=contract, period=period)
+                date_col = "datetime"
+                timeframe = _period_to_timeframe(period)
+
+            if df is None or df.empty:
+                logger.warning("%s period=%s: 无数据", contract, period)
+                return []
+
+            results: List[dict] = []
+            for _, row in df.iterrows():
+                ts = _parse_akshare_timestamp(row.get(date_col))
+                if ts is None:
+                    continue
+
+                volume_raw = row.get("volume", 0)
+                try:
+                    volume = int(float(volume_raw))
+                except (ValueError, TypeError):
+                    volume = 0
+
+                results.append({
+                    "symbol": symbol,
+                    "contract": contract,
+                    "timeframe": timeframe,
+                    "timestamp": ts,
+                    "open": float(row["open"]),
+                    "high": float(row["high"]),
+                    "low": float(row["low"]),
+                    "close": float(row["close"]),
+                    "volume": volume,
+                })
+
+            results.sort(key=lambda r: r["timestamp"])
+            logger.info("%s period=%s: 获取 %d 条K线", contract, period, len(results))
+            return results
+
+        except Exception as e:
+            if attempt < max_retries:
+                wait = 1.0 * (attempt + 1)
+                logger.warning(
+                    "fetch_klines %s/%s period=%s, attempt %d/%d failed (%s), "
+                    "retrying in %.0fs",
+                    symbol, contract, period,
+                    attempt + 1, max_retries + 1, e,
+                    wait,
+                )
+                time_module.sleep(wait)
+            else:
+                logger.error(
+                    "fetch_klines %s/%s period=%s, all %d attempts failed: %s",
+                    symbol, contract, period,
+                    max_retries + 1, e,
+                )
+                return []
+
+    return []
 
 
 # ============================================================
@@ -260,7 +289,7 @@ class FuturesCollector:
             conn.commit()
             return cursor.rowcount
         finally:
-            conn.close()
+            pass  # 连接由 Database 管理生命周期
 
     def _get_last_kline_timestamp(
         self, symbol: str, contract: str, timeframe: str
@@ -285,7 +314,7 @@ class FuturesCollector:
             ).fetchone()
             return row["max_ts"] if row and row["max_ts"] is not None else None
         finally:
-            conn.close()
+            pass  # 连接由 Database 管理生命周期
 
     # ── 采集核心 ─────────────────────────────────────────────
 
@@ -514,8 +543,38 @@ class FuturesCollector:
                     if main_df is not None and not main_df.empty:
                         contract = str(main_df.iloc[-1].get("contract", symbol))
                         _CONTRACT_CACHE[symbol.lower()] = contract
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(
+                        "collect_all %s: futures_main_sina 查询失败, 回退品种代码: %s",
+                        symbol, e,
+                    )
+                    # ── DB回退合约解析 ────────────────────────────
+                    # futures_main_sina 全线故障（2026-06-11确认），
+                    # 从 futures_klines 表查询该品种最近使用的分钟线合约代码
+                    try:
+                        conn = self.db.get_conn()
+                        fallback_row = conn.execute(
+                            """SELECT contract, MAX(timestamp) as max_ts
+                               FROM futures_klines
+                               WHERE symbol=? AND timeframe IN ('15m','1h')
+                               GROUP BY contract
+                               ORDER BY max_ts DESC
+                               LIMIT 1""",
+                            (symbol,),
+                        ).fetchone()
+                        if fallback_row and fallback_row["contract"]:
+                            contract = fallback_row["contract"]
+                            _CONTRACT_CACHE[symbol.lower()] = contract
+                            logger.info(
+                                "collect_all %s: DB回退合约 %s "
+                                "(来自 futures_klines 表)",
+                                symbol, contract,
+                            )
+                    except Exception as e2:
+                        logger.warning(
+                            "collect_all %s: DB回退合约查询失败: %s",
+                            symbol, e2,
+                        )
 
             logger.info(
                 "[%d/%d] %s (%s) 合约: %s", idx, total_symbols, symbol, name, contract

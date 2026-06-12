@@ -196,12 +196,14 @@ class TestLevel1PassLevel2Fail:
     def test_l2_macd_not_passed(
         self, mock_macd: MagicMock, mock_get: MagicMock, mock_bonus: MagicMock,
     ) -> None:
-        """L2 MACD轨迹未通过 → score=0.3, WATCH"""
+        """L2 MACD轨迹未通过但方向匹配 → score=0.5, CANDIDATE（放宽后）"""
 
         def get_struct_side_effect(db, symbol, contract, timeframe):
             if timeframe == LEVEL1_TIMEFRAME:
                 return make_l1_struct(direction="LONG")
-            return make_l2_struct(direction="LONG")
+            elif timeframe == LEVEL2_TIMEFRAME:
+                return make_l2_struct(direction="LONG")
+            return None  # L3无结构（Level2通过后会走到Level3）
 
         def macd_side_effect(symbol, contract, n_struct, tf, direction, db):
             if tf == "1d":  # L1 MACD
@@ -212,8 +214,12 @@ class TestLevel1PassLevel2Fail:
         mock_macd.side_effect = macd_side_effect
 
         result = evaluate("RB", "rb2510", _test_db)
-        assert result.overall_score == 0.3
-        assert result.signal_type == "WATCH"
+        # 放宽后：方向匹配即通过Level2，MACD轨迹影响评分档位
+        # L2分=0.5（MACD未通过），L3无结构保留L2分
+        assert result.overall_score == 0.5
+        assert result.signal_type == "CANDIDATE"
+        assert result.level2["passed"] is True
+        assert result.level2["macd_passed"] is False
 
 
 # ═══════════════════════════════════════════════════════
@@ -352,23 +358,49 @@ class TestAllLevelsPass:
 # ═══════════════════════════════════════════════════════
 class TestSLTPLong:
 
-    def test_long_sl_tp(self) -> None:
-        """LONG: SL=A点, TP=entry + height*0.5"""
+    def test_long_leg2_sl_tp(self) -> None:
+        """LONG LEG2: SL=C点(最近极值), TP=entry + risk*2.0"""
         result = SignalResult(symbol="RB", contract="rb2510", direction="LONG")
-        result.entry_price = 3600.0
-        n_struct = {"point_a_price": 3500.0, "point_b_price": 3600.0}
+        result.entry_price = 3605.0
+        n_struct = {
+            "point_a_price": 3500.0,
+            "point_b_price": 3600.0,
+            "point_c_price": 3530.0,
+            "state": "LEG2",
+        }
         sl, tp = _calculate_sl_tp(result, n_struct)
-        assert sl == 3500.0
-        assert tp == 3650.0
+        assert sl == 3530.0  # C点（最近极值）
+        risk = 3605.0 - 3530.0  # = 75
+        assert tp == pytest.approx(3605.0 + risk * 2.0)  # 3755.0
 
-    def test_long_sl_tp_small_height(self) -> None:
-        """LONG: 小高度"""
+    def test_long_leg3_sl_tp(self) -> None:
+        """LONG LEG3: SL=B点(突破点变支撑), TP=entry + risk*2.0"""
         result = SignalResult(symbol="RB", contract="rb2510", direction="LONG")
-        result.entry_price = 3550.0
-        n_struct = {"point_a_price": 3540.0, "point_b_price": 3560.0}
+        result.entry_price = 3655.0
+        n_struct = {
+            "point_a_price": 3500.0,
+            "point_b_price": 3600.0,
+            "point_c_price": 3650.0,
+            "state": "LEG3",
+        }
         sl, tp = _calculate_sl_tp(result, n_struct)
-        assert sl == 3540.0
-        assert tp == 3560.0
+        assert sl == 3600.0  # B点（突破点变支撑）
+        risk = 3655.0 - 3600.0  # = 55
+        assert tp == pytest.approx(3655.0 + risk * 2.0)  # 3765.0
+
+    def test_long_leg2_no_c_price(self) -> None:
+        """LONG LEG2无C点: SL兜底用B点"""
+        result = SignalResult(symbol="RB", contract="rb2510", direction="LONG")
+        result.entry_price = 3610.0
+        n_struct = {
+            "point_a_price": 3500.0,
+            "point_b_price": 3600.0,
+            "state": "LEG2",
+        }
+        sl, tp = _calculate_sl_tp(result, n_struct)
+        assert sl == 3600.0  # 兜底用B点
+        risk = 3610.0 - 3600.0  # = 10
+        assert tp == pytest.approx(3610.0 + risk * 2.0)  # 3630.0
 
 
 # ═══════════════════════════════════════════════════════
@@ -376,23 +408,49 @@ class TestSLTPLong:
 # ═══════════════════════════════════════════════════════
 class TestSLTPShort:
 
-    def test_short_sl_tp(self) -> None:
-        """SHORT: SL=A点, TP=entry - height*0.5"""
+    def test_short_leg2_sl_tp(self) -> None:
+        """SHORT LEG2: SL=C点(最近极值), TP=entry - risk*2.0"""
         result = SignalResult(symbol="RB", contract="rb2510", direction="SHORT")
-        result.entry_price = 3500.0
-        n_struct = {"point_a_price": 3600.0, "point_b_price": 3500.0}
+        result.entry_price = 3515.0
+        n_struct = {
+            "point_a_price": 3600.0,
+            "point_b_price": 3500.0,
+            "point_c_price": 3580.0,
+            "state": "LEG2",
+        }
         sl, tp = _calculate_sl_tp(result, n_struct)
-        assert sl == 3600.0
-        assert tp == 3450.0
+        assert sl == 3580.0  # C点（最近极值）
+        risk = 3580.0 - 3515.0  # = 65
+        assert tp == pytest.approx(3515.0 - risk * 2.0)  # 3385.0
 
-    def test_short_sl_tp_small_height(self) -> None:
-        """SHORT: 小高度"""
+    def test_short_leg3_sl_tp(self) -> None:
+        """SHORT LEG3: SL=B点(突破点变阻力), TP=entry - risk*2.0"""
         result = SignalResult(symbol="RB", contract="rb2510", direction="SHORT")
-        result.entry_price = 3550.0
-        n_struct = {"point_a_price": 3560.0, "point_b_price": 3540.0}
+        result.entry_price = 3515.0
+        n_struct = {
+            "point_a_price": 3600.0,
+            "point_b_price": 3500.0,
+            "point_c_price": 3580.0,
+            "state": "LEG3",
+        }
         sl, tp = _calculate_sl_tp(result, n_struct)
-        assert sl == 3560.0
-        assert tp == 3540.0
+        assert sl == 3500.0  # B点（突破点变阻力）
+        risk = 3515.0 - 3500.0  # = 15
+        assert tp == pytest.approx(3515.0 - risk * 2.0)  # 3485.0
+
+    def test_short_leg2_no_c_price(self) -> None:
+        """SHORT LEG2无C点: SL兜底用B点"""
+        result = SignalResult(symbol="RB", contract="rb2510", direction="SHORT")
+        result.entry_price = 3515.0
+        n_struct = {
+            "point_a_price": 3600.0,
+            "point_b_price": 3500.0,
+            "state": "LEG2",
+        }
+        sl, tp = _calculate_sl_tp(result, n_struct)
+        assert sl == 3500.0  # 兜底用B点
+        risk = 3515.0 - 3500.0  # = 15
+        assert tp == pytest.approx(3515.0 - risk * 2.0)  # 3485.0
 
 
 # ═══════════════════════════════════════════════════════

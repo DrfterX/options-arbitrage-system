@@ -125,7 +125,7 @@ class IVRecorder:
             logger.error("save_snapshot %s 失败: %s", symbol, e)
             return False
         finally:
-            conn.close()
+            pass  # 连接由 Database 管理生命周期
 
     # ── 查询历史 ─────────────────────────────────────────────
 
@@ -148,7 +148,7 @@ class IVRecorder:
             ).fetchall()
             return [dict(r) for r in rows]
         finally:
-            conn.close()
+            pass  # 连接由 Database 管理生命周期
 
     # ── IV 百分位 ────────────────────────────────────────────
 
@@ -292,7 +292,7 @@ class IVRecorder:
             return results
 
         finally:
-            conn.close()
+            pass  # 连接由 Database 管理生命周期
 
 
 # ============================================================

@@ -215,7 +215,7 @@ def backfill_czce(db: Database, year: int = 2026) -> int:
                     logger.debug("  写入失败 %s: %s", d, e)
             conn.commit()
         finally:
-            conn.close()
+            pass  # 连接由 Database 管理生命周期
 
         logger.info("  写入 %d 条 (%d 个交易日)", stored, len(daily_iv))
         total_stored += stored
@@ -306,7 +306,7 @@ def backfill_shfe(db: Database, start_date: str, end_date: str) -> int:
                 conn.commit()
                 stored += 1
             finally:
-                conn.close()
+                pass  # 连接由 Database 管理生命周期
 
             time.sleep(0.5)
 
@@ -528,7 +528,7 @@ def backfill_dce_sina(db: Database) -> int:
 
             conn.commit()
         finally:
-            conn.close()
+            pass  # 连接由 Database 管理生命周期
 
         logger.info("  写入 %d 条", stored)
         total_stored += stored

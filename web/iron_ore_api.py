@@ -211,7 +211,7 @@ def _build_bp(db):
                 }
             )
         finally:
-            conn.close()
+            pass  # 连接由 Database 管理生命周期
 
     # -----------------------------------------------------------------------
     # /api/iron-ore/discount
@@ -278,7 +278,7 @@ def _build_bp(db):
                 }
             )
         finally:
-            conn.close()
+            pass  # 连接由 Database 管理生命周期
 
     # -----------------------------------------------------------------------
     # /api/iron-ore/percentile
@@ -321,7 +321,7 @@ def _build_bp(db):
 
             return jsonify(result)
         finally:
-            conn.close()
+            pass  # 连接由 Database 管理生命周期
 
     # -----------------------------------------------------------------------
     # /api/iron-ore/contracts
@@ -347,7 +347,7 @@ def _build_bp(db):
                 )
             return jsonify({"contracts": contracts_list})
         finally:
-            conn.close()
+            pass  # 连接由 Database 管理生命周期
 
     # -----------------------------------------------------------------------
     # /api/iron-ore/kline-history
@@ -393,6 +393,6 @@ def _build_bp(db):
                 {"contract": contract, "timeframe": timeframe, "bars": bars, "count": len(bars)}
             )
         finally:
-            conn.close()
+            pass  # 连接由 Database 管理生命周期
 
     return bp

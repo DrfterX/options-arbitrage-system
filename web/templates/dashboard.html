@@ -161,6 +161,45 @@
 
 </div><!-- /.main -->
 
+<!-- ── 健康状态面板 ── -->
+<div class="cards-section" id="health-panel">
+  <h2>💚 系统健康 <span class="badge" id="health-badge">加载中…</span></h2>
+  <div class="health-grid" id="healthGrid">
+    <div class="health-card status">
+      <div class="h-label">状态</div>
+      <div class="h-value" id="h-status">—</div>
+    </div>
+    <div class="health-card">
+      <div class="h-label">运行时间</div>
+      <div class="h-value" id="h-uptime">—</div>
+    </div>
+    <div class="health-card">
+      <div class="h-label">DB 总行数</div>
+      <div class="h-value" id="h-rows">—</div>
+    </div>
+    <div class="health-card">
+      <div class="h-label">最新信号</div>
+      <div class="h-value h-dt" id="h-last-signal">—</div>
+    </div>
+    <div class="health-card">
+      <div class="h-label">最新K线</div>
+      <div class="h-value h-dt" id="h-last-kline">—</div>
+    </div>
+    <div class="health-card">
+      <div class="h-label">最新N型</div>
+      <div class="h-value h-dt" id="h-last-n">—</div>
+    </div>
+  </div>
+  <div class="health-tables" id="healthTables">
+    <h3>📋 表状态</h3>
+    <div class="ht-grid" id="htGrid"></div>
+  </div>
+  <div class="health-issues" id="healthIssues" style="display:none">
+    <h3>⚠️ 告警</h3>
+    <ul id="h-issue-list"></ul>
+  </div>
+</div>
+
 <div class="footer">Auto Company · 期权期货交易信号平台 · v0.1.0</div>
 </div><!-- /.app -->
 
@@ -456,6 +495,94 @@ document.getElementById('kpClose').addEventListener('click', function(e) { e.sto
     })
     .catch(function(e) { statusEl.textContent = '加载失败'; console.error(e); });
 })();
+
+// ── 健康面板 ──
+(function loadHealth() {
+  var badge = document.getElementById('health-badge');
+  fetch('/api/health', { cache: 'no-cache' })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.error) { badge.textContent = '错误'; return; }
+      badge.textContent = d.status === 'healthy' ? '✅ 正常' : (d.status === 'degraded' ? '⚠️ 降级' : '❌ 异常');
+      badge.style.color = d.status === 'healthy' ? '#22c55e' : (d.status === 'degraded' ? '#f0b429' : '#f04438');
+
+      document.getElementById('h-status').textContent = d.status === 'healthy' ? '正常' : (d.status === 'degraded' ? '降级' : '异常');
+      document.getElementById('h-status').className = 'h-value h-' + d.status;
+      document.getElementById('h-uptime').textContent = d.uptime_human || (d.uptime + 's');
+      document.getElementById('h-rows').textContent = (d.total_rows || 0).toLocaleString();
+      document.getElementById('h-last-signal').textContent = d.last_signal || '—';
+      document.getElementById('h-last-kline').textContent = d.last_kline || '—';
+      document.getElementById('h-last-n').textContent = d.last_n_structure || '—';
+
+      // tables grid
+      var htGrid = document.getElementById('htGrid');
+      if (d.tables) {
+        var html = '';
+        var keys = Object.keys(d.tables);
+        keys.forEach(function(k) {
+          var cnt = d.tables[k];
+          var cls = cnt > 0 ? 'ht-ok' : 'ht-empty';
+          html += '<div class="ht-card ' + cls + '"><span class="ht-name">' + k + '</span><span class="ht-count">' + cnt.toLocaleString() + '</span></div>';
+        });
+        htGrid.innerHTML = html;
+      }
+
+      // issues
+      var issuesEl = document.getElementById('healthIssues');
+      var listEl = document.getElementById('h-issue-list');
+      if (d.issues && d.issues.length) {
+        issuesEl.style.display = 'block';
+        listEl.innerHTML = d.issues.map(function(msg) { return '<li>' + msg + '</li>'; }).join('');
+      } else {
+        issuesEl.style.display = 'none';
+      }
+    })
+    .catch(function(e) { badge.textContent = '加载失败'; console.error(e); });
+})();
+
+// 健康面板也加入 30 秒轮询
+setInterval(function() {
+  if (document.hidden) return;
+  var badge = document.getElementById('health-badge');
+  if (!badge) return;
+  fetch('/api/health', { cache: 'no-cache' })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.error) return;
+      badge.textContent = d.status === 'healthy' ? '✅ 正常' : (d.status === 'degraded' ? '⚠️ 降级' : '❌ 异常');
+      badge.style.color = d.status === 'healthy' ? '#22c55e' : (d.status === 'degraded' ? '#f0b429' : '#f04438');
+      document.getElementById('h-status').textContent = d.status === 'healthy' ? '正常' : (d.status === 'degraded' ? '降级' : '异常');
+      document.getElementById('h-status').className = 'h-value h-' + d.status;
+      document.getElementById('h-uptime').textContent = d.uptime_human || (d.uptime + 's');
+      document.getElementById('h-rows').textContent = (d.total_rows || 0).toLocaleString();
+      document.getElementById('h-last-signal').textContent = d.last_signal || '—';
+      document.getElementById('h-last-kline').textContent = d.last_kline || '—';
+      document.getElementById('h-last-n').textContent = d.last_n_structure || '—';
+
+      var htGrid = document.getElementById('htGrid');
+      if (d.tables && htGrid) {
+        var html = '';
+        var keys = Object.keys(d.tables);
+        keys.forEach(function(k) {
+          var cnt = d.tables[k];
+          var cls = cnt > 0 ? 'ht-ok' : 'ht-empty';
+          html += '<div class="ht-card ' + cls + '"><span class="ht-name">' + k + '</span><span class="ht-count">' + cnt.toLocaleString() + '</span></div>';
+        });
+        htGrid.innerHTML = html;
+      }
+
+      var issuesEl = document.getElementById('healthIssues');
+      var listEl = document.getElementById('h-issue-list');
+      if (d.issues && d.issues.length && issuesEl && listEl) {
+        issuesEl.style.display = 'block';
+        listEl.innerHTML = d.issues.map(function(msg) { return '<li>' + msg + '</li>'; }).join('');
+      } else if (issuesEl) {
+        issuesEl.style.display = 'none';
+      }
+    })
+    .catch(function(e) { /* silent */ });
+}, 30000);
+
 </script>
 </body>
 </html>

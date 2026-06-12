@@ -63,10 +63,13 @@ class Database:
         - ``PRAGMA foreign_keys=ON``（外键约束）
         - ``PRAGMA busy_timeout``（等待锁释放超时，默认 5 秒）
 
+        当缓存的连接已被外部代码关闭时（如旧的 conn.close() 调用），
+        自动检测并重建连接（防御性重连）。
+
         Notes:
             sqlite3.Connection 被 ``with`` 上下文使用时，
             ``__exit__`` 只执行 commit/rollback，**不调用 close**。
-            因此长连接在 `with` 退出后继续可用，无需拦截 close。
+            因此长连接在 `with` 退出后继续可用。
 
         Args:
             timeout: 连接超时秒数，默认 30 秒。
@@ -75,7 +78,13 @@ class Database:
             配置好的 sqlite3.Connection 对象。
         """
         if self._conn is not None:
-            return self._conn
+            try:
+                # 探测连接是否仍然存活（防御性重连）
+                self._conn.execute("SELECT 1")
+                return self._conn
+            except (sqlite3.ProgrammingError, sqlite3.OperationalError):
+                logger.debug("缓存连接已失效，重建: %s", self.db_path)
+                self._conn = None
 
         conn = sqlite3.connect(self.db_path, timeout=timeout)
         conn.row_factory = sqlite3.Row

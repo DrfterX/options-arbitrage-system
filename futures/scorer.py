@@ -112,6 +112,7 @@ def _get_all_main_contracts(db: Database) -> List[Dict[str, Any]]:
                  FROM futures_klines
                ) k ON s.symbol = k.symbol
                WHERE s.has_options = 1
+                 AND k.contract != s.symbol
                ORDER BY s.symbol"""
         ).fetchall()
     return [dict(r) for r in rows]
@@ -190,9 +191,11 @@ def _calculate_sl_tp(
 ) -> tuple:
     """计算止损止盈，基于入场级别的N型结构（15分钟）。
 
-    原理：
-      - SL = A点（结构极值）
-      - TP = 入场价 ± (A-B高度) * 0.5
+    原则：
+      - SL 永远用「最近有效极值点」，而非结构起点 A：
+        - LEG2 状态：C 点（最近反向极值）为最合理止损位
+        - LEG3 状态：B 点（突破点位变支撑/阻力）为最合理止损位
+      - TP = 入场价 ± 风险 × TP_RATIO（固定 2:1 风险收益比）
 
     Returns:
         (sl, tp) 或 (None, None)。
@@ -201,18 +204,29 @@ def _calculate_sl_tp(
     entry_price = result.entry_price
     a_price = n_struct.get("point_a_price")
     b_price = n_struct.get("point_b_price")
+    c_price = n_struct.get("point_c_price")
+    state = n_struct.get("state", "LEG2")
 
     if a_price is None or b_price is None or entry_price is None:
         return None, None
 
-    sl = a_price
+    # 止损位：LEG3 用 B 点，LEG2 用 C 点（最近极值），兜底用 B
+    if state == "LEG3":
+        sl = b_price
+    else:
+        sl = c_price if c_price is not None else b_price
+
+    if sl is None:
+        return None, None
+
+    # 止盈位：固定 2:1 风险收益比
+    risk = abs(entry_price - sl)
+    tp_ratio = 2.0
 
     if direction == "LONG":
-        height = abs(b_price - a_price)
-        tp = entry_price + height * 0.5
+        tp = entry_price + risk * tp_ratio
     elif direction == "SHORT":
-        height = abs(a_price - b_price)
-        tp = entry_price - height * 0.5
+        tp = entry_price - risk * tp_ratio
     else:
         return None, None
 
@@ -392,37 +406,35 @@ def evaluate(
 
     # ═══════════════════════════════════════════════════
     # Level2: 小时线N型确认 + 15分钟MACD轨迹验证
+    # 放宽：方向匹配即通过Level2（MACD轨迹变为评分分级因素而非硬门槛）
     # ═══════════════════════════════════════════════════
     l2_struct = _get_active_n_structure(db, symbol, contract, LEVEL2_TIMEFRAME)
 
     l2_result: Dict[str, Any] = {"passed": False}
+    l2_macd_passed = False
+
     if l2_struct and l2_struct.get("direction") == direction:
         l2_macd = check_macd_trajectory(
             symbol, contract, l2_struct, LEVEL2_MACD_TIMEFRAME, direction, db
         )
-        if l2_macd.get("passed"):
-            l2_result = {
-                "passed": True,
-                "direction": direction,
-                "state": l2_struct["state"],
-                "n_structure": {
-                    "point_a_price": l2_struct["point_a_price"],
-                    "point_b_price": l2_struct["point_b_price"],
-                    "point_c_price": l2_struct.get("point_c_price"),
-                },
-                "macd_trajectory": l2_macd,
-                "description": _level2_description(
-                    direction, l2_struct["state"], l2_macd
-                ),
-            }
-        else:
-            l2_result = {
-                "passed": False,
-                "reason": (
-                    f"小时线MACD轨迹未配合: {l2_macd.get('description', '')}"
-                ),
-                "macd_trajectory": l2_macd,
-            }
+        l2_macd_passed = l2_macd.get("passed", False)
+
+        # 只要方向匹配即通过Level2，MACD轨迹决定实际评分档位
+        l2_result = {
+            "passed": True,
+            "direction": direction,
+            "state": l2_struct["state"],
+            "n_structure": {
+                "point_a_price": l2_struct["point_a_price"],
+                "point_b_price": l2_struct["point_b_price"],
+                "point_c_price": l2_struct.get("point_c_price"),
+            },
+            "macd_trajectory": l2_macd,
+            "macd_passed": l2_macd_passed,
+            "description": _level2_description(
+                direction, l2_struct["state"], l2_macd
+            ),
+        }
     elif l2_struct:
         l2_result = {
             "passed": False,
@@ -443,6 +455,13 @@ def evaluate(
         bonus_total = sum(b["score"] for b in result.bonus if b["passed"])
         result.overall_score = min(0.3 + bonus_total, 1.0)
         return result
+
+    # Level2 通过（方向匹配）：MACD轨迹决定评分档位
+    if l2_macd_passed:
+        result.overall_score = 0.6
+    else:
+        result.overall_score = 0.5
+    result.signal_type = "CANDIDATE"
 
     # ═══════════════════════════════════════════════════
     # Level3: 15分钟N型入场 + 3分钟MACD稳定 + 突破
@@ -479,16 +498,13 @@ def evaluate(
             sl, tp = _calculate_sl_tp(result, l3_struct)
             result.stop_loss = sl
             result.take_profit = tp
-        else:
-            result.overall_score = 0.6
-            result.signal_type = "CANDIDATE"
+        # else: 保留 Level2 设定的评分（0.5 或 0.6），signal_type 保持 CANDIDATE
     else:
         l3_result = {
             "passed": False,
             "reason": "15分钟无活跃N型或方向不一致",
         }
-        result.overall_score = 0.6
-        result.signal_type = "CANDIDATE"
+        # 保留 Level2 设定的评分，signal_type 保持 CANDIDATE
 
     result.level3 = l3_result
 

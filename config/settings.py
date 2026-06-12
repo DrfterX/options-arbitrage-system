@@ -7,7 +7,45 @@
 
 import os
 from pathlib import Path
+from typing import Optional
 from zoneinfo import ZoneInfo
+
+# ============================================================
+# .env 文件自动加载（纯 Python 实现，不依赖 python-dotenv）
+# ============================================================
+def _load_dotenv() -> None:
+    """加载项目根目录的 .env 文件到环境变量（若存在）。
+
+    .env 文件格式：
+        KEY=VALUE            # 基本赋值
+        export KEY=VALUE     # Bash export 语法（兼容）
+        # 注释行              # 注释
+        空行跳过
+
+    已存在的环境变量不会被覆盖（os.environ 优先级高于 .env 文件）。
+    """
+    env_path = PROJECT_ROOT / ".env"
+    if not env_path.exists():
+        return
+    with open(env_path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            # 去掉 export 前缀（兼容 bash export 语法）
+            if line.startswith("export "):
+                line = line[7:].strip()
+            if "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            key = key.strip()
+            value = value.strip()
+            # 去掉引号
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
+                value = value[1:-1]
+            if key and key not in os.environ:
+                os.environ[key] = value
+
 
 # ============================================================
 # 路径
@@ -15,6 +53,9 @@ from zoneinfo import ZoneInfo
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DB_PATH = PROJECT_ROOT / "trading_system.db"
 LOG_PATH = PROJECT_ROOT / "trading_system.log"
+
+# 加载 .env 文件（环境变量优先级高于 .env）
+_load_dotenv()
 
 # ============================================================
 # 时区
@@ -155,8 +196,8 @@ PUSHED_LOG = os.path.expanduser("~/.hermes/options_pushed.json")
 # 参考：https://core.telegram.org/bots/api
 # 创建 Bot: @BotFather → /newbot → 获取 token
 # 获取 chat_id: 给 bot 发消息后访问 https://api.telegram.org/bot<token>/getUpdates
-TELEGRAM_BOT_TOKEN = ""  # 例: "123456:ABC-DEF1234..."
-TELEGRAM_CHAT_ID = ""    # 例: "-1001234567890"
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")  # 例: "123456:ABC-DEF1234..."
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")      # 例: "-1001234567890"
 
 # ============================================================
 # 监控配置

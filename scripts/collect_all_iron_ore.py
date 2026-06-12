@@ -98,7 +98,7 @@ def collect_all():
                     logger.info(f"  [{contract}] {tf_label} ✓ {len(df)} 条")
                     collected += 1
                 finally:
-                    conn.close()
+                    pass  # 连接由 Database 管理生命周期
 
             except Exception as e:
                 logger.warning(f"  [{contract}] {tf_label} 失败: {e}")

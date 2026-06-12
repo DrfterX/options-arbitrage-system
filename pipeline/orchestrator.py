@@ -12,6 +12,7 @@
 
 import argparse
 import logging
+import os
 import time as time_module
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -61,6 +62,37 @@ class Orchestrator:
         self.hub: SignalHub = SignalHub(self.db)
         self.formatter: UnifiedFormatter = UnifiedFormatter()
         self._smart_filter: Optional["SmartFilter"] = None
+        # ── Telegram 推送模式自动检测 ──────────────────────────
+        self._enable_telegram: bool = self._check_telegram_config()
+        if self._enable_telegram:
+            logger.info("Telegram 推送已配置，启用 Telegram 推送模式")
+        else:
+            logger.info(
+                "Telegram 未配置 (TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID 为空)，"
+                "推送回退到 stdout 模式"
+            )
+
+    @staticmethod
+    def _check_telegram_config() -> bool:
+        """检查 Telegram 推送配置是否齐全。
+
+        优先从 config.settings 读取，兜底读 os.environ。
+
+        Returns:
+            True 当 TELEGRAM_BOT_TOKEN 和 TELEGRAM_CHAT_ID 均已设置。
+        """
+        from config.settings import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+        if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
+            return True
+        # 兜底读环境变量（settings 已通过 _load_dotenv() 加载 .env）
+        tok = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+        cid = os.environ.get("TELEGRAM_CHAT_ID", "")
+        return bool(tok and cid)
+
+    @property
+    def _push_mode(self) -> str:
+        """推送模式：Telegram 已配置时返回 ``'telegram'``，否则 ``'stdout'``。"""
+        return "telegram" if self._enable_telegram else "stdout"
 
     @property
     def smart_filter(self) -> "SmartFilter":
@@ -257,7 +289,7 @@ class Orchestrator:
 
                 # ── 推送 ──────────────────────────────────────
                 msg = self.formatter.format_futures_signal(r)
-                dispatch(msg, level=decision.push_level, mode="stdout")
+                dispatch(msg, level=decision.push_level, mode=self._push_mode)
 
                 # 记录推送
                 self.hub.record_push(
@@ -582,7 +614,7 @@ class Orchestrator:
                     )
                     if not self.hub.check_duplicate(fingerprint, hours=DEDUP_HOURS):
                         msg = self.formatter.format_options_strategy(sig)
-                        dispatch(msg, level="ENTRY", mode="stdout")
+                        dispatch(msg, level="ENTRY", mode=self._push_mode)
                         self.hub.record_push(
                             fingerprint=fingerprint,
                             symbol=symbol,
@@ -665,7 +697,7 @@ class Orchestrator:
             iv_rank_msg = self.formatter.format_iv_rank(iv_status)
             daily_msg = daily_msg + "\n\n" + iv_rank_msg
 
-        dispatch(daily_msg, level="DAILY", mode="stdout")
+        dispatch(daily_msg, level="DAILY", mode=self._push_mode)
         return daily_msg
 
 
