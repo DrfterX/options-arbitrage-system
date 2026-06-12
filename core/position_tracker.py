@@ -16,6 +16,7 @@ import logging
 from typing import Any, Optional
 
 from .db import Database
+from config.contracts import ContractRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,8 @@ class PositionTracker:
             db: Database 实例，需已调用过 init_all_tables() 确保表存在。
         """
         self.db = db
+        self.registry = ContractRegistry(str(db.db_path))
+        self._multiplier_cache: dict[str, int] = {}
 
     # ════════════════════════════════════════════════════════════
     # 建仓
@@ -139,12 +142,14 @@ class PositionTracker:
             logger.warning("持仓 #%d 已平仓", position_id)
             return False
 
-        # 计算 PnL
+        # 计算 PnL（含合约乘数）
+        multiplier = self._get_multiplier(position["symbol"], position.get("signal_type", "futures"))
         pnl = self._calculate_pnl(
             position["direction"],
             position["entry_price"],
             close_price,
             position["quantity"],
+            multiplier,
         )
 
         conn = self.db.get_conn()
@@ -194,7 +199,18 @@ class PositionTracker:
             ORDER BY p.entry_time DESC
             """,
         ).fetchall()
-        return [dict(r) for r in rows]
+        positions = [dict(r) for r in rows]
+        # 计算 unrealized_pnl（含合约乘数），供前端直接使用
+        for pos in positions:
+            if pos.get("current_price") and pos["current_price"] > 0:
+                multiplier = self._get_multiplier(pos["symbol"], pos.get("signal_type", "futures"))
+                pos["unrealized_pnl"] = self._calculate_pnl(
+                    pos["direction"], pos["entry_price"],
+                    pos["current_price"], pos["quantity"], multiplier,
+                )
+            else:
+                pos["unrealized_pnl"] = 0.0
+        return positions
 
     def get_closed_positions(
         self,
@@ -265,11 +281,13 @@ class PositionTracker:
         if position is None:
             return 0.0
 
+        multiplier = self._get_multiplier(position["symbol"], position.get("signal_type", "futures"))
         pnl = self._calculate_pnl(
             position["direction"],
             position["entry_price"],
             current_price,
             position["quantity"],
+            multiplier,
         )
 
         conn = self.db.get_conn()
@@ -355,6 +373,29 @@ class PositionTracker:
     # 内部工具方法
     # ════════════════════════════════════════════════════════════
 
+    def _get_multiplier(self, symbol: str, signal_type: str = "futures") -> int:
+        """获取合约乘数。
+
+        期货：从 ContractRegistry 查询品种的合约乘数。
+        期权：期权 PnL 基于净权利金（净值），合约乘数 = 1。
+
+        Args:
+            symbol: 品种代码。
+            signal_type: 信号类型，'futures' 或 'options'。
+
+        Returns:
+            合约乘数。期权始终返回 1。
+        """
+        if signal_type == "options":
+            return 1
+        if symbol not in self._multiplier_cache:
+            try:
+                self._multiplier_cache[symbol] = self.registry.get_multiplier(symbol)
+            except Exception:
+                logger.warning("查询合约乘数失败 %s, 使用默认值 1", symbol)
+                self._multiplier_cache[symbol] = 1
+        return self._multiplier_cache[symbol]
+
     def _find_open_position(
         self,
         contract: str,
@@ -403,13 +444,17 @@ class PositionTracker:
         entry_price: float,
         current_price: float,
         quantity: int,
+        multiplier: int = 1,
     ) -> float:
         """计算盈亏金额。
 
-        LONG: (current - entry) * quantity
-        SHORT: (entry - current) * quantity
+        LONG: (current - entry) * quantity * multiplier
+        SHORT: (entry - current) * quantity * multiplier
+
+        期货盈亏 = 价格差 × 手数 × 合约乘数
+        期权盈亏 = 净值差 × 手数（合约乘数 = 1，因 net_cost 已是货币金额）
         """
         if direction == "LONG":
-            return round((current_price - entry_price) * quantity, 2)
+            return round((current_price - entry_price) * quantity * multiplier, 2)
         else:
-            return round((entry_price - current_price) * quantity, 2)
+            return round((entry_price - current_price) * quantity * multiplier, 2)

@@ -1194,6 +1194,18 @@ body {
   letter-spacing: .04em;
 }
 
+/* ── positions disclaimer ── */
+.pos-disclaimer {
+  font-size: .62rem;
+  color: var(--text3);
+  background: rgba(251, 191, 36, .08);
+  border: 1px solid rgba(251, 191, 36, .2);
+  border-radius: var(--radius-sm);
+  padding: 5px 10px;
+  margin-bottom: 10px;
+  line-height: 1.4;
+}
+
 /* ── open positions grid ── */
 .pos-open-grid {
   display: grid;

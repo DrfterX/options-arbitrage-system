@@ -664,7 +664,13 @@ class Orchestrator:
                                 )
                         # short_strangle / iron_condor 为中性策略，跳过自动建仓
                         if direction and sig.get("futures_price", 0) > 0:
-                            opt_entry_price = sig["futures_price"]
+                            # 修复 P0 #2: 期权建仓使用净权利金（net_cost），而非期货价格
+                            strategy_details = sig.get("strategy_details", {})
+                            if isinstance(strategy_details, dict):
+                                net_cost = strategy_details.get("net_cost", 0)
+                                opt_entry_price = abs(net_cost) if net_cost != 0 else sig["futures_price"]
+                            else:
+                                opt_entry_price = sig["futures_price"]
                             opt_pos_id = self.position_tracker.open_position(
                                 symbol=symbol,
                                 contract=contract,

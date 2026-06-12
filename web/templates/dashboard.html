@@ -163,6 +163,7 @@
   </div>
 
   <h3 class="pos-subtitle">📌 当前持仓</h3>
+  <div class="pos-disclaimer">💡 期货 PnL 已含合约乘数 · 期权 PnL 为净权利金（不含合约乘数）</div>
   <div class="pos-open-grid" id="posOpenGrid">
     <div class="pos-empty"><span class="pos-empty-icon">📭</span><span>暂无持仓</span></div>
   </div>
@@ -570,13 +571,16 @@ document.getElementById('kpClose').addEventListener('click', function(e) { e.sto
         var dirClass = p.direction === 'LONG' ? 'long' : 'short';
         var entryTime = p.entry_time ? formatPosTime(p.entry_time) : '—';
         var currPrice = p.current_price && p.current_price > 0 ? p.current_price : '—';
-        var pnlVal = (p.current_price && p.current_price > 0)
-          ? (p.direction === 'LONG' ? p.current_price - p.entry_price : p.entry_price - p.current_price) * (p.quantity || 1)
-          : 0;
+        // 使用后端计算好的 unrealized_pnl（含合约乘数），兜底前端自算
+        var pnlVal = (p.unrealized_pnl !== undefined) ? p.unrealized_pnl
+          : ((p.current_price && p.current_price > 0)
+            ? (p.direction === 'LONG' ? p.current_price - p.entry_price : p.entry_price - p.current_price) * (p.quantity || 1)
+            : 0);
         var pnlCls = pnlVal > 0 ? 'profit' : (pnlVal < 0 ? 'loss' : 'flat');
         var pnlStr = pnlVal > 0 ? '+' + pnlVal.toFixed(2) : (pnlVal < 0 ? pnlVal.toFixed(2) : '0.00');
-        // PnL bar: clamp percentage display
-        var pnlPct = p.entry_price > 0 ? (pnlVal / (p.entry_price * (p.quantity || 1))) * 100 : 0;
+        // PnL bar: clamp percentage display (fallback ratio for old data)
+        var costBasis = p.entry_price * (p.quantity || 1);
+        var pnlPct = costBasis > 0 ? (pnlVal / costBasis) * 100 : 0;
         var barPct = Math.min(Math.abs(pnlPct) * 3, 100);
         var barColor = pnlVal > 0 ? '#22c55e' : (pnlVal < 0 ? '#f04438' : 'rgba(90,97,115,.3)');
 
@@ -695,12 +699,14 @@ setInterval(function() {
           var dirClass = p.direction === 'LONG' ? 'long' : 'short';
           var entryTime = p.entry_time ? formatPosTime(p.entry_time) : '—';
           var currPrice = p.current_price && p.current_price > 0 ? p.current_price : '—';
-          var pnlVal = (p.current_price && p.current_price > 0)
-            ? (p.direction === 'LONG' ? p.current_price - p.entry_price : p.entry_price - p.current_price) * (p.quantity || 1)
-            : 0;
+          var pnlVal = (p.unrealized_pnl !== undefined) ? p.unrealized_pnl
+            : ((p.current_price && p.current_price > 0)
+              ? (p.direction === 'LONG' ? p.current_price - p.entry_price : p.entry_price - p.current_price) * (p.quantity || 1)
+              : 0);
           var pnlCls = pnlVal > 0 ? 'profit' : (pnlVal < 0 ? 'loss' : 'flat');
           var pnlStr = pnlVal > 0 ? '+' + pnlVal.toFixed(2) : (pnlVal < 0 ? pnlVal.toFixed(2) : '0.00');
-          var pnlPct = p.entry_price > 0 ? (pnlVal / (p.entry_price * (p.quantity || 1))) * 100 : 0;
+          var costBasis = p.entry_price * (p.quantity || 1);
+          var pnlPct = costBasis > 0 ? (pnlVal / costBasis) * 100 : 0;
           var barPct = Math.min(Math.abs(pnlPct) * 3, 100);
           var barColor = pnlVal > 0 ? '#22c55e' : (pnlVal < 0 ? '#f04438' : 'rgba(90,97,115,.3)');
 
