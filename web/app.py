@@ -181,7 +181,7 @@ def index() -> str:
             sector_stats=sector_stats, options=options,
             iv_status=iv_status, iv_json=json.dumps(iv_status, ensure_ascii=False))
     finally:
-        conn.close()
+        pass  # 连接由 Database 管理生命周期
 
 
 @app.route("/api/matrix")
@@ -267,7 +267,7 @@ def api_matrix():
 
         return jsonify({"matrix": matrix, "cards": cards})
     finally:
-        conn.close()
+        pass  # 连接由 Database 管理生命周期
 
 
 @app.route("/api/klines")
@@ -329,7 +329,7 @@ def api_klines():
         
         return jsonify({"symbol": sym, "timeframe": tf, "bars": result})
     finally:
-        conn.close()
+        pass  # 连接由 Database 管理生命周期
 
 
 @app.route("/api/stats")
@@ -367,7 +367,7 @@ def api_stats():
             "sectors": sector_stats,
         })
     finally:
-        conn.close()
+        pass  # 连接由 Database 管理生命周期
 
 
 @app.route("/api/signals/futures")
@@ -426,6 +426,91 @@ def api_filter_log():
     hub = _get_hub()
     log = hub.get_recent_filter_log(limit)
     return jsonify(log)
+
+
+# ─── 健康检查 API ────────────────────────────────────────────
+
+_APP_START_TIME = None  # set at module init below
+import time as _time
+_APP_START_TIME = _time.time()
+
+_HEALTH_CACHE: dict = {"result": None, "timestamp": 0}
+
+
+@app.route("/api/health")
+def api_health():
+    """系统健康检查：DB连通性 + 数据流状态 + 管线存活。"""
+    import time as time_module
+
+    now = time_module.time()
+    if _HEALTH_CACHE["result"] and (now - _HEALTH_CACHE["timestamp"]) < 15:
+        return jsonify(_HEALTH_CACHE["result"])
+
+    try:
+        conn = db.get_conn()
+        # 基础连通性
+        conn.execute("SELECT 1").fetchone()
+
+        # 各表行数
+        tables_info = {}
+        for table_name in [
+            "futures_klines", "futures_signals", "futures_n_structures",
+            "futures_macd", "futures_swing_points", "options_signals",
+            "iv_history", "filter_decision_log", "signal_push_log",
+        ]:
+            count = conn.execute(
+                f"SELECT COUNT(*) FROM {table_name}"
+            ).fetchone()[0]
+            tables_info[table_name] = count
+
+        # 最新信号时间
+        last_signal = conn.execute(
+            "SELECT MAX(created_at) FROM futures_signals"
+        ).fetchone()[0]
+
+        # 最新K线时间
+        last_kline = conn.execute(
+            "SELECT datetime(MAX(timestamp), 'unixepoch') FROM futures_klines"
+        ).fetchone()[0]
+
+        # 最新N型结构时间
+        last_n_structure = conn.execute(
+            "SELECT MAX(updated_at) FROM futures_n_structures"
+        ).fetchone()[0]
+
+        uptime_seconds = int(now - _APP_START_TIME)
+
+        sectors = [
+            "futures_klines", "futures_signals", "futures_n_structures",
+            "futures_swing_points", "options_signals", "iv_history",
+        ]
+        status = "healthy"
+        issues = []
+        for tbl in sectors:
+            if tables_info.get(tbl, 0) == 0:
+                issues.append(f"{tbl} 无数据")
+        if tables_info.get("futures_signals", 0) == 0:
+            status = "degraded"
+        if issues:
+            status = "degraded" if status == "healthy" else status
+
+        result = {
+            "status": status,
+            "uptime": uptime_seconds,
+            "uptime_human": f"{uptime_seconds // 3600}h{(uptime_seconds % 3600) // 60}m{uptime_seconds % 60}s",
+            "tables": tables_info,
+            "total_rows": sum(tables_info.values()),
+            "last_signal": last_signal,
+            "last_kline": last_kline,
+            "last_n_structure": last_n_structure,
+            "issues": issues,
+        }
+        _HEALTH_CACHE["result"] = result
+        _HEALTH_CACHE["timestamp"] = now
+        return jsonify(result)
+    except Exception as e:
+        logger.error("健康检查异常: %s", e)
+        return jsonify({"status": "error", "error": str(e)}), 500
 
 
 # ─── 回测 API ─────────────────────────────────────────────
