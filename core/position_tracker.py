@@ -48,6 +48,7 @@ class PositionTracker:
         当前迁移:
           1. positions 表添加 remaining_quantity 列（部分平仓支持）。
           2. positions 表添加 unrealized_pnl 列（持久化浮动盈亏）。
+          3. 创建 risk_management 表并初始化已有持仓的风控记录。
         """
         conn = self.db.get_conn()
         try:
@@ -94,6 +95,59 @@ class PositionTracker:
                     )
                 conn.commit()
                 logger.info("DB迁移完成: unrealized_pnl 列已添加并初始化")
+
+            # 迁移 3: 创建 risk_management 表
+            if "risk_management" not in [r["name"] for r in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()]:
+                logger.info("DB迁移: 创建 risk_management 表")
+                conn.execute("""
+                    CREATE TABLE risk_management (
+                        id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                        position_id      INTEGER NOT NULL UNIQUE,
+                        sl_price         REAL DEFAULT 0,
+                        tp_price         REAL DEFAULT 0,
+                        trail_activation_price REAL DEFAULT 0,
+                        trail_distance   REAL DEFAULT 0,
+                        trail_step       REAL DEFAULT 0,
+                        last_check_time  INTEGER DEFAULT 0,
+                        last_check_price REAL DEFAULT 0,
+                        alert_level      TEXT DEFAULT 'none'
+                                         CHECK(alert_level IN ('none','info','warning','critical')),
+                        alert_reason     TEXT DEFAULT '',
+                        alert_count      INTEGER DEFAULT 0,
+                        next_check_time  INTEGER DEFAULT 0,
+                        created_at       TEXT DEFAULT (datetime('now')),
+                        updated_at       TEXT DEFAULT (datetime('now')),
+                        FOREIGN KEY (position_id) REFERENCES positions(id) ON DELETE CASCADE
+                    )
+                """)
+                # 为已有 open 持仓创建风控记录（使用 positions 表中的 SL/TP 值）
+                existing = conn.execute(
+                    "SELECT id, stop_loss, take_profit FROM positions WHERE status='open'"
+                ).fetchall()
+                for pos in existing:
+                    conn.execute(
+                        "INSERT INTO risk_management (position_id, sl_price, tp_price) VALUES (?, ?, ?)",
+                        (pos["id"], pos["stop_loss"] or 0, pos["take_profit"] or 0),
+                    )
+                conn.commit()
+                logger.info("DB迁移完成: risk_management 表已创建，为 %d 个持仓初始化风控记录", len(existing))
+            else:
+                # 表已存在，确保已有持仓都有对应的风控记录
+                missing = conn.execute("""
+                    SELECT p.id, p.stop_loss, p.take_profit FROM positions p
+                    WHERE p.status='open'
+                    AND p.id NOT IN (SELECT position_id FROM risk_management)
+                """).fetchall()
+                for pos in missing:
+                    conn.execute(
+                        "INSERT INTO risk_management (position_id, sl_price, tp_price) VALUES (?, ?, ?)",
+                        (pos["id"], pos["stop_loss"] or 0, pos["take_profit"] or 0),
+                    )
+                if missing:
+                    conn.commit()
+                    logger.info("DB迁移: 为 %d 个已有持仓补全风控记录", len(missing))
         except Exception as e:
             logger.warning("DB迁移异常(可忽略): %s", e)
             conn.rollback()
@@ -156,6 +210,15 @@ class PositionTracker:
 
             # 同一事务内写入 trade 流水
             self._record_trade(position_id, "open", entry_price, entry_time, "signal_entry")
+
+            # 同一事务内创建风控记录（从参数中获取 SL/TP）
+            conn.execute(
+                """
+                INSERT INTO risk_management (position_id, sl_price, tp_price)
+                VALUES (?, ?, ?)
+                """,
+                (position_id, stop_loss or 0, take_profit or 0),
+            )
             conn.commit()
         except Exception:
             conn.rollback()
@@ -350,6 +413,120 @@ class PositionTracker:
             (signal_id,),
         ).fetchone()
         return dict(row) if row else None
+
+    def get_risk_params(self, position_id: int) -> Optional[dict[str, Any]]:
+        """获取指定持仓的风控参数。
+
+        Args:
+            position_id: 持仓 ID。
+
+        Returns:
+            风控参数字典（含 sl_price, tp_price, alert_level 等），
+            持仓不存在或无风控记录时返回 None。
+        """
+        conn = self.db.get_conn()
+        row = conn.execute(
+            "SELECT * FROM risk_management WHERE position_id=?",
+            (position_id,),
+        ).fetchone()
+        return dict(row) if row else None
+
+    def set_risk_params(
+        self,
+        position_id: int,
+        sl_price: Optional[float] = None,
+        tp_price: Optional[float] = None,
+        trail_activation_price: Optional[float] = None,
+        trail_distance: Optional[float] = None,
+        trail_step: Optional[float] = None,
+        alert_level: Optional[str] = None,
+        alert_reason: str = "",
+    ) -> bool:
+        """更新指定持仓的风控参数。
+
+        只更新非 None 的字段，不影响已有设置。
+        同时同步更新 positions 表的 stop_loss/take_profit 字段保持一致。
+
+        Args:
+            position_id: 持仓 ID。
+            sl_price: 新止损价（None=不更新）。
+            tp_price: 新止盈价（None=不更新）。
+            trail_activation_price: 移动止损激活价。
+            trail_distance: 移动止损距离（点数）。
+            trail_step: 移动止损步进。
+            alert_level: 告警级别。
+            alert_reason: 告警原因说明。
+
+        Returns:
+            True 更新成功，False 持仓不存在。
+        """
+        position = self._get_position_by_id(position_id)
+        if position is None:
+            logger.warning("设置风控参数失败: 持仓 #%d 不存在", position_id)
+            return False
+
+        conn = self.db.get_conn()
+        try:
+            # 构建 risk_management 表的动态 UPDATE
+            fields: list[str] = []
+            values: list[Any] = []
+            if sl_price is not None:
+                fields.append("sl_price=?")
+                values.append(sl_price)
+            if tp_price is not None:
+                fields.append("tp_price=?")
+                values.append(tp_price)
+            if trail_activation_price is not None:
+                fields.append("trail_activation_price=?")
+                values.append(trail_activation_price)
+            if trail_distance is not None:
+                fields.append("trail_distance=?")
+                values.append(trail_distance)
+            if trail_step is not None:
+                fields.append("trail_step=?")
+                values.append(trail_step)
+            if alert_level is not None:
+                fields.append("alert_level=?")
+                values.append(alert_level)
+            if alert_reason:
+                fields.append("alert_reason=?")
+                values.append(alert_reason)
+            fields.append("updated_at=datetime('now')")
+
+            if fields:
+                values.append(position_id)
+                conn.execute(
+                    f"UPDATE risk_management SET {', '.join(fields)} WHERE position_id=?",
+                    values,
+                )
+
+            # 同步更新 positions 表的 stop_loss 和 take_profit（保持一致性）
+            pos_updates: list[str] = []
+            pos_values: list[Any] = []
+            if sl_price is not None:
+                pos_updates.append("stop_loss=?")
+                pos_values.append(sl_price)
+            if tp_price is not None:
+                pos_updates.append("take_profit=?")
+                pos_values.append(tp_price)
+            if pos_updates:
+                pos_values.append(position_id)
+                conn.execute(
+                    f"UPDATE positions SET {', '.join(pos_updates)}, "
+                    "updated_at=datetime('now') WHERE id=?",
+                    pos_values,
+                )
+
+            conn.commit()
+            logger.info("风控参数已更新: 持仓 #%d sl=%.2f tp=%.2f",
+                         position_id,
+                         sl_price if sl_price is not None else position.get("stop_loss", 0),
+                         tp_price if tp_price is not None else position.get("take_profit", 0))
+            return True
+        except Exception:
+            conn.rollback()
+            logger.error("更新风控参数失败 #%d, 已回滚", position_id)
+            raise
 
     # ════════════════════════════════════════════════════════════
     # 盈亏更新

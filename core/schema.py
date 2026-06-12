@@ -238,6 +238,29 @@ ALL_TABLES: dict[str, str] = {
             FOREIGN KEY (position_id) REFERENCES positions(id) ON DELETE CASCADE
         )
     """,
+
+    # ── 14. 风控管理表 ─────────────────────────────────────────
+    "risk_management": """
+        CREATE TABLE IF NOT EXISTS risk_management (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            position_id      INTEGER NOT NULL UNIQUE,
+            sl_price         REAL DEFAULT 0,
+            tp_price         REAL DEFAULT 0,
+            trail_activation_price REAL DEFAULT 0,
+            trail_distance   REAL DEFAULT 0,
+            trail_step       REAL DEFAULT 0,
+            last_check_time  INTEGER DEFAULT 0,
+            last_check_price REAL DEFAULT 0,
+            alert_level      TEXT DEFAULT 'none'
+                             CHECK(alert_level IN ('none','info','warning','critical')),
+            alert_reason     TEXT DEFAULT '',
+            alert_count      INTEGER DEFAULT 0,
+            next_check_time  INTEGER DEFAULT 0,
+            created_at       TEXT DEFAULT (datetime('now')),
+            updated_at       TEXT DEFAULT (datetime('now')),
+            FOREIGN KEY (position_id) REFERENCES positions(id) ON DELETE CASCADE
+        )
+    """,
 }
 
 # ============================================================
@@ -273,4 +296,7 @@ INDEXES: list[str] = [
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_positions_open_uniq ON positions(contract, direction) WHERE status='open'",
     "CREATE INDEX IF NOT EXISTS idx_trades_position ON trades(position_id)",
     "CREATE INDEX IF NOT EXISTS idx_trades_action ON trades(action)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_risk_mgmt_position ON risk_management(position_id)",
+    "CREATE INDEX IF NOT EXISTS idx_risk_mgmt_alert ON risk_management(alert_level)",
+    "CREATE INDEX IF NOT EXISTS idx_risk_mgmt_next_check ON risk_management(next_check_time)",
 ]
