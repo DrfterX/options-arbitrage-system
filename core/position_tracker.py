@@ -109,7 +109,7 @@ class PositionTracker:
         direction: str,
         entry_price: float,
         entry_time: int,
-        signal_id: int = 0,
+        signal_id: Optional[int] = None,
         signal_type: str = "futures",
         quantity: int = 1,
         stop_loss: float = 0,
@@ -123,7 +123,7 @@ class PositionTracker:
             direction: 方向，'LONG' 或 'SHORT'。
             entry_price: 入场价格。
             entry_time: 入场时间（Unix 秒）。
-            signal_id: 关联的信号 ID。
+            signal_id: 关联的信号 ID（None 表示手动建仓）。
             signal_type: 信号类型，'futures' 或 'options'。
             quantity: 手数，默认 1。
             stop_loss: 止损价，默认 0（未设置）。
@@ -333,15 +333,17 @@ class PositionTracker:
         ).fetchall()
         return [dict(r) for r in rows]
 
-    def get_position_by_signal(self, signal_id: int) -> Optional[dict[str, Any]]:
+    def get_position_by_signal(self, signal_id: Optional[int] = None) -> Optional[dict[str, Any]]:
         """根据信号 ID 查询已建仓的持仓。
 
         Args:
-            signal_id: 信号 ID。
+            signal_id: 信号 ID。None 或 0 时返回 None（手动建仓无关联信号）。
 
         Returns:
             持仓字典，或 None。
         """
+        if not signal_id:
+            return None
         conn = self.db.get_conn()
         row = conn.execute(
             "SELECT * FROM positions WHERE signal_id = ? ORDER BY id DESC LIMIT 1",
@@ -405,7 +407,7 @@ class PositionTracker:
             if price is not None:
                 pos["unrealized_pnl"] = self.update_pnl(pos["id"], price)
             else:
-                pos["unrealized_pnl"] = 0.0
+                pos["unrealized_pnl"] = None
         return positions
 
     # ════════════════════════════════════════════════════════════

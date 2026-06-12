@@ -327,6 +327,9 @@ class Orchestrator:
                                         pos_id, r.contract, direction, entry_price)
                             # 初始化浮动盈亏
                             self.position_tracker.update_pnl(pos_id, entry_price)
+                    elif entry_price <= 0:
+                        logger.warning("跳过期货建仓 %s %s: entry_price=%s (无效或缺失)",
+                                       r.symbol, r.contract, entry_price)
 
                 # 避免 API 过载
                 if pushed_count > 1:
@@ -656,12 +659,11 @@ class Orchestrator:
                         strategy_name = sig.get("strategy", "")
                         direction = ""
                         if strategy_name == "ratio_spread":
-                            sd = sig.get("strategy_details", {})
-                            if isinstance(sd, dict):
-                                side = sd.get("side", "")
-                                direction = "LONG" if side == "call" else (
-                                    "SHORT" if side == "put" else ""
-                                )
+                            # 使用 net_delta 而非 side 判断方向（P1 #7）
+                            net_delta = sig.get("net_delta", 0) or 0
+                            direction = "LONG" if net_delta > 0 else (
+                                "SHORT" if net_delta < 0 else ""
+                            )
                         # short_strangle / iron_condor 为中性策略，跳过自动建仓
                         if direction and sig.get("futures_price", 0) > 0:
                             # 修复 P0 #2: 期权建仓使用净权利金（net_cost），而非期货价格
