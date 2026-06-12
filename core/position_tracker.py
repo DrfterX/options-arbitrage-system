@@ -644,6 +644,168 @@ class PositionTracker:
         return positions
 
     # ════════════════════════════════════════════════════════════
+    # 换月（Rollover）
+    # ════════════════════════════════════════════════════════════
+
+    def rollover_position(
+        self,
+        old_position_id: int,
+        new_symbol: str,
+        new_contract: str,
+        new_entry_price: float,
+        close_price: float,
+        close_time: int,
+    ) -> Optional[int]:
+        """原子换月：平旧仓 + 开新仓 + 继承风控参数。
+
+        在同一 SQLite 事务中依次执行：
+        1. 关闭旧持仓（status='closed'，记录 trade 流水）
+        2. 新建同方向持仓（target 合约）
+        3. 为新持仓创建风控记录（SL/TP/TS 按偏移量继承）
+
+        风控参数继承策略：
+        从旧持仓的入场价计算偏移量（点数），应用到新持仓入场价。
+        例如旧 SL=535(entry=525→偏移+10)，新 entry=550 → 新 SL=560。
+
+        Args:
+            old_position_id: 旧持仓 ID（将被关闭）。
+            new_symbol: 新品种代码（如 'SC'）。
+            new_contract: 新合约代码（如 'SC2608'）。
+            new_entry_price: 新持仓入场价（SC2608 当前价）。
+            close_price: 平旧仓价格（SC2607 当前价）。
+            close_time: 换月执行时间（Unix 秒）。
+
+        Returns:
+            新持仓 ID；失败（旧持仓不存在/已平仓/重复建仓）返回 None。
+        """
+        old_pos = self._get_position_by_id(old_position_id)
+        if old_pos is None:
+            logger.warning("换月失败: 持仓 #%d 不存在", old_position_id)
+            return None
+        if old_pos["status"] != "open":
+            logger.warning("换月失败: 持仓 #%d 状态=%s，不是 open", old_position_id, old_pos["status"])
+            return None
+
+        direction = old_pos["direction"]
+        quantity = old_pos.get("remaining_quantity", old_pos["quantity"]) or 1
+        signal_type = old_pos.get("signal_type", "futures")
+
+        # 去重：新合约不能已有同方向 open 持仓
+        dup = self._find_open_position(new_contract, direction)
+        if dup is not None:
+            logger.warning("换月失败: %s %s 已有 open 持仓 #%d", new_contract, direction, dup["id"])
+            return None
+
+        # 计算偏移量：从旧持仓的入场价计算 SL/TP/TS 偏移（绝对值点数）
+        old_entry = old_pos["entry_price"]
+        old_risk = self.get_risk_params(old_position_id)
+
+        sl_offset = 0.0
+        tp_offset = 0.0
+        ts_activation_offset = 0.0
+        trail_distance = 0.0
+        trail_step = 0.0
+
+        if old_risk:
+            if old_risk.get("sl_price", 0):
+                sl_offset = old_risk["sl_price"] - old_entry
+            if old_risk.get("tp_price", 0):
+                tp_offset = old_risk["tp_price"] - old_entry
+            if old_risk.get("trail_activation_price", 0):
+                ts_activation_offset = old_risk["trail_activation_price"] - old_entry
+            trail_distance = old_risk.get("trail_distance", 0) or 0
+            trail_step = old_risk.get("trail_step", 0) or 0
+
+        # 应用偏移到新入场价
+        new_sl = max(0, round(new_entry_price + sl_offset, 2))
+        new_tp = max(0, round(new_entry_price + tp_offset, 2))
+        new_ts_activation = max(0, round(new_entry_price + ts_activation_offset, 2))
+
+        multiplier = self._get_multiplier(old_pos["symbol"], signal_type)
+        pnl = self._calculate_pnl(
+            direction, old_pos["entry_price"], close_price,
+            quantity, multiplier,
+        )
+
+        conn = self.db.get_conn()
+        try:
+            # 1. 关闭旧持仓
+            conn.execute(
+                """
+                UPDATE positions
+                SET status='closed', current_price=?, remaining_quantity=0,
+                    closed_at=datetime('now'), updated_at=datetime('now')
+                WHERE id=?
+                """,
+                (close_price, old_position_id),
+            )
+            # 旧仓平仓流水
+            conn.execute(
+                "INSERT INTO trades (position_id, action, price, time, reason, pnl) "
+                "VALUES (?, 'close', ?, ?, 'rollover', ?)",
+                (old_position_id, close_price, close_time, pnl),
+            )
+
+            # 2. 新建持仓（同方向、同数量）
+            cursor = conn.execute(
+                """
+                INSERT INTO positions
+                    (symbol, contract, direction, entry_price, entry_time,
+                     quantity, remaining_quantity, signal_id, signal_type)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (new_symbol, new_contract, direction, new_entry_price, close_time,
+                 quantity, quantity, old_pos.get("signal_id"), signal_type),
+            )
+            new_position_id = cursor.lastrowid
+
+            # 新仓开仓流水
+            conn.execute(
+                "INSERT INTO trades (position_id, action, price, time, reason, pnl) "
+                "VALUES (?, 'open', ?, ?, 'rollover', 0)",
+                (new_position_id, new_entry_price, close_time),
+            )
+
+            # 3. 为新持仓创建风控记录（继承偏移后参数）
+            conn.execute(
+                """
+                INSERT INTO risk_management
+                    (position_id, sl_price, tp_price,
+                     trail_activation_price, trail_distance, trail_step)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (new_position_id, new_sl, new_tp,
+                 new_ts_activation, trail_distance, trail_step),
+            )
+
+            # 4. 关闭旧仓的风控自动执行（防重入）
+            conn.execute(
+                "UPDATE risk_management SET auto_execute=0, "
+                "execute_at=?, updated_at=datetime('now') "
+                "WHERE position_id=?",
+                (close_time, old_position_id),
+            )
+
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            logger.error(
+                "换月失败: #%d %s→%s (close=%.2f open=%.2f), 已全量回滚",
+                old_position_id, old_pos["contract"], new_contract,
+                close_price, new_entry_price,
+            )
+            raise
+
+        logger.info(
+            "换月成功: #%d %s %s @%.2f → #%d %s @%.2f | "
+            "PnL=¥%.2f SL=%.2f TP=%.2f TS=%.2f/%.1f",
+            old_position_id, old_pos["contract"], direction, old_pos["entry_price"],
+            new_position_id, new_contract, new_entry_price,
+            pnl, new_sl, new_tp, new_ts_activation, trail_distance,
+        )
+        return new_position_id
+
+    # ════════════════════════════════════════════════════════════
     # 统计
     # ════════════════════════════════════════════════════════════
 
