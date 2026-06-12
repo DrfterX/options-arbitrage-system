@@ -112,6 +112,9 @@ class Orchestrator:
         """为当前 Open 持仓构建 {contract: current_price} 价格映射。
 
         从 futures_klines 表查询每个持仓合约的最新收盘价。
+        **优先取 timeframe='1m' 的数据**（最实时）；找不到 1m 数据时
+        降级回退到任意周期的最近数据。
+
         若某合约无 K 线数据，跳过该持仓（风控检查会记录为"无价格数据"）。
 
         Returns:
@@ -127,11 +130,20 @@ class Orchestrator:
         price_map: dict[str, float] = {}
         for row in open_positions:
             contract = row["contract"]
+            # ── 优先取 1m 数据（最实时） ────────────────────────────
             latest = conn.execute(
                 "SELECT close FROM futures_klines "
-                "WHERE contract=? ORDER BY timestamp DESC LIMIT 1",
+                "WHERE contract=? AND timeframe='1m' "
+                "ORDER BY timestamp DESC LIMIT 1",
                 (contract,),
             ).fetchone()
+            # ── 降级：无 1m 数据时回退到任意周期 ──────────────────
+            if not latest:
+                latest = conn.execute(
+                    "SELECT close FROM futures_klines "
+                    "WHERE contract=? ORDER BY timestamp DESC LIMIT 1",
+                    (contract,),
+                ).fetchone()
             if latest:
                 price_map[contract] = latest["close"]
         return price_map
@@ -335,6 +347,28 @@ class Orchestrator:
         # 1. 采集K线
         logger.info("[1/5] 采集K线数据...")
         collect_stats = self.futures_collector.collect_all()
+
+        # 1.5 风控价格采集：为持仓合约采集 1m K 线（更实时价格）
+        try:
+            with self.db.get_conn() as conn:
+                open_contracts = [
+                    r["contract"]
+                    for r in conn.execute(
+                        "SELECT DISTINCT contract FROM positions WHERE status='open'"
+                    ).fetchall()
+                ]
+            if open_contracts:
+                logger.info(
+                    "[1.5/5] 采集风控价格(1m K线): %s", open_contracts
+                )
+                risk_stats = self.futures_collector.collect_risk_prices(
+                    open_contracts
+                )
+                logger.info(
+                    "  风控价格采集完成: %d 个持仓合约", len(risk_stats)
+                )
+        except Exception as e:
+            logger.warning("风控价格采集异常(已跳过): %s", e)
 
         # 2. 获取已采集的合约
         with self.db.get_conn() as conn:

@@ -629,6 +629,50 @@ class FuturesCollector:
         """
         return self.collect_all(period_map={"15m": "15"})
 
+    # ── 风控价格采集 ──────────────────────────────────────────
+
+    def _contract_to_symbol(self, contract: str) -> Optional[str]:
+        """从合约代码反查品种代码。
+
+        Args:
+            contract: 合约代码，如 ``'SC2607'``。
+
+        Returns:
+            品种代码（如 ``'SC'``），未找到返回 None。
+        """
+        conn = self.db.get_conn()
+        row = conn.execute(
+            "SELECT symbol FROM futures_klines WHERE contract=? LIMIT 1",
+            (contract,),
+        ).fetchone()
+        return row["symbol"] if row else None
+
+    def collect_risk_prices(self, contracts: list[str]) -> dict:
+        """为风控持仓合约采集 1 分钟 K 线（增量）。
+
+        嵌入在 orchestrator 管线中，供风控系统使用最实时价格。
+        只采 1m（15m/1h/1d 由 collect_all 负责），避免重复和存储膨胀。
+
+        Args:
+            contracts: 持仓合约代码列表，如 ``['SC2607']``。
+
+        Returns:
+            ``{contract: {timeframe: stats}}`` 采集统计。
+        """
+        results: dict = {}
+        for contract in contracts:
+            symbol = self._contract_to_symbol(contract)
+            if not symbol:
+                logger.warning(
+                    "collect_risk_prices: 合约 %s 未找到对应品种，跳过", contract
+                )
+                continue
+            # 只采 1m（15m/1h/1d 由 collect_all 负责）
+            stats = self.collect_symbol(symbol, contract, {"1m": "1"})
+            results[contract] = stats
+            time_module.sleep(0.3)
+        return results
+
 
 # ============================================================
 # 模块自测入口
