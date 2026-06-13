@@ -30,6 +30,7 @@ from signals.formatter import UnifiedFormatter
 from signals.dispatcher import dispatch
 from signals.smart_filter import SmartFilter
 from signals.macos_notifier import notify_signal_summary
+from pipeline.n_signal_pipeline import NSignalPipeline as _NSignalPipeline
 
 logger = logging.getLogger(__name__)
 
@@ -591,6 +592,37 @@ class Orchestrator:
 
         return results
 
+    # ── N 型信号管道 ──────────────────────────────────────────
+
+    def run_n_signal_scan(self, refresh: bool = True) -> list:
+        """运行 N 型信号管道（轻量级 N 型 15m B 点突破扫描）。
+
+        相比 run_futures_scan（三级嵌套评分），本管道：
+          - 仅依赖 1d N 型结构 + 15m B 点突破
+          - 不运行全量 MACD/颜色轨迹验证
+          - 适合高频扫描（每 15m 一次）
+
+        流程：
+            0. （可选）``data_refresh()`` 刷新数据
+            1. 创建 ``NSignalPipeline`` 实例
+            2. 调用 ``scan()`` 扫描所有活跃 N 型结构
+            3. 去重 + 推送
+
+        Args:
+            refresh: 是否在扫描前刷新数据，默认 True。
+
+        Returns:
+            NBreakoutSignal 列表（已推送的信号）。
+        """
+        if refresh:
+            self.data_refresh()
+
+        logger.info("开始 N 型信号管道扫描...")
+        pipeline = _NSignalPipeline(self.db, self.hub)
+        signals = pipeline.scan()
+        logger.info("N 型信号管道完成: %d 个信号推送", len(signals))
+        return signals
+
     # ── 期权策略扫描 ──────────────────────────────────────────
 
     def run_options_scan(self, limit: int = 15) -> list:
@@ -1065,9 +1097,9 @@ def main() -> None:
     )
     parser.add_argument(
         "--mode",
-        choices=["futures", "options", "all", "eod"],
+        choices=["futures", "options", "all", "eod", "n_signal"],
         default="all",
-        help="运行模式: futures=期货扫描, options=期权扫描, all=全量, eod=收盘总结 (默认: all)",
+        help="运行模式: futures=期货扫描, options=期权扫描, all=全量, eod=收盘总结, n_signal=N型信号管道 (默认: all)",
     )
     parser.add_argument(
         "--symbol",
@@ -1100,6 +1132,9 @@ def main() -> None:
     if args.mode == "futures":
         logger.info("运行模式: 期货信号扫描")
         orch.run_futures_scan()
+    elif args.mode == "n_signal":
+        logger.info("运行模式: N 型信号管道")
+        orch.run_n_signal_scan()
     elif args.mode == "options":
         logger.info("运行模式: 期权策略扫描 limit=%d", args.limit)
         orch.run_options_scan(args.limit)

@@ -58,9 +58,9 @@ def _get_active_n_structure(
     with db.get_conn() as conn:
         row = conn.execute(
             """SELECT * FROM futures_n_structures
-               WHERE symbol=? AND contract=? AND timeframe=? AND state!='COMPLETED'
+               WHERE symbol=? AND timeframe=? AND state!='COMPLETED'
                ORDER BY updated_at DESC LIMIT 1""",
-            (symbol, contract, timeframe),
+            (symbol, timeframe),
         ).fetchone()
 
         if not row:

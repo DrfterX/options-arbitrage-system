@@ -1,0 +1,102 @@
+{
+  "aggregate": {
+    "trades": 30,
+    "wins": 8,
+    "losses": 22,
+    "win_rate_pct": 26.7,
+    "total_pnl": -8728.71,
+    "total_return_pct": -8.73,
+    "profit_ratio": 0.8,
+    "max_dd_pct": 10.4,
+    "sharpe": -8.19,
+    "signal_count": 30,
+    "score": 32.9,
+    "score_details": {
+      "wr_score": 44.4,
+      "pr_score": 39.9,
+      "tr_score": 0.0,
+      "dd_score": 64.0,
+      "sr_score": 0.0
+    },
+    "grade": "FAIL"
+  },
+  "per_symbol": {
+    "RB": {
+      "trades": 1,
+      "win_rate_pct": 100.0,
+      "total_pnl": 454.07,
+      "total_return_pct": 0.45,
+      "profit_ratio": 454.07,
+      "max_dd_pct": 0.0,
+      "sharpe": 0.0,
+      "signal_count": 1,
+      "score": 70.5
+    },
+    "Y": {
+      "trades": 5,
+      "win_rate_pct": 20.0,
+      "total_pnl": -1326.57,
+      "total_return_pct": -1.33,
+      "profit_ratio": 0.64,
+      "max_dd_pct": 1.58,
+      "sharpe": -11.29,
+      "signal_count": 5,
+      "score": 33.0
+    },
+    "P": {
+      "trades": 3,
+      "win_rate_pct": 0.0,
+      "total_pnl": -1746.0,
+      "total_return_pct": -1.75,
+      "profit_ratio": 0.0,
+      "max_dd_pct": 1.75,
+      "sharpe": -55.18,
+      "signal_count": 3,
+      "score": 15.0
+    },
+    "EB": {
+      "trades": 6,
+      "win_rate_pct": 33.3,
+      "total_pnl": -1924.11,
+      "total_return_pct": -1.92,
+      "profit_ratio": 0.8,
+      "max_dd_pct": 1.92,
+      "sharpe": -5.48,
+      "signal_count": 6,
+      "score": 41.7
+    },
+    "L": {
+      "trades": 5,
+      "win_rate_pct": 20.0,
+      "total_pnl": -1656.0,
+      "total_return_pct": -1.66,
+      "profit_ratio": 0.53,
+      "max_dd_pct": 1.66,
+      "sharpe": -11.67,
+      "signal_count": 5,
+      "score": 31.6
+    },
+    "PG": {
+      "trades": 6,
+      "win_rate_pct": 0.0,
+      "total_pnl": -3568.82,
+      "total_return_pct": -3.57,
+      "profit_ratio": 0.0,
+      "max_dd_pct": 3.57,
+      "sharpe": -29.89,
+      "signal_count": 6,
+      "score": 15.0
+    },
+    "TA": {
+      "trades": 4,
+      "win_rate_pct": 75.0,
+      "total_pnl": 1038.71,
+      "total_return_pct": 1.04,
+      "profit_ratio": 1.56,
+      "max_dd_pct": 0.28,
+      "sharpe": 11.36,
+      "signal_count": 4,
+      "score": 75.6
+    }
+  }
+}
