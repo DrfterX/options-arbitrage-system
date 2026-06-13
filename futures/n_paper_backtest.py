@@ -554,12 +554,14 @@ def _aggregate(trades: List[Trade], summaries: List[PerfSummary], capital: float
 # ═══════════════════════════════════════════════════════════
 
 def run_symbol(
-    sym_data: Dict[str, Any], capital: float = 100000.0
+    sym_data: Dict[str, Any], capital: float = 100000.0,
+    entry_mode: str = "pullback",
 ) -> Tuple[PerfSummary, List[Trade]]:
     """单个品种 Paper Trading 回测。
 
     Args:
         sym_data: load_one() 返回的品种数据。
+        entry_mode: "direct" = B 点首次突破即入场；"pullback" = 等待回撤二次突破。
 
     Returns:
         (PerfSummary, 交易记录列表)
@@ -672,45 +674,61 @@ def run_symbol(
             else:
                 is_fresh = False
 
-            # ── Pullback 入场状态机 ──
-            # IDLE → BREAKOUT (B 突破) → PULLBACK (回撤到 B±0.3×ATR) → re-break 入场
-            # N 型变更时重置
-            if pb_phase is not None and active_ns.pc_time != pb_ns_ts:
-                pb_phase = None
-
-            if pb_phase is None:
-                # IDLE: 等待首次 B 点突破
+            # ── 入场模式 ──
+            if entry_mode == "direct":
+                # 直接入场：B 点首次突破即入场
                 if is_fresh:
-                    pb_phase = "BREAKOUT"
-                    pb_b_price = active_ns.b_price
-                    pb_ns_ts = active_ns.pc_time
-                    pb_atr = _calc_atr(k15[max(0, bi - 20):bi + 1], 14)
-                    if pb_atr <= 0:
-                        pb_atr = abs(active_ns.b_price - active_ns.a_price) * 0.02
-                    logger.debug("  [%s] Pullback: BREAKOUT @ B=%.0f ATR=%.1f",
-                                 symbol, pb_b_price, pb_atr)
-
-            elif pb_phase == "BREAKOUT":
-                # BREAKOUT: 已突破 B，等待价格回撤到 B ± 0.3×ATR 范围
-                pb_low = pb_b_price - 0.3 * pb_atr
-                pb_high = pb_b_price + 0.3 * pb_atr
-                if bar.low <= pb_high and bar.high >= pb_low:
-                    pb_phase = "PULLBACK"
-                    logger.debug("  [%s] Pullback: PULLBACK (touched %.0f~%.0f zone) @ %.0f",
-                                 symbol, pb_low, pb_high, bar.close)
-
-            elif pb_phase == "PULLBACK":
-                # PULLBACK: 回撤完成，等待 B 点二次突破（同方向）→ 入场
-                if is_fresh:
-                    atr = pb_atr
+                    atr = _calc_atr(k15[max(0, bi - 20):bi + 1], 14)
+                    if atr <= 0:
+                        atr = abs(active_ns.b_price - active_ns.a_price) * 0.02
                     position = Position(symbol, active_ns.direction, ts,
                                         bar.close, active_ns, atr, qty=1)
                     signal_count += 1
-                    logger.debug("  [%s] 入场 %s @ %.0f (Pullback entry)",
+                    logger.debug("  [%s] 入场 %s @ %.0f (Direct entry)",
                                  symbol, active_ns.direction, bar.close)
-                    # 入场后释放 N 型 + 重置 pullback 状态
                     active_ns = None
                     pb_phase = None
+
+            else:
+                # Pullback 入场状态机
+                # IDLE → BREAKOUT (B 突破) → PULLBACK (回撤到 B±0.3×ATR) → re-break 入场
+                # N 型变更时重置
+                if pb_phase is not None and active_ns.pc_time != pb_ns_ts:
+                    pb_phase = None
+
+                if pb_phase is None:
+                    # IDLE: 等待首次 B 点突破
+                    if is_fresh:
+                        pb_phase = "BREAKOUT"
+                        pb_b_price = active_ns.b_price
+                        pb_ns_ts = active_ns.pc_time
+                        pb_atr = _calc_atr(k15[max(0, bi - 20):bi + 1], 14)
+                        if pb_atr <= 0:
+                            pb_atr = abs(active_ns.b_price - active_ns.a_price) * 0.02
+                        logger.debug("  [%s] Pullback: BREAKOUT @ B=%.0f ATR=%.1f",
+                                     symbol, pb_b_price, pb_atr)
+
+                elif pb_phase == "BREAKOUT":
+                    # BREAKOUT: 已突破 B，等待价格回撤到 B ± 0.3×ATR 范围
+                    pb_low = pb_b_price - 0.3 * pb_atr
+                    pb_high = pb_b_price + 0.3 * pb_atr
+                    if bar.low <= pb_high and bar.high >= pb_low:
+                        pb_phase = "PULLBACK"
+                        logger.debug("  [%s] Pullback: PULLBACK (touched %.0f~%.0f zone) @ %.0f",
+                                     symbol, pb_low, pb_high, bar.close)
+
+                elif pb_phase == "PULLBACK":
+                    # PULLBACK: 回撤完成，等待 B 点二次突破（同方向）→ 入场
+                    if is_fresh:
+                        atr = pb_atr
+                        position = Position(symbol, active_ns.direction, ts,
+                                            bar.close, active_ns, atr, qty=1)
+                        signal_count += 1
+                        logger.debug("  [%s] 入场 %s @ %.0f (Pullback entry)",
+                                     symbol, active_ns.direction, bar.close)
+                        # 入场后释放 N 型 + 重置 pullback 状态
+                        active_ns = None
+                        pb_phase = None
 
         else:
             # 不在入场窗口或有持仓 → 重置 pullback 状态
@@ -733,7 +751,8 @@ def run_symbol(
 # 多品种 / 全量回测
 # ═══════════════════════════════════════════════════════════
 
-def run_all(db_path: str, capital: float = 100000.0) -> Tuple[PerfSummary, List[PerfSummary], List[Trade]]:
+def run_all(db_path: str, capital: float = 100000.0,
+             entry_mode: str = "pullback") -> Tuple[PerfSummary, List[PerfSummary], List[Trade]]:
     summaries: List[PerfSummary] = []
     all_trades: List[Trade] = []
 
@@ -745,20 +764,46 @@ def run_all(db_path: str, capital: float = 100000.0) -> Tuple[PerfSummary, List[
         if not sym_data:
             summaries.append(PerfSummary(symbol=sym))
             continue
-        perf, trades = run_symbol(sym_data, capital)
+        perf, trades = run_symbol(sym_data, capital, entry_mode=entry_mode)
         summaries.append(perf)
         all_trades.extend(trades)
 
     agg = _aggregate(all_trades, summaries, capital)
+    agg.signal_count = len(all_trades)
     return agg, summaries, all_trades
 
 
+def run_comparison(db_path: str, capital: float = 100000.0) -> Dict[str, Any]:
+    """运行直接入场与 Pullback 入场的对比回测。
+
+    Returns:
+        包含两种模式结果和对比的字典。
+    """
+    from copy import deepcopy
+
+    print("\n" + "=" * 60)
+    print("  ═══ 基线：直接入场 (Direct Entry) ═══")
+    print("=" * 60)
+    agg_direct, summaries_direct, trades_direct = run_all(db_path, capital, entry_mode="direct")
+
+    print("\n" + "=" * 60)
+    print("  ═══ P2：Pullback 入场 ═══")
+    print("=" * 60)
+    agg_pullback, summaries_pullback, trades_pullback = run_all(db_path, capital, entry_mode="pullback")
+
+    return {
+        "direct": {"agg": agg_direct, "summaries": summaries_direct, "trades": trades_direct},
+        "pullback": {"agg": agg_pullback, "summaries": summaries_pullback, "trades": trades_pullback},
+    }
+
+
 def save_results(trades: List[Trade], agg: PerfSummary, summaries: List[PerfSummary],
-                 db_path: str) -> None:
+                 db_path: str, entry_mode: str = "pullback") -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    csv_path = OUTPUT_DIR / "n_paper_trades.csv"
-    json_path = OUTPUT_DIR / "n_paper_summary.json"
+    suffix = f"_{entry_mode}" if entry_mode == "pullback" else ""
+    csv_path = OUTPUT_DIR / f"n_paper_trades{suffix}.csv"
+    json_path = OUTPUT_DIR / f"n_paper_summary{suffix}.json"
 
     # CSV
     if trades:
@@ -841,6 +886,80 @@ def print_report(agg: PerfSummary, summaries: List[PerfSummary]) -> None:
     print("=" * 60)
 
 
+def print_comparison(result: Dict[str, Any]) -> None:
+    """打印直接入场 vs Pullback 入场的侧面对比报告。"""
+    d = result["direct"]
+    p = result["pullback"]
+    da = d["agg"]
+    pa = p["agg"]
+
+    print("\n" + "=" * 65)
+    print("  P2.2 对比报告：Direct Entry vs Pullback Entry")
+    print("=" * 65)
+
+    # ── 总体对比表 ──
+    print(f"\n  {'指标':>16} | {'直接入场':>12} | {'Pullback':>10} | {'变化':>10}")
+    print(f"  {'-'*16}-+-{'-'*12}-+-{'-'*10}-+-{'-'*10}")
+
+    def _line(label, d_val, p_val, fmt=".1f", reverse=False):
+        diff = p_val - d_val
+        arrow = "▲" if diff > 0 else "▼" if diff < 0 else "─"
+        if reverse:
+            arrow = "▼" if diff > 0 else "▲" if diff < 0 else "─"
+        d_s = f"{d_val:{fmt}}" if isinstance(d_val, (int, float)) else str(d_val)
+        p_s = f"{p_val:{fmt}}" if isinstance(p_val, (int, float)) else str(p_val)
+        print(f"  {label:>16} | {d_s:>12} | {p_s:>10} | {arrow} {diff:{fmt}}")
+
+    _line("信号数", da.signal_count, pa.signal_count, "d")
+    _line("交易数", da.trades, pa.trades, "d")
+    _line("胜率", da.win_rate * 100, pa.win_rate * 100, ".1f")
+    _line("总 PnL", da.total_pnl, pa.total_pnl, ".0f")
+    _line("总收益率%", da.total_return_pct, pa.total_return_pct, ".2f")
+    _line("盈亏比", da.profit_ratio, pa.profit_ratio, ".2f")
+    _line("最大回撤%", da.max_dd_pct * 100, pa.max_dd_pct * 100, ".2f")
+    _line("Sharpe", da.sharpe, pa.sharpe, ".2f")
+    _line("评分", da.score, pa.score, ".1f")
+
+    # 各维度评分对比
+    print(f"\n  {'维度评分':>16} | {'直接':>12} | {'Pullback':>10} | {'变化':>10}")
+    print(f"  {'-'*16}-+-{'-'*12}-+-{'-'*10}-+-{'-'*10}")
+    for k in ["wr_score", "pr_score", "tr_score", "dd_score", "sr_score"]:
+        d_v = da.score_details.get(k, 0)
+        p_v = pa.score_details.get(k, 0)
+        label = {"wr_score": "胜率分", "pr_score": "盈亏比分",
+                 "tr_score": "收益分", "dd_score": "回撤分", "sr_score": "Sharpe分"}.get(k, k)
+        _line(label, d_v, p_v, ".1f")
+
+    print()
+
+    # ── 分品种对比 ──
+    print(f"  {'='*65}")
+    print(f"  分品种对比")
+    print(f"  {'='*65}")
+    header = f"  {'Sym':>4} | {'模式':>8} | {'信号':>4} | {'胜率':>5} | {'PnL':>9} | {'Score':>5}"
+    print(header)
+    print(f"  {'-'*4}-+-{'-'*8}-+-{'-'*4}-+-{'-'*5}-+-{'-'*9}-+-{'-'*5}")
+
+    ds_map = {s.symbol: s for s in d["summaries"]}
+    ps_map = {s.symbol: s for s in p["summaries"]}
+
+    for sym in TARGET_SYMBOLS:
+        ds = ds_map.get(sym)
+        ps = ps_map.get(sym)
+        if ds is None and ps is None:
+            continue
+        if ds:
+            print(f"  {sym:>4} | {'直接':>8} | {ds.trades:>4} | {ds.win_rate*100:>4.0f}% | {ds.total_pnl:>+8.0f} | {ds.score:>4.0f}")
+        if ps:
+            print(f"  {sym:>4} | {'Pullback':>8} | {ps.trades:>4} | {ps.win_rate*100:>4.0f}% | {ps.total_pnl:>+8.0f} | {ps.score:>4.0f}")
+
+    print()
+    print(f"  ⭐ 直接入场总分: {da.score:.1f} {'WATCH' if da.score >= 50 else 'FAIL'}")
+    print(f"  ⭐ Pullback 总分: {pa.score:.1f} {'WATCH' if pa.score >= 50 else 'FAIL'}")
+    print(f"  🔻 差异: {pa.score - da.score:+.1f} 分")
+    print("=" * 65)
+
+
 # ═══════════════════════════════════════════════════════════
 # CLI
 # ═══════════════════════════════════════════════════════════
@@ -854,23 +973,33 @@ def main():
     parser.add_argument("--symbol", "-s", default="", help="单品种")
     parser.add_argument("--db", default=str(DEFAULT_DB_PATH), help="数据库路径")
     parser.add_argument("--capital", "-c", type=float, default=100000.0, help="初始资金")
+    parser.add_argument("--entry-mode", default="pullback",
+                        choices=["direct", "pullback", "compare"],
+                        help="入场模式: direct / pullback / compare（两者对比）")
     args = parser.parse_args()
 
     db_path = args.db
+
+    if args.entry_mode == "compare":
+        result = run_comparison(db_path, args.capital)
+        print_comparison(result)
+        return
+
+    entry_mode = args.entry_mode
 
     if args.symbol:
         if args.symbol not in TARGET_SYMBOLS:
             print(f"不支持 {args.symbol}，可选: {', '.join(TARGET_SYMBOLS)}")
             sys.exit(1)
         sym_data = load_one(db_path, args.symbol)
-        perf, trades = run_symbol(sym_data, args.capital)
+        perf, trades = run_symbol(sym_data, args.capital, entry_mode=entry_mode)
         print_report(perf, [perf])
-        save_results(trades, perf, [perf], db_path)
+        save_results(trades, perf, [perf], db_path, entry_mode=entry_mode)
     else:
         start = time_module.time()
-        agg, summaries, trades = run_all(db_path, args.capital)
+        agg, summaries, trades = run_all(db_path, args.capital, entry_mode=entry_mode)
         print_report(agg, summaries)
-        save_results(trades, agg, summaries, db_path)
+        save_results(trades, agg, summaries, db_path, entry_mode=entry_mode)
         elapsed = time_module.time() - start
         print(f"耗时: {elapsed:.1f}s")
 
