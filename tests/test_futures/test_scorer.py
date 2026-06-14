@@ -297,7 +297,7 @@ class TestLevel3NoBreakout:
 
         result = evaluate("RB", "rb2510", _test_db)
         assert result.overall_score == 2  # Level1+2通过=2分
-        assert result.signal_type == "NONE"  # score<3 硬条件不满足
+        assert result.signal_type == "ENTRY"  # 2分=入场阈值（梯度策略：2分入场/3分加仓）
 
     @patch("futures.scorer._apply_score_reset", return_value=False)
     @patch("futures.scorer.check_realtime_breakout")
@@ -324,7 +324,7 @@ class TestLevel3NoBreakout:
 
         result = evaluate("RB", "rb2510", _test_db)
         assert result.overall_score == 2
-        assert result.signal_type == "NONE"  # score<3 硬条件不满足
+        assert result.signal_type == "ENTRY"  # 2分=入场阈值（梯度策略：2分入场/3分加仓）
 
 
 # ═══════════════════════════════════════════════════════

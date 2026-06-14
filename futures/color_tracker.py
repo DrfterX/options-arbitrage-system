@@ -16,8 +16,6 @@ from config.settings import (
     LEVEL3_STABILITY_TIMEFRAME,
     LEVEL3_STABILITY_WINDOW,
     LEVEL3_STABILITY_MAX_SWITCHES,
-    TRANSITION_WINDOW_BEFORE,
-    TRANSITION_WINDOW_AFTER,
 )
 
 logger = logging.getLogger(__name__)
@@ -224,12 +222,14 @@ def _check_pivot_transition(
     to_color: str,
     leg_label: str,
 ) -> tuple:
-    """检查 MACD 在转折点处的颜色过渡。
+    """检查 MACD 在转折点处的动量确认（CEO决策 Cycle #41）。
 
-    放宽规则：不要求 MACD 线翻零，但要求 histogram 方向已反转。
+    删除尾部颜色过渡检查（颜色过渡与N型B点有系统性时序偏差）。
+    仅保留 histogram 动量方向确认。
+    原理: MACD 的"配合"本质是动量确认，不是颜色序列的精确匹配。
 
     Args:
-        macd_before: 转折点前MACD数据。
+        macd_before: 转折点前MACD数据（不再用于颜色过渡检查）。
         macd_after: 转折点后MACD数据。
         from_color: 过渡前颜色。
         to_color: 过渡后颜色。
@@ -238,44 +238,52 @@ def _check_pivot_transition(
     Returns:
         (passed: bool, detail: str)
     """
-    dominant_before = _dominant_color(macd_before)
+    if not macd_after:
+        return False, f"{leg_label}: 转折后无MACD数据"
+
+    # 优先: to_color 已出现在转折后 → 颜色过渡已完成
     has_to_after = _has_color(macd_after, to_color)
-
-    if dominant_before is None:
-        return False, f"{leg_label}: 转折前无MACD数据"
-
-    if dominant_before != from_color:
-        return False, f"{leg_label}: 转折前主体{dominant_before}，期望{from_color}"
-
     if has_to_after:
-        before_counts = Counter(
-            r["color"] for r in macd_before if r["color"] in (COLOR_RED, COLOR_BLUE)
-        )
-        after_counts = Counter(
-            r["color"] for r in macd_after if r["color"] in (COLOR_RED, COLOR_BLUE)
-        )
+        after_count = sum(1 for r in macd_after if r["color"] == to_color)
         return True, (
-            f"{leg_label}: {from_color}({before_counts.get(from_color, 0)}根)"
-            f"→{to_color}({after_counts.get(to_color, 0)}根)"
+            f"{leg_label}: {to_color}已出现({after_count}根),颜色过渡确认"
         )
 
+    # histogram 动量确认（核心检查）
+    # SHORT: 期望 histogram 转负（动量向下）
+    # LONG:  期望 histogram 转正（动量向上）
     if to_color == COLOR_BLUE:  # SHORT → 期望动量向下
         after_trend = _trend_from_histogram(macd_after, "SHORT")
         if after_trend == "FALLING":
             return True, f"{leg_label}: MACD仍{from_color},但histogram已转负(动量向下)"
+        last3_hist = (
+            sum(r.get("histogram", 0) for r in macd_after[-3:])
+            / max(len(macd_after[-3:]), 1)
+        )
+        if last3_hist < 0:
+            return True, (
+                f"{leg_label}: MACD仍{from_color},最近3根histogram均值{last3_hist:.2f}(已负)"
+            )
+        return False, (
+            f"{leg_label}: MACD仍{from_color}且histogram未转负"
+            f"(最近3根均值{last3_hist:.2f})"
+        )
     else:  # LONG → 期望动量向上
         after_trend = _trend_from_histogram(macd_after, "LONG")
         if after_trend == "RISING":
             return True, f"{leg_label}: MACD仍{from_color},但histogram已转正(动量向上)"
-
-    after_hist_sum = (
-        sum(r.get("histogram", 0) for r in macd_after[-3:])
-        / max(len(macd_after[-3:]), 1)
-    )
-    return False, (
-        f"{leg_label}: MACD仍{from_color}且histogram未反转"
-        f"(最近3根均值{after_hist_sum:.2f})"
-    )
+        last3_hist = (
+            sum(r.get("histogram", 0) for r in macd_after[-3:])
+            / max(len(macd_after[-3:]), 1)
+        )
+        if last3_hist > 0:
+            return True, (
+                f"{leg_label}: MACD仍{from_color},最近3根histogram均值{last3_hist:.2f}(已正)"
+            )
+        return False, (
+            f"{leg_label}: MACD仍{from_color}且histogram未转正"
+            f"(最近3根均值{last3_hist:.2f})"
+        )
 
 
 # ─── 核心验证 ────────────────────────────────────────────────
@@ -346,43 +354,23 @@ def check_macd_trajectory(
     window_b = max(window_b, min_window)
     window_c = max(window_c, min_window)
 
-    # 腿1: A转折点
+    # 腿1: A转折点 — 使用动态窗口（不再被 TRANSITION_WINDOW_BEFORE/AFTER 截断）
     macd_before_a = _get_macd_in_range(
         db, symbol, contract, lower_tf, a_time - window_a, a_time
     )
     macd_after_a = _get_macd_in_range(
         db, symbol, contract, lower_tf, a_time, a_time + window_a
     )
-    macd_before_a = (
-        macd_before_a[-TRANSITION_WINDOW_BEFORE:]
-        if len(macd_before_a) > TRANSITION_WINDOW_BEFORE
-        else macd_before_a
-    )
-    macd_after_a = (
-        macd_after_a[:TRANSITION_WINDOW_AFTER]
-        if len(macd_after_a) > TRANSITION_WINDOW_AFTER
-        else macd_after_a
-    )
     leg1_passed, leg1_detail = _check_pivot_transition(
         macd_before_a, macd_after_a, leg1_from, leg1_to, f"A点({direction})"
     )
 
-    # 腿2: B转折点
+    # 腿2: B转折点 — 使用动态窗口（不再被 TRANSITION_WINDOW_BEFORE/AFTER 截断）
     macd_before_b = _get_macd_in_range(
         db, symbol, contract, lower_tf, b_time - window_b, b_time
     )
     macd_after_b = _get_macd_in_range(
         db, symbol, contract, lower_tf, b_time, b_time + window_b
-    )
-    macd_before_b = (
-        macd_before_b[-TRANSITION_WINDOW_BEFORE:]
-        if len(macd_before_b) > TRANSITION_WINDOW_BEFORE
-        else macd_before_b
-    )
-    macd_after_b = (
-        macd_after_b[:TRANSITION_WINDOW_AFTER]
-        if len(macd_after_b) > TRANSITION_WINDOW_AFTER
-        else macd_after_b
     )
     leg2_passed, leg2_detail = _check_pivot_transition(
         macd_before_b, macd_after_b, leg2_from, leg2_to, f"B点({direction})"
