@@ -1,11 +1,17 @@
 """
-三级嵌套验证评分引擎。
+三级嵌套验证评分引擎（★ P0指令覆盖：3分硬条件入场制 — Cycle #59）。
 
 核心逻辑：
   Level1 = 周线N型结构 + 日线MACD颜色轨迹验证（红→绿→红→减弱）
   Level2 = 小时线N型结构 + 15分钟MACD颜色轨迹验证
-  Level3 = 15分钟N型结构 + 3分钟MACD验证 + 15分钟突破15分钟B点
+  Level3 = 15分钟N型结构 + 3分钟MACD验证 + 15分钟突破B点
    加分 = 月线+周线MACD / 日线+小时线MACD 等更大周期配合
+
+评分规则（P0指令覆盖 Cycle #35 梯度策略）：
+  score=3(L1+L2+L3+MACD硬) → ENTRY
+  score=4(+加分项)         → ADD_POSITION
+  score<3                  → NONE
+  3分是硬性入场条件，缺一分都不行。加分不计入基础分。
 
 所有DB访问通过 ``db: Database`` 参数完成。
 """
@@ -1004,22 +1010,20 @@ def evaluate(
             return result
 
     # ═══════════════════════════════════════════════════
-    # 最终评分判定（Cycle #35 CEO决策：梯度策略）
+    # 最终评分判定（P0指令：3分硬条件入场制 — Cycle #59）
     #
-    # 回测验证（2026-06-15）：
-    #   L1+L2（2分）= 40条历史信号 × 60.9%准确率 ✅ 可入场
-    #   3分硬条件 = 0条历史信号 ❌ 过于严格无实际信号
-    # → 梯度策略：2分入场（限制仓位）+ 3分加仓
+    # 覆盖 Cycle #35 的梯度策略决策（2分入场）。根据原始笔记要求：
+    #   - 3分是硬性入场条件——缺一分都不行
+    #   - 加分单独计算，不能用来补齐基础3分中的缺分
     #
-    # score=2(L1+L2+MACD硬) → ENTRY（入场，限制仓位）
-    # score=3(L1+L2+L3+MACD硬) → ENTRY（全信号）
-    # score=4(+加分项)      → ADD_POSITION（加仓）
-    # score<2               → NONE（不满足条件）
+    # score=3(L1+L2+L3+MACD硬) → ENTRY
+    # score=4(+加分项)         → ADD_POSITION
+    # score<3                  → NONE
     # ═══════════════════════════════════════════════════
     if score >= 3 and bonus_total > 0:
         result.overall_score = 4
         result.signal_type = "ADD_POSITION"
-    elif score >= 2:
+    elif score >= 3:
         result.overall_score = score
         result.signal_type = "ENTRY"
     else:
