@@ -184,15 +184,16 @@ class SignalResult:
 
 
 def _calculate_sl_tp(
-    result: SignalResult, n_struct: Dict[str, Any]
+    result: SignalResult, n_struct: Dict[str, Any], l1_struct: Dict[str, Any]
 ) -> tuple:
-    """计算止损止盈，基于入场级别的N型结构（15分钟）。
+    """计算止损止盈，基于入场级别的N型结构（15分钟），止盈用大周期（周线）第一笔幅度推算。
 
     原则：
       - SL 永远用「最近有效极值点」，而非结构起点 A：
         - LEG2 状态：C 点（最近反向极值）为最合理止损位
         - LEG3 状态：B 点（突破点位变支撑/阻力）为最合理止损位
-      - TP = 入场价 ± 风险 × TP_RATIO（固定 2:1 风险收益比）
+      - TP = 入场价 ± 大周期第一笔幅度（Level1 A→B 波幅）
+        天然获得 1:10~1:30+ 超大盈亏比，替代固定 2:1。
 
     Returns:
         (sl, tp) 或 (None, None)。
@@ -216,16 +217,27 @@ def _calculate_sl_tp(
     if sl is None:
         return None, None
 
-    # 止盈位：固定 2:1 风险收益比
-    risk = abs(entry_price - sl)
-    tp_ratio = 2.0
+    # 止盈位：大周期（Level1）第一笔 A→B 幅度推算第三笔目标
+    l1_a = l1_struct.get("point_a_price")
+    l1_b = l1_struct.get("point_b_price")
+    if l1_a is not None and l1_b is not None:
+        amplitude = abs(l1_b - l1_a)
 
-    if direction == "LONG":
-        tp = entry_price + risk * tp_ratio
-    elif direction == "SHORT":
-        tp = entry_price - risk * tp_ratio
+        if direction == "LONG":
+            tp = entry_price + amplitude
+        elif direction == "SHORT":
+            tp = entry_price - amplitude
+        else:
+            return None, None
     else:
-        return None, None
+        # 兜底：无法获取Level1波幅则用固定 2:1
+        risk = abs(entry_price - sl)
+        if direction == "LONG":
+            tp = entry_price + risk * 2.0
+        elif direction == "SHORT":
+            tp = entry_price - risk * 2.0
+        else:
+            return None, None
 
     return round(sl, 2), round(tp, 2)
 
@@ -481,7 +493,7 @@ def evaluate(
             l3_result["passed"] = True
             score = 3  # Level3 通过 → 3分，满足入场条件
             result.entry_price = breakout.get("trigger_price")
-            sl, tp = _calculate_sl_tp(result, l3_struct)
+            sl, tp = _calculate_sl_tp(result, l3_struct, l1_struct)
             result.stop_loss = sl
             result.take_profit = tp
     else:

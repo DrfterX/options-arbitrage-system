@@ -1,6 +1,7 @@
-"""测试 futures/scorer.py 的 evaluate() 和 _calculate_sl_tp()
+"""测试 futures/scorer.py 的 evaluate() — 离散3分制版
 
 从旧期货项目迁移，调整了导入路径和 db 参数。
+3分硬条件：Level1+L2+L3全通过=3分(ENTRY)，有加分=4分(ADD_POSITION)，不足3分=NONE。
 """
 
 import pytest
@@ -105,56 +106,55 @@ def make_stability_result(stable: bool = True) -> dict:
 
 
 # ═══════════════════════════════════════════════════════
-# 1. Level1未通过 → overall_score=0.0, signal_type=NONE
+# 1. Level1未通过 → overall_score=0, signal_type=NONE
 # ═══════════════════════════════════════════════════════
 class TestLevel1Fail:
 
     @patch("futures.scorer._get_active_n_structure", return_value=None)
     def test_no_l1_structure(self, mock_get: MagicMock) -> None:
-        """无周线活跃N型 → score=0.0, NONE"""
+        """无周线活跃N型 → score=0, NONE"""
         result = evaluate("RB", "rb2510", _test_db)
-        assert result.overall_score == 0.0
+        assert result.overall_score == 0
         assert result.signal_type == "NONE"
         assert result.direction == "NONE"
         assert result.level1["passed"] is False
 
     @patch("futures.scorer._get_active_n_structure")
     def test_l1_wrong_state(self, mock_get: MagicMock) -> None:
-        """L1状态为COMPLETED → score=0.0, NONE"""
+        """L1状态为COMPLETED → score=0, NONE"""
         mock_get.return_value = make_l1_struct(state="COMPLETED")
         result = evaluate("RB", "rb2510", _test_db)
-        assert result.overall_score == 0.0
+        assert result.overall_score == 0
         assert result.signal_type == "NONE"
 
     @patch("futures.scorer._get_active_n_structure")
     def test_l1_state_idle(self, mock_get: MagicMock) -> None:
-        """L1状态为IDLE → score=0.0, NONE"""
+        """L1状态为IDLE → score=0, NONE"""
         mock_get.return_value = make_l1_struct(state="IDLE")
         result = evaluate("RB", "rb2510", _test_db)
-        assert result.overall_score == 0.0
+        assert result.overall_score == 0
         assert result.signal_type == "NONE"
 
     @patch("futures.scorer._get_active_n_structure")
     def test_l1_state_leg1(self, mock_get: MagicMock) -> None:
-        """L1状态为LEG1 → score=0.0, NONE"""
+        """L1状态为LEG1 → score=0, NONE"""
         mock_get.return_value = make_l1_struct(state="LEG1")
         result = evaluate("RB", "rb2510", _test_db)
-        assert result.overall_score == 0.0
+        assert result.overall_score == 0
         assert result.signal_type == "NONE"
 
 
 # ═══════════════════════════════════════════════════════
-# 2. Level1通过+Level2未通过 → overall_score=0.3, signal_type=WATCH
+# 2. Level1通过+Level2未通过 → NONE（删除降级路径）
 # ═══════════════════════════════════════════════════════
 class TestLevel1PassLevel2Fail:
 
-    @patch("futures.scorer._check_bonus", return_value=[])
     @patch("futures.scorer._get_active_n_structure")
     @patch("futures.scorer.check_macd_trajectory")
     def test_l2_no_structure(
-        self, mock_macd: MagicMock, mock_get: MagicMock, mock_bonus: MagicMock,
+        self, mock_macd: MagicMock, mock_get: MagicMock,
     ) -> None:
-        """L2无活跃N型 → score=0.3, WATCH"""
+        """L2无活跃N型 → score=1, NONE（旧: 0.3, WATCH）"""
 
         def get_struct_side_effect(db, symbol, contract, timeframe):
             if timeframe == LEVEL1_TIMEFRAME:
@@ -165,18 +165,17 @@ class TestLevel1PassLevel2Fail:
         mock_macd.return_value = make_macd_result(passed=True)
 
         result = evaluate("RB", "rb2510", _test_db)
-        assert result.overall_score == 0.3
-        assert result.signal_type == "WATCH"
+        assert result.overall_score == 1  # 只有Level1的1分
+        assert result.signal_type == "NONE"
         assert result.level1["passed"] is True
         assert result.level2["passed"] is False
 
-    @patch("futures.scorer._check_bonus", return_value=[])
     @patch("futures.scorer._get_active_n_structure")
     @patch("futures.scorer.check_macd_trajectory")
     def test_l2_direction_mismatch(
-        self, mock_macd: MagicMock, mock_get: MagicMock, mock_bonus: MagicMock,
+        self, mock_macd: MagicMock, mock_get: MagicMock,
     ) -> None:
-        """L2方向不一致 → score=0.3, WATCH"""
+        """L2方向不一致 → score=1, NONE"""
 
         def get_struct_side_effect(db, symbol, contract, timeframe):
             if timeframe == LEVEL1_TIMEFRAME:
@@ -187,16 +186,15 @@ class TestLevel1PassLevel2Fail:
         mock_macd.return_value = make_macd_result(passed=True)
 
         result = evaluate("RB", "rb2510", _test_db)
-        assert result.overall_score == 0.3
-        assert result.signal_type == "WATCH"
+        assert result.overall_score == 1
+        assert result.signal_type == "NONE"
 
-    @patch("futures.scorer._check_bonus", return_value=[])
     @patch("futures.scorer._get_active_n_structure")
     @patch("futures.scorer.check_macd_trajectory")
     def test_l2_macd_not_passed(
-        self, mock_macd: MagicMock, mock_get: MagicMock, mock_bonus: MagicMock,
+        self, mock_macd: MagicMock, mock_get: MagicMock,
     ) -> None:
-        """L2 MACD轨迹未通过但方向匹配 → score=0.5, CANDIDATE（放宽后）"""
+        """L2 MACD轨迹未通过 → score=1（仅L1通过），NONE"""
 
         def get_struct_side_effect(db, symbol, contract, timeframe):
             if timeframe == LEVEL1_TIMEFRAME:
@@ -214,29 +212,28 @@ class TestLevel1PassLevel2Fail:
         mock_macd.side_effect = macd_side_effect
 
         result = evaluate("RB", "rb2510", _test_db)
-        # 放宽后：方向匹配即通过Level2，MACD轨迹影响评分档位
-        # L2分=0.5（MACD未通过），L3无结构保留L2分
-        assert result.overall_score == 0.5
-        assert result.signal_type == "CANDIDATE"
-        assert result.level2["passed"] is True
+        # MACD未通过 → Level2不得分 → score=1仅L1
+        # < 3分 → NONE
+        assert result.overall_score == 1
+        assert result.signal_type == "NONE"
+        assert result.level2["passed"] is False
         assert result.level2["macd_passed"] is False
 
 
 # ═══════════════════════════════════════════════════════
-# 3. Level1+2通过+Level3未突破 → overall_score=0.6, signal_type=CANDIDATE
+# 3. Level1+2通过+Level3未突破 → NONE（删除降级路径）
 # ═══════════════════════════════════════════════════════
 class TestLevel3NoBreakout:
 
-    @patch("futures.scorer._check_bonus", return_value=[])
     @patch("futures.scorer.check_realtime_breakout")
     @patch("futures.scorer.check_3m_stability")
     @patch("futures.scorer._get_active_n_structure")
     @patch("futures.scorer.check_macd_trajectory")
     def test_l3_no_breakout(
         self, mock_macd: MagicMock, mock_get: MagicMock, mock_stability: MagicMock,
-        mock_breakout: MagicMock, mock_bonus: MagicMock,
+        mock_breakout: MagicMock,
     ) -> None:
-        """L3突破未触发 → score=0.6, CANDIDATE"""
+        """L3突破未触发 → score=2, NONE（旧: 0.6, CANDIDATE）"""
 
         def get_struct_side_effect(db, symbol, contract, timeframe):
             if timeframe == LEVEL1_TIMEFRAME:
@@ -251,19 +248,18 @@ class TestLevel3NoBreakout:
         mock_breakout.return_value = make_breakout_result(triggered=False, is_fresh=False)
 
         result = evaluate("RB", "rb2510", _test_db)
-        assert result.overall_score == 0.6
-        assert result.signal_type == "CANDIDATE"
+        assert result.overall_score == 2  # Level1+2通过=2分
+        assert result.signal_type == "NONE"  # 不足3分 → NONE
 
-    @patch("futures.scorer._check_bonus", return_value=[])
     @patch("futures.scorer.check_realtime_breakout")
     @patch("futures.scorer.check_3m_stability")
     @patch("futures.scorer._get_active_n_structure")
     @patch("futures.scorer.check_macd_trajectory")
     def test_l3_not_stable(
         self, mock_macd: MagicMock, mock_get: MagicMock, mock_stability: MagicMock,
-        mock_breakout: MagicMock, mock_bonus: MagicMock,
+        mock_breakout: MagicMock,
     ) -> None:
-        """L3 3分钟不稳定 → score=0.6, CANDIDATE"""
+        """L3 3分钟不稳定 → score=2, NONE（旧: 0.6, CANDIDATE）"""
 
         def get_struct_side_effect(db, symbol, contract, timeframe):
             if timeframe == LEVEL1_TIMEFRAME:
@@ -278,12 +274,12 @@ class TestLevel3NoBreakout:
         mock_breakout.return_value = make_breakout_result(triggered=True, is_fresh=True)
 
         result = evaluate("RB", "rb2510", _test_db)
-        assert result.overall_score == 0.6
-        assert result.signal_type == "CANDIDATE"
+        assert result.overall_score == 2
+        assert result.signal_type == "NONE"
 
 
 # ═══════════════════════════════════════════════════════
-# 4. 全通过 → overall_score=1.0, signal_type=ENTRY
+# 4. 全通过 → overall_score=3, signal_type=ENTRY（3分入场）
 # ═══════════════════════════════════════════════════════
 class TestAllLevelsPass:
 
@@ -296,7 +292,7 @@ class TestAllLevelsPass:
         self, mock_macd: MagicMock, mock_get: MagicMock, mock_stability: MagicMock,
         mock_breakout: MagicMock, mock_bonus: MagicMock,
     ) -> None:
-        """全通过LONG → score=1.0, ENTRY"""
+        """全通过LONG，无加分 → score=3, ENTRY"""
 
         def get_struct_side_effect(db, symbol, contract, timeframe):
             if timeframe == LEVEL1_TIMEFRAME:
@@ -314,7 +310,7 @@ class TestAllLevelsPass:
         )
 
         result = evaluate("RB", "rb2510", _test_db)
-        assert result.overall_score == 1.0
+        assert result.overall_score == 3  # 3分入场
         assert result.signal_type == "ENTRY"
         assert result.direction == "LONG"
         assert result.entry_price == 3585.0
@@ -330,7 +326,7 @@ class TestAllLevelsPass:
         self, mock_macd: MagicMock, mock_get: MagicMock, mock_stability: MagicMock,
         mock_breakout: MagicMock, mock_bonus: MagicMock,
     ) -> None:
-        """全通过SHORT → score=1.0, ENTRY"""
+        """全通过SHORT，无加分 → score=3, ENTRY"""
 
         def get_struct_side_effect(db, symbol, contract, timeframe):
             if timeframe == LEVEL1_TIMEFRAME:
@@ -348,7 +344,7 @@ class TestAllLevelsPass:
         )
 
         result = evaluate("RB", "rb2510", _test_db)
-        assert result.overall_score == 1.0
+        assert result.overall_score == 3
         assert result.signal_type == "ENTRY"
         assert result.direction == "SHORT"
 
@@ -359,7 +355,7 @@ class TestAllLevelsPass:
 class TestSLTPLong:
 
     def test_long_leg2_sl_tp(self) -> None:
-        """LONG LEG2: SL=C点(最近极值), TP=entry + risk*2.0"""
+        """LONG LEG2: SL=C点, TP=entry + L1振幅(600)=4205"""
         result = SignalResult(symbol="RB", contract="rb2510", direction="LONG")
         result.entry_price = 3605.0
         n_struct = {
@@ -368,13 +364,13 @@ class TestSLTPLong:
             "point_c_price": 3530.0,
             "state": "LEG2",
         }
-        sl, tp = _calculate_sl_tp(result, n_struct)
+        l1_struct = {"point_a_price": 3200.0, "point_b_price": 3800.0}
+        sl, tp = _calculate_sl_tp(result, n_struct, l1_struct)
         assert sl == 3530.0  # C点（最近极值）
-        risk = 3605.0 - 3530.0  # = 75
-        assert tp == pytest.approx(3605.0 + risk * 2.0)  # 3755.0
+        assert tp == pytest.approx(4205.0)  # 3605 + 600(振幅)
 
     def test_long_leg3_sl_tp(self) -> None:
-        """LONG LEG3: SL=B点(突破点变支撑), TP=entry + risk*2.0"""
+        """LONG LEG3: SL=B点, TP=entry + L1振幅(600)=4255"""
         result = SignalResult(symbol="RB", contract="rb2510", direction="LONG")
         result.entry_price = 3655.0
         n_struct = {
@@ -383,13 +379,13 @@ class TestSLTPLong:
             "point_c_price": 3650.0,
             "state": "LEG3",
         }
-        sl, tp = _calculate_sl_tp(result, n_struct)
+        l1_struct = {"point_a_price": 3200.0, "point_b_price": 3800.0}
+        sl, tp = _calculate_sl_tp(result, n_struct, l1_struct)
         assert sl == 3600.0  # B点（突破点变支撑）
-        risk = 3655.0 - 3600.0  # = 55
-        assert tp == pytest.approx(3655.0 + risk * 2.0)  # 3765.0
+        assert tp == pytest.approx(4255.0)  # 3655 + 600(振幅)
 
     def test_long_leg2_no_c_price(self) -> None:
-        """LONG LEG2无C点: SL兜底用B点"""
+        """LONG LEG2无C点: SL兜底B点, TP=entry + L1振幅(600)=4210"""
         result = SignalResult(symbol="RB", contract="rb2510", direction="LONG")
         result.entry_price = 3610.0
         n_struct = {
@@ -397,10 +393,10 @@ class TestSLTPLong:
             "point_b_price": 3600.0,
             "state": "LEG2",
         }
-        sl, tp = _calculate_sl_tp(result, n_struct)
+        l1_struct = {"point_a_price": 3200.0, "point_b_price": 3800.0}
+        sl, tp = _calculate_sl_tp(result, n_struct, l1_struct)
         assert sl == 3600.0  # 兜底用B点
-        risk = 3610.0 - 3600.0  # = 10
-        assert tp == pytest.approx(3610.0 + risk * 2.0)  # 3630.0
+        assert tp == pytest.approx(4210.0)  # 3610 + 600(振幅)
 
 
 # ═══════════════════════════════════════════════════════
@@ -409,7 +405,7 @@ class TestSLTPLong:
 class TestSLTPShort:
 
     def test_short_leg2_sl_tp(self) -> None:
-        """SHORT LEG2: SL=C点(最近极值), TP=entry - risk*2.0"""
+        """SHORT LEG2: SL=C点(最近极值), TP=entry - L1振幅(600)=2915"""
         result = SignalResult(symbol="RB", contract="rb2510", direction="SHORT")
         result.entry_price = 3515.0
         n_struct = {
@@ -418,13 +414,13 @@ class TestSLTPShort:
             "point_c_price": 3580.0,
             "state": "LEG2",
         }
-        sl, tp = _calculate_sl_tp(result, n_struct)
+        l1_struct = {"point_a_price": 3800.0, "point_b_price": 3200.0}
+        sl, tp = _calculate_sl_tp(result, n_struct, l1_struct)
         assert sl == 3580.0  # C点（最近极值）
-        risk = 3580.0 - 3515.0  # = 65
-        assert tp == pytest.approx(3515.0 - risk * 2.0)  # 3385.0
+        assert tp == pytest.approx(2915.0)  # 3515 - 600(振幅)
 
     def test_short_leg3_sl_tp(self) -> None:
-        """SHORT LEG3: SL=B点(突破点变阻力), TP=entry - risk*2.0"""
+        """SHORT LEG3: SL=B点(突破点变阻力), TP=entry - L1振幅(600)=2915"""
         result = SignalResult(symbol="RB", contract="rb2510", direction="SHORT")
         result.entry_price = 3515.0
         n_struct = {
@@ -433,13 +429,13 @@ class TestSLTPShort:
             "point_c_price": 3580.0,
             "state": "LEG3",
         }
-        sl, tp = _calculate_sl_tp(result, n_struct)
+        l1_struct = {"point_a_price": 3800.0, "point_b_price": 3200.0}
+        sl, tp = _calculate_sl_tp(result, n_struct, l1_struct)
         assert sl == 3500.0  # B点（突破点变阻力）
-        risk = 3515.0 - 3500.0  # = 15
-        assert tp == pytest.approx(3515.0 - risk * 2.0)  # 3485.0
+        assert tp == pytest.approx(2915.0)  # 3515 - 600(振幅)
 
     def test_short_leg2_no_c_price(self) -> None:
-        """SHORT LEG2无C点: SL兜底用B点"""
+        """SHORT LEG2无C点: SL兜底B点, TP=entry - L1振幅(600)=2915"""
         result = SignalResult(symbol="RB", contract="rb2510", direction="SHORT")
         result.entry_price = 3515.0
         n_struct = {
@@ -447,10 +443,10 @@ class TestSLTPShort:
             "point_b_price": 3500.0,
             "state": "LEG2",
         }
-        sl, tp = _calculate_sl_tp(result, n_struct)
+        l1_struct = {"point_a_price": 3800.0, "point_b_price": 3200.0}
+        sl, tp = _calculate_sl_tp(result, n_struct, l1_struct)
         assert sl == 3500.0  # 兜底用B点
-        risk = 3515.0 - 3500.0  # = 15
-        assert tp == pytest.approx(3515.0 - risk * 2.0)  # 3485.0
+        assert tp == pytest.approx(2915.0)  # 3515 - 600(振幅)
 
 
 # ═══════════════════════════════════════════════════════
@@ -463,7 +459,8 @@ class TestBonusScoring:
         result = SignalResult(symbol="RB", contract="rb2510", direction="NONE")
         result.entry_price = 3550.0
         n_struct = {"point_a_price": 3500.0, "point_b_price": 3600.0}
-        sl, tp = _calculate_sl_tp(result, n_struct)
+        l1_struct = {"point_a_price": 3200.0, "point_b_price": 3800.0}
+        sl, tp = _calculate_sl_tp(result, n_struct, l1_struct)
         assert sl is None
         assert tp is None
 
@@ -472,7 +469,7 @@ class TestBonusScoring:
         result = SignalResult(symbol="RB", contract="rb2510", direction="LONG")
         result.entry_price = 3550.0
         n_struct = {"point_a_price": None, "point_b_price": 3600.0}
-        sl, tp = _calculate_sl_tp(result, n_struct)
+        sl, tp = _calculate_sl_tp(result, n_struct, l1_struct={})
         assert sl is None
         assert tp is None
 
@@ -481,12 +478,12 @@ class TestBonusScoring:
         result = SignalResult(symbol="RB", contract="rb2510", direction="LONG")
         result.entry_price = None
         n_struct = {"point_a_price": 3500.0, "point_b_price": 3600.0}
-        sl, tp = _calculate_sl_tp(result, n_struct)
+        sl, tp = _calculate_sl_tp(result, n_struct, l1_struct={})
         assert sl is None
         assert tp is None
 
     @patch("futures.scorer._check_bonus", return_value=[
-        {"check": "1mon+1w", "passed": True, "score": 0.15, "detail": "ok"},
+        {"check": "1mon+1w", "passed": True, "score": 1, "detail": "ok"},
         {"check": "1d+1h", "passed": False, "score": 0, "detail": "fail"},
     ])
     @patch("futures.scorer.check_realtime_breakout")
@@ -497,7 +494,7 @@ class TestBonusScoring:
         self, mock_macd: MagicMock, mock_get: MagicMock, mock_stability: MagicMock,
         mock_breakout: MagicMock, mock_bonus: MagicMock,
     ) -> None:
-        """加分项被正确加到overall_score上"""
+        """3分+加分项通过 → 4分加仓(ADD_POSITION)"""
 
         def get_struct_side_effect(db, symbol, contract, timeframe):
             if timeframe == LEVEL1_TIMEFRAME:
@@ -514,21 +511,19 @@ class TestBonusScoring:
         )
 
         result = evaluate("RB", "rb2510", _test_db)
-        # 基础分1.0 + bonus 0.15 = 1.15 → capped at 1.0
-        assert result.overall_score == 1.0
+        # 3分 + 1加分 → 4分加仓
+        assert result.overall_score == 4
+        assert result.signal_type == "ADD_POSITION"
         assert len(result.bonus) == 2
-        assert result.bonus[0]["score"] == 0.15
+        assert result.bonus[0]["score"] == 1
         assert result.bonus[1]["score"] == 0
 
-    @patch("futures.scorer._check_bonus", return_value=[
-        {"check": "1mon+1w", "passed": True, "score": 0.15, "detail": "ok"},
-    ])
     @patch("futures.scorer._get_active_n_structure")
     @patch("futures.scorer.check_macd_trajectory")
     def test_bonus_on_level2_fail(
-        self, mock_macd: MagicMock, mock_get: MagicMock, mock_bonus: MagicMock,
+        self, mock_macd: MagicMock, mock_get: MagicMock,
     ) -> None:
-        """Level2失败时，加分项仍被加到0.3上"""
+        """Level2失败 → score=1, NONE（删除降级路径，加分不补缺分）"""
 
         def get_struct_side_effect(db, symbol, contract, timeframe):
             if timeframe == LEVEL1_TIMEFRAME:
@@ -539,23 +534,23 @@ class TestBonusScoring:
         mock_macd.return_value = make_macd_result(passed=True)
 
         result = evaluate("RB", "rb2510", _test_db)
-        # 0.3 + 0.15 = 0.45 (浮点精度)
-        assert result.overall_score == pytest.approx(0.45)
-        assert result.signal_type == "WATCH"
+        # Level2失败，只有Level1的1分，不足3分 → NONE
+        assert result.overall_score == 1
+        assert result.signal_type == "NONE"
 
     @patch("futures.scorer._check_bonus", return_value=[
-        {"check": "1d+1h", "passed": True, "score": 0.10, "detail": "ok"},
-        {"check": "1mon+1w", "passed": True, "score": 0.15, "detail": "ok"},
+        {"check": "1d+1h", "passed": True, "score": 1, "detail": "ok"},
+        {"check": "1mon+1w", "passed": True, "score": 1, "detail": "ok"},
     ])
     @patch("futures.scorer.check_realtime_breakout")
     @patch("futures.scorer.check_3m_stability")
     @patch("futures.scorer._get_active_n_structure")
     @patch("futures.scorer.check_macd_trajectory")
-    def test_bonus_capped_at_1(
+    def test_bonus_capped_at_4(
         self, mock_macd: MagicMock, mock_get: MagicMock, mock_stability: MagicMock,
         mock_breakout: MagicMock, mock_bonus: MagicMock,
     ) -> None:
-        """加分项使分数超过1.0 → 被capped"""
+        """3分+多个加分项 → 4分（有加分就4分加仓，不累加）"""
 
         def get_struct_side_effect(db, symbol, contract, timeframe):
             if timeframe == LEVEL1_TIMEFRAME:
@@ -572,5 +567,6 @@ class TestBonusScoring:
         )
 
         result = evaluate("RB", "rb2510", _test_db)
-        # 1.0 + 0.10 + 0.15 = 1.25 → capped at 1.0
-        assert result.overall_score == 1.0
+        # 3分+加分→4分加仓，不累加到5分
+        assert result.overall_score == 4
+        assert result.signal_type == "ADD_POSITION"
