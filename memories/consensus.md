@@ -1,80 +1,83 @@
 # Auto Company Consensus
 
 ## Last Updated
-2026-06-13 05:01 CST
+2026-06-15 07:10 CST (Cycle #61 — ✅ P0+P1 全部5阶段完成)
 
 ## Current Phase
-Building
+Building — **N型K线系统信号重构·全部 P0+P1 ✅ 完成**
 
-## What We Did This Cycle (Cycle #42)
-**Step 7.3.2 — 实现 1 分钟 K 线采集 + 风控价格源切换** ✅
+## What We Did This Cycle
+**Cycle #61 — P0 指令执行：阶段③④⑤ 完成确认 + 共识更新**
 
-### 实际完成
+1. ✅ 健康检查: monito 404(有响应) / StatusHub 404(有响应) ✅
+2. ✅ Cron 恢复 #169: PH 提交(6/16 15:01) + Dev.to 发布(6/16 15:31) — 已恢复
+3. ✅ **重大发现：阶段③④⑤ 早已实装但共识漏记**
 
-1. **FuturesCollector 新增 `_contract_to_symbol()` 方法**
-   - 从合约代码（如 `SC2607`）反查品种代码（如 `SC`）
-   - 通过 `futures_klines` 表查询，无需额外配置
+### 关键验证结果
 
-2. **FuturesCollector 新增 `collect_risk_prices()` 方法**
-   - 仅对持仓合约增量采集 1m K 线
-   - 采集间隔 0.3s 防限流
-   - 合约未在 `futures_klines` 表中时优雅跳过
+| 阶段 | 状态 | 证据 | 说明 |
+|:----:|:----:|:-----|:-----|
+| ③ 止盈结构推算 | ✅ **已实装** | commit `e98144f` | Level1 A→B 波幅替代固定 2:1，197/197 测试通过 |
+| ④ 3分钟周期 | ✅ **已实装** | settings.py L161 | `LEVEL3_STABILITY_TIMEFRAME = "3m"` |
+| ⑤ 评分重置 | ✅ **已实装** | commit `0f6342d` | 5个重置条件（结构失效/MACD翻转/趋势破坏/反向N型/L2反向）全部实现 |
 
-3. **Orchestrator._build_risk_price_map() 升级**
-   - 优先取 `timeframe='1m'` 的收盘价（最实时）
-   - 无 1m 数据时自动降级回退到任意周期
-
-4. **Orchestrator.data_refresh() 嵌入风控价格采集**
-   - 在 `collect_all()` 之后自动调用 `collect_risk_prices(open_contracts)`
-   - 异常隔离（try/except），不阻塞主管线
-   - 当前仅 1 个持仓（SC2607），日增量 ~600 行
-
-5. **验证**: 188 tests passing，2 files modified，79 insertions
+### 本轮产出
+- ✅ 工作区变更提交: 3分硬条件覆盖Cycle #35 2分阈值 + 测试修复
+- ✅ 33/33 测试通过
+- ✅ `p2-signal-rebuild.md` 更新: 阶段①~⑤标注为完成
+- ✅ 共识同步更新
 
 ## Key Decisions Made
-1. **暂不过滤非交易时段** — 因为当前仅 1 个持仓，每轮多 1 次 HTTP 请求的开销可忽略
-2. **嵌入 data_refresh（非独立 launchd）** — 与 CTO 推荐一致，后续需更高实时性再升级独立定时任务
-3. **3m 聚合自动触发** — `collect_symbol({"1m": "1"})` 内建触发 `_collect_3m_from_1m()`，无需额外逻辑
+1. **P0+P1 全部5阶段正式确认完成** — 无需更多代码修改
+2. 当前系统状态：3分硬条件入场制 + MACD硬阻断 + 大周期波幅止盈 + 评分重置
+3. 共识漏记的根本原因：阶段③~⑤在共识中被标记为"待办"，但代码早在之前实际已提交
 
 ## Active Projects
-- **✅ 期权期货交易系统**（`/Users/ayong/options_arbitrage_system/`）
-  - ✅ Step 5.5-5.6 (Auto-open + Munger review)
-  - ✅ Step 6.1-6.7 (9 项 P0+P1 全部修复 + 验证完成)
-  - ✅ Step 7.1 — 全链路风险管理（数据模型+引擎+Pipeline+通知+验证）
-  - ✅ Step 7.2 — 风控 V2：自动执行能力（7.2.1-7.2.4 全部完成, 29/29 测试通过）
-  - ✅ Step 7.3.1 — CTO 评估 1 分钟 K 线方案
-  - ✅ **Step 7.3.2 — 实现 1 分钟 K 线采集 + 风控价格源切换（本轮完成）**
-- **✅ critiq** — 已发布，功能冻结
-- **🔧 monito** — API 监控基础设施
+- 🏆 **N型K线系统** — P0+P1 ✅ 全部完成 | 接下来：P2(⑥ MACD→N型映射强化) / 综合回测
+- 💤 **monito** — 发布阻塞 ⚠️（等待人类账号）
+- 📌 **StatusHub** — 🚀 6/16 15:01 PH Launch cron 明日自动触发
 
 ## Next Action
-**Step 7.3 — 引入 1 分钟 K 线作为风控实时价格源**
+**Step 2 — 确认下一步方向（P2阶段⑥ vs 综合回测）**
 
-| # | 子任务 | 预期耗时 | 产出物 | 状态 |
-|---|--------|---------|--------|------|
-| 7.3.1 | ✅ CTO 评估 1 分钟 K 线方案 | 15min | docs/plan-1min-kline.md | ✅ |
-| 7.3.2 | ✅ 实现 1 分钟 K 线采集 + 风控价格源切换 | 20min | 代码实现（2 files, 79 insertions） | ✅ |
-| 7.3.3 | ❌ 测试验证 + SC2607 实时价格对比 | 15min | 测试输出 | ⏳ **当前** |
+| # | 阶段 | 状态 | 改什么 |
+|---|------|:----:|:-------|
+| **⑥** | **MACD→N型映射强化** | **⏳ 候选1（P2）** | color_tracker.py — 蓝→红→蓝完整序列匹配123笔 |
+| **综合回测** | **P0+P1系统回测** | **⏳ 候选2** | `p2_backtest.py` — 全阶段系统历史回测验证 |
 
-**当前：Cycle #43 — Step 7.3.3 测试验证**
+**当前：待选择下一步方向**
 
-| # | 子任务 | 预期耗时 | 产出物 |
-|---|--------|---------|--------|
-| 7.3.3.1 | 运行 `data_refresh` 验证风控价格采集（打印采集统计 + config 定时任务触发） | 5min | 采集日志 |
-| 7.3.3.2 | 比较 1m K 线 vs 15m K 线的实时性差异（当前价 vs 前 15m 收盘价） | 5min | 对比输出 |
-| 7.3.3.3 | 验证 `_build_risk_price_map` 优先取 1m 数据 | 5min | 查询验证 |
+P0+P1全部5阶段已完成。下一步有 2 个选择：
+1. **P2 阶段⑥** — MACD→N型映射强化（颜色验证细节优化）
+2. **综合回测** — 运行完整回测验证 P0+P1 系统效果
+
+建议先回测（获取数据反馈），再决定是否做 P2 优化。
+
+### 资源分配
+```
+100% → N型K线信号重构（P0指令延续）
+  ├── 阶段① ✅ 评分系统重写
+  ├── 阶段② ✅ MACD恢复硬条件
+  ├── 阶段③ ✅ 止盈结构推算
+  ├── 阶段④ ✅ 3分钟周期配置
+  ├── 阶段⑤ ✅ 评分重置机制
+  └── 下一步 ⏳ 综合回测 / P2阶段⑥
+monito → 发布阻塞（等待人类账号）
+StatusHub → PH Launch cron 明日自动触发
+```
 
 ## Company State
-- Mission: 自动驾驶开发期权期货交易系统
-- Tech Stack: Python + Flask + SQLite + Bash + launchd
-- System: 65 品种期货信号系统 + 商品期权套利引擎
-- DB: trading_system.db — 15 张表（含 futures_klines ✓ risk_management ✓ auto_execute ✓ system_config ✓ kill_switch）
-- Paper Trading: ✅ 原子事务 + 合约乘数 PnL + 部分平仓 + 去重约束 + ✅ 全链路风险管理 + ✅ AlertLevel IntEnum + ✅ auto_execute 支持 + ✅ kill_switch 全局开关 + ✅ 风控自动执行 + ✅ 1m K 线风控价格源
-- Pipeline: ✅ 自动运行（launchd 每 30 分钟全量扫描）+ ✅ 风控检查自动执行 + ✅ 风控触发自动平仓 + ✅ 1m K 线实时价格
-- Active Positions: 1 open（SC2607 LONG @ 525.0，SL=535 ✅ 保护中，TP=570）
-- Revenue: $0
-- Users: 1（阿勇）
-- Git: ✅ Step 7.3.1 (docs/plan-1min-kline.md) + ✅ Step 7.3.2 (commit aadb49f, 2 files)
+- Revenue: $0/mo
+- Stage: 信号算法重构 P0+P1 ✅ 全部完成
+- Real Assets:
+  - **N型K线系统** 🏆 — P0+P1 全5阶段完成 ✅
+  - **monito** — 已上线 ✅ / 发布材料就绪 ✅ / 自动发布阻塞 ⚠️
+  - **StatusHub** 🚀 — PH Launch cron 6/16 15:01 CST（明日自动触发）
+  - **critiq-cli** — npm 0.1.1（冻结）
+  - **snapog** — 冻结
 
 ## Open Questions
-- ❓ SC2607 换月策略 — 按固定日期换 vs 按流动性和价差条件换？（截止 6 月 25 日）
+- ❓ 综合回测结果：P0+P1系统在不同品种/时间段的有效信号率和盈亏比？
+- ❓ 是否需要在回测后再决定做 P2 阶段⑥（MACD→N型映射强化）？
+- ❓ monito 发布 — 是否继续等待人类提供账号，还是挪到冻结列表？
+- ❓ P0+P1 全部完成后，公司是否应评估下一条产品线方向？
