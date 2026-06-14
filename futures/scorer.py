@@ -23,9 +23,6 @@ from config.settings import (
     LEVEL2_MACD_TIMEFRAME,
     LEVEL3_TIMEFRAME,
     BONUS_CHECKS,
-    LEVEL1_MIN_SCORE,
-    LEVEL2_MIN_SCORE,
-    LEVEL3_MIN_SCORE,
 )
 from futures.color_tracker import check_macd_trajectory, check_3m_stability
 from futures.n_structure import check_realtime_breakout
@@ -152,7 +149,7 @@ def _save_signal(db: Database, sig: Dict[str, Any]) -> int:
 
 @dataclass
 class SignalResult:
-    """三级验证信号结果。
+    """三级验证信号结果（离散3分制）。
 
     Attributes:
         symbol: 品种代码。
@@ -162,8 +159,8 @@ class SignalResult:
         level2: Level2 验证结果。
         level3: Level3 验证结果。
         bonus: 加分项列表。
-        overall_score: 综合评分。
-        signal_type: NONE / WATCH / CANDIDATE / ENTRY。
+        overall_score: 综合评分（0-4 整数：0=NONE, 1=L1, 2=L1+L2, 3=ENTRY, 4=加仓）。
+        signal_type: NONE / ENTRY / ADD_POSITION。
         entry_price: 入场价。
         stop_loss: 止损价。
         take_profit: 止盈价。
@@ -176,7 +173,7 @@ class SignalResult:
     level2: dict = field(default_factory=dict)
     level3: dict = field(default_factory=dict)
     bonus: list = field(default_factory=list)
-    overall_score: float = 0.0
+    overall_score: int = 0
     signal_type: str = "NONE"
     entry_price: Optional[float] = None
     stop_loss: Optional[float] = None
@@ -349,16 +346,12 @@ def evaluate(
     contract: str,
     db: Database,
 ) -> SignalResult:
-    """完整三级嵌套验证。
+    """完整三级嵌套验证（离散3分硬条件制）。
 
-    Args:
-        symbol: 品种代码。
-        contract: 合约代码。
-        db: Database 实例。
-
-    Returns:
-        SignalResult 信号结果。
+    Level1 通过=1分，Level2+MACD通过=2分，Level3通过=3分。
+    3分是硬性入场条件，缺一分都不行。加分项不计入基础分。
     """
+    score = 0
     result = SignalResult(symbol=symbol, contract=contract, direction="NONE")
 
     # ═══════════════════════════════════════════════════
@@ -376,7 +369,7 @@ def evaluate(
             ),
             "n_structure": l1_struct,
         }
-        result.overall_score = 0.0
+        result.overall_score = 0
         result.signal_type = "NONE"
         return result
 
@@ -404,9 +397,10 @@ def evaluate(
         ),
     }
 
+    score = 1  # Level1 通过 → 1分
+
     # ═══════════════════════════════════════════════════
-    # Level2: 小时线N型确认 + 15分钟MACD轨迹验证
-    # 放宽：方向匹配即通过Level2（MACD轨迹变为评分分级因素而非硬门槛）
+    # Level2: 小时线N型确认 + 15分钟MACD轨迹验证（硬条件）
     # ═══════════════════════════════════════════════════
     l2_struct = _get_active_n_structure(db, symbol, contract, LEVEL2_TIMEFRAME)
 
@@ -419,9 +413,11 @@ def evaluate(
         )
         l2_macd_passed = l2_macd.get("passed", False)
 
-        # 只要方向匹配即通过Level2，MACD轨迹决定实际评分档位
+        if l2_macd_passed:
+            score = 2  # MACD通过 → Level2完整通过，+1分
+
         l2_result = {
-            "passed": True,
+            "passed": l2_macd_passed,
             "direction": direction,
             "state": l2_struct["state"],
             "n_structure": {
@@ -448,23 +444,14 @@ def evaluate(
 
     result.level2 = l2_result
 
-    if not l2_result["passed"]:
-        result.overall_score = 0.3
-        result.signal_type = "WATCH"
-        result.bonus = _check_bonus(symbol, contract, direction, db)
-        bonus_total = sum(b["score"] for b in result.bonus if b["passed"])
-        result.overall_score = min(0.3 + bonus_total, 1.0)
+    if score < 2:
+        # 不足2分 → NONE（降级路径已删除）
+        result.overall_score = score
+        result.signal_type = "NONE"
         return result
 
-    # Level2 通过（方向匹配）：MACD轨迹决定评分档位
-    if l2_macd_passed:
-        result.overall_score = 0.6
-    else:
-        result.overall_score = 0.5
-    result.signal_type = "CANDIDATE"
-
     # ═══════════════════════════════════════════════════
-    # Level3: 15分钟N型入场 + 3分钟MACD稳定 + 突破
+    # Level3: 15分钟N型入场 + 3分钟MACD稳定 + 突破 → 3分
     # ═══════════════════════════════════════════════════
     l3_struct = _get_active_n_structure(db, symbol, contract, LEVEL3_TIMEFRAME)
 
@@ -492,28 +479,38 @@ def evaluate(
 
         if breakout.get("triggered") and stability.get("stable"):
             l3_result["passed"] = True
-            result.overall_score = 1.0
-            result.signal_type = "ENTRY"
+            score = 3  # Level3 通过 → 3分，满足入场条件
             result.entry_price = breakout.get("trigger_price")
             sl, tp = _calculate_sl_tp(result, l3_struct)
             result.stop_loss = sl
             result.take_profit = tp
-        # else: 保留 Level2 设定的评分（0.5 或 0.6），signal_type 保持 CANDIDATE
     else:
         l3_result = {
             "passed": False,
             "reason": "15分钟无活跃N型或方向不一致",
         }
-        # 保留 Level2 设定的评分，signal_type 保持 CANDIDATE
 
     result.level3 = l3_result
 
     # ═══════════════════════════════════════════════════
-    # 加分项
+    # 加分项（单独计算，不影响入场条件，用于4分加仓判定）
     # ═══════════════════════════════════════════════════
     result.bonus = _check_bonus(symbol, contract, direction, db)
     bonus_total = sum(b["score"] for b in result.bonus if b["passed"])
-    result.overall_score = min(result.overall_score + bonus_total, 1.0)
+
+    # ═══════════════════════════════════════════════════
+    # 3分制最终判定（离散整数分，无浮点）
+    # ═══════════════════════════════════════════════════
+    if score >= 3:
+        if bonus_total > 0:
+            result.overall_score = 4  # 4分加仓
+            result.signal_type = "ADD_POSITION"
+        else:
+            result.overall_score = 3
+            result.signal_type = "ENTRY"
+    else:
+        result.overall_score = score
+        result.signal_type = "NONE"
 
     return result
 
