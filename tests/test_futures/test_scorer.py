@@ -145,6 +145,53 @@ class TestLevel1Fail:
 
 
 # ═══════════════════════════════════════════════════════
+# 1b. Level1 N型存在 + MACD未通过 → NONE（MACD为阻断条件）
+# ═══════════════════════════════════════════════════════
+class TestLevel1MacdFail:
+
+    @patch("futures.scorer._get_active_n_structure")
+    @patch("futures.scorer.check_macd_trajectory")
+    def test_l1_macd_not_passed(
+        self, mock_macd: MagicMock, mock_get: MagicMock,
+    ) -> None:
+        """L1 N型存在但MACD轨迹未通过 → score=0, NONE（MACD阻断）"""
+
+        def get_struct_side_effect(db, symbol, contract, timeframe):
+            if timeframe == LEVEL1_TIMEFRAME:
+                return make_l1_struct(direction="LONG")
+            return None  # L2/L3无结构（应不会执行到）
+
+        mock_get.side_effect = get_struct_side_effect
+        mock_macd.return_value = make_macd_result(passed=False)
+
+        result = evaluate("RB", "rb2510", _test_db)
+        assert result.overall_score == 0
+        assert result.signal_type == "NONE"
+        assert result.level1["passed"] is False
+        assert "MACD" in result.level1.get("reason", "")
+
+    @patch("futures.scorer._get_active_n_structure")
+    @patch("futures.scorer.check_macd_trajectory")
+    def test_l1_macd_still_passes_long(
+        self, mock_macd: MagicMock, mock_get: MagicMock,
+    ) -> None:
+        """L1 N型+MACD双通过 → score=1 (验证阻断不影响正常路径)"""
+
+        def get_struct_side_effect(db, symbol, contract, timeframe):
+            if timeframe == LEVEL1_TIMEFRAME:
+                return make_l1_struct(direction="LONG")
+            return None  # L2无结构
+
+        mock_get.side_effect = get_struct_side_effect
+        mock_macd.return_value = make_macd_result(passed=True)
+
+        result = evaluate("RB", "rb2510", _test_db)
+        assert result.overall_score == 1  # L1通过 → 1分
+        assert result.signal_type == "NONE"  # 总分<3 → NONE
+        assert result.level1["passed"] is True
+
+
+# ═══════════════════════════════════════════════════════
 # 2. Level1通过+Level2未通过 → NONE（删除降级路径）
 # ═══════════════════════════════════════════════════════
 class TestLevel1PassLevel2Fail:
@@ -225,15 +272,16 @@ class TestLevel1PassLevel2Fail:
 # ═══════════════════════════════════════════════════════
 class TestLevel3NoBreakout:
 
+    @patch("futures.scorer._apply_score_reset", return_value=False)
     @patch("futures.scorer.check_realtime_breakout")
     @patch("futures.scorer.check_3m_stability")
     @patch("futures.scorer._get_active_n_structure")
     @patch("futures.scorer.check_macd_trajectory")
     def test_l3_no_breakout(
         self, mock_macd: MagicMock, mock_get: MagicMock, mock_stability: MagicMock,
-        mock_breakout: MagicMock,
+        mock_breakout: MagicMock, mock_reset: MagicMock,
     ) -> None:
-        """L3突破未触发 → score=2, NONE（旧: 0.6, CANDIDATE）"""
+        """L3突破未触发 → score=2, NONE（score<3 硬条件不满足）"""
 
         def get_struct_side_effect(db, symbol, contract, timeframe):
             if timeframe == LEVEL1_TIMEFRAME:
@@ -249,17 +297,18 @@ class TestLevel3NoBreakout:
 
         result = evaluate("RB", "rb2510", _test_db)
         assert result.overall_score == 2  # Level1+2通过=2分
-        assert result.signal_type == "NONE"  # 不足3分 → NONE
+        assert result.signal_type == "NONE"  # score<3 硬条件不满足
 
+    @patch("futures.scorer._apply_score_reset", return_value=False)
     @patch("futures.scorer.check_realtime_breakout")
     @patch("futures.scorer.check_3m_stability")
     @patch("futures.scorer._get_active_n_structure")
     @patch("futures.scorer.check_macd_trajectory")
     def test_l3_not_stable(
         self, mock_macd: MagicMock, mock_get: MagicMock, mock_stability: MagicMock,
-        mock_breakout: MagicMock,
+        mock_breakout: MagicMock, mock_reset: MagicMock,
     ) -> None:
-        """L3 3分钟不稳定 → score=2, NONE（旧: 0.6, CANDIDATE）"""
+        """L3 3分钟不稳定 → score=2, NONE（score<3 硬条件不满足）"""
 
         def get_struct_side_effect(db, symbol, contract, timeframe):
             if timeframe == LEVEL1_TIMEFRAME:
@@ -275,7 +324,7 @@ class TestLevel3NoBreakout:
 
         result = evaluate("RB", "rb2510", _test_db)
         assert result.overall_score == 2
-        assert result.signal_type == "NONE"
+        assert result.signal_type == "NONE"  # score<3 硬条件不满足
 
 
 # ═══════════════════════════════════════════════════════
@@ -283,6 +332,7 @@ class TestLevel3NoBreakout:
 # ═══════════════════════════════════════════════════════
 class TestAllLevelsPass:
 
+    @patch("futures.scorer._apply_score_reset", return_value=False)
     @patch("futures.scorer._check_bonus", return_value=[])
     @patch("futures.scorer.check_realtime_breakout")
     @patch("futures.scorer.check_3m_stability")
@@ -290,7 +340,7 @@ class TestAllLevelsPass:
     @patch("futures.scorer.check_macd_trajectory")
     def test_all_pass_long(
         self, mock_macd: MagicMock, mock_get: MagicMock, mock_stability: MagicMock,
-        mock_breakout: MagicMock, mock_bonus: MagicMock,
+        mock_breakout: MagicMock, mock_bonus: MagicMock, mock_reset: MagicMock,
     ) -> None:
         """全通过LONG，无加分 → score=3, ENTRY"""
 
@@ -317,6 +367,7 @@ class TestAllLevelsPass:
         assert result.stop_loss is not None
         assert result.take_profit is not None
 
+    @patch("futures.scorer._apply_score_reset", return_value=False)
     @patch("futures.scorer._check_bonus", return_value=[])
     @patch("futures.scorer.check_realtime_breakout")
     @patch("futures.scorer.check_3m_stability")
@@ -324,7 +375,7 @@ class TestAllLevelsPass:
     @patch("futures.scorer.check_macd_trajectory")
     def test_all_pass_short(
         self, mock_macd: MagicMock, mock_get: MagicMock, mock_stability: MagicMock,
-        mock_breakout: MagicMock, mock_bonus: MagicMock,
+        mock_breakout: MagicMock, mock_bonus: MagicMock, mock_reset: MagicMock,
     ) -> None:
         """全通过SHORT，无加分 → score=3, ENTRY"""
 
@@ -482,6 +533,7 @@ class TestBonusScoring:
         assert sl is None
         assert tp is None
 
+    @patch("futures.scorer._apply_score_reset", return_value=False)
     @patch("futures.scorer._check_bonus", return_value=[
         {"check": "1mon+1w", "passed": True, "score": 1, "detail": "ok"},
         {"check": "1d+1h", "passed": False, "score": 0, "detail": "fail"},
@@ -492,7 +544,7 @@ class TestBonusScoring:
     @patch("futures.scorer.check_macd_trajectory")
     def test_bonus_adds_to_score(
         self, mock_macd: MagicMock, mock_get: MagicMock, mock_stability: MagicMock,
-        mock_breakout: MagicMock, mock_bonus: MagicMock,
+        mock_breakout: MagicMock, mock_bonus: MagicMock, mock_reset: MagicMock,
     ) -> None:
         """3分+加分项通过 → 4分加仓(ADD_POSITION)"""
 
@@ -538,6 +590,7 @@ class TestBonusScoring:
         assert result.overall_score == 1
         assert result.signal_type == "NONE"
 
+    @patch("futures.scorer._apply_score_reset", return_value=False)
     @patch("futures.scorer._check_bonus", return_value=[
         {"check": "1d+1h", "passed": True, "score": 1, "detail": "ok"},
         {"check": "1mon+1w", "passed": True, "score": 1, "detail": "ok"},
@@ -548,7 +601,7 @@ class TestBonusScoring:
     @patch("futures.scorer.check_macd_trajectory")
     def test_bonus_capped_at_4(
         self, mock_macd: MagicMock, mock_get: MagicMock, mock_stability: MagicMock,
-        mock_breakout: MagicMock, mock_bonus: MagicMock,
+        mock_breakout: MagicMock, mock_bonus: MagicMock, mock_reset: MagicMock,
     ) -> None:
         """3分+多个加分项 → 4分（有加分就4分加仓，不累加）"""
 
@@ -570,3 +623,260 @@ class TestBonusScoring:
         # 3分+加分→4分加仓，不累加到5分
         assert result.overall_score == 4
         assert result.signal_type == "ADD_POSITION"
+
+
+# ═══════════════════════════════════════════════════════
+# 8. 评分重置测试 — 集成 evaluate() 重置路径
+# ═══════════════════════════════════════════════════════
+class TestScoreReset:
+    """验证 evaluate() 中评分重置路径正确性。
+
+    重置检查在加分项计算之后、最终判定之前执行。
+    当 _apply_score_reset() 返回 True → score=0, signal_type=NONE。
+    当返回 False → 评分和信号类型不受影响。
+    """
+
+    # ── TC1: B点突破 LONG ──────────────────────────────────
+
+    @patch("futures.scorer._apply_score_reset", return_value=True)
+    @patch("futures.scorer._check_bonus", return_value=[])
+    @patch("futures.scorer.check_realtime_breakout")
+    @patch("futures.scorer.check_3m_stability")
+    @patch("futures.scorer._get_active_n_structure")
+    @patch("futures.scorer.check_macd_trajectory")
+    def test_tc1_reset_long_breakout(
+        self, mock_macd: MagicMock, mock_get: MagicMock, mock_stability: MagicMock,
+        mock_breakout: MagicMock, mock_bonus: MagicMock, mock_reset: MagicMock,
+    ) -> None:
+        """TC1: B点突破 LONG — score=3, 最新价跌破B点99% → score=0, NONE"""
+        def side_effect(db, symbol, contract, timeframe):
+            if timeframe == LEVEL1_TIMEFRAME:
+                return make_l1_struct(direction="LONG")
+            elif timeframe == LEVEL2_TIMEFRAME:
+                return make_l2_struct(direction="LONG")
+            return make_l3_struct(direction="LONG")
+
+        mock_get.side_effect = side_effect
+        mock_macd.return_value = make_macd_result(passed=True)
+        mock_stability.return_value = make_stability_result(stable=True)
+        mock_breakout.return_value = make_breakout_result(
+            triggered=True, is_fresh=True, direction="LONG",
+            breakout_price=3580.0, trigger_price=3585.0,
+        )
+
+        result = evaluate("RB", "rb2510", _test_db)
+        # 满足3分条件但重置触发 → score=0, NONE
+        assert result.overall_score == 0
+        assert result.signal_type == "NONE"
+        assert result.direction == "LONG"  # direction 在重置前已确定
+
+    # ── TC2: B点突破 SHORT ─────────────────────────────────
+
+    @patch("futures.scorer._apply_score_reset", return_value=True)
+    @patch("futures.scorer._check_bonus", return_value=[])
+    @patch("futures.scorer.check_realtime_breakout")
+    @patch("futures.scorer.check_3m_stability")
+    @patch("futures.scorer._get_active_n_structure")
+    @patch("futures.scorer.check_macd_trajectory")
+    def test_tc2_reset_short_breakout(
+        self, mock_macd: MagicMock, mock_get: MagicMock, mock_stability: MagicMock,
+        mock_breakout: MagicMock, mock_bonus: MagicMock, mock_reset: MagicMock,
+    ) -> None:
+        """TC2: B点突破 SHORT — score=3, 最新价涨破B点101% → score=0, NONE"""
+        def side_effect(db, symbol, contract, timeframe):
+            if timeframe == LEVEL1_TIMEFRAME:
+                return make_l1_struct(direction="SHORT")
+            elif timeframe == LEVEL2_TIMEFRAME:
+                return make_l2_struct(direction="SHORT")
+            return make_l3_struct(direction="SHORT")
+
+        mock_get.side_effect = side_effect
+        mock_macd.return_value = make_macd_result(passed=True)
+        mock_stability.return_value = make_stability_result(stable=True)
+        mock_breakout.return_value = make_breakout_result(
+            triggered=True, is_fresh=True, direction="SHORT",
+            breakout_price=3520.0, trigger_price=3515.0,
+        )
+
+        result = evaluate("RB", "rb2510", _test_db)
+        assert result.overall_score == 0
+        assert result.signal_type == "NONE"
+        assert result.direction == "SHORT"
+
+    # ── TC3: 95%缓冲内不触发 ────────────────────────────────
+
+    @patch("futures.scorer._apply_score_reset", return_value=False)
+    @patch("futures.scorer._check_bonus", return_value=[])
+    @patch("futures.scorer.check_realtime_breakout")
+    @patch("futures.scorer.check_3m_stability")
+    @patch("futures.scorer._get_active_n_structure")
+    @patch("futures.scorer.check_macd_trajectory")
+    def test_tc3_buffer_zone_no_reset(
+        self, mock_macd: MagicMock, mock_get: MagicMock, mock_stability: MagicMock,
+        mock_breakout: MagicMock, mock_bonus: MagicMock, mock_reset: MagicMock,
+    ) -> None:
+        """TC3: 95%缓冲内不触发 — 最新价在B点99%~101%之间 → score=3, ENTRY"""
+        def side_effect(db, symbol, contract, timeframe):
+            if timeframe == LEVEL1_TIMEFRAME:
+                return make_l1_struct(direction="LONG")
+            elif timeframe == LEVEL2_TIMEFRAME:
+                return make_l2_struct(direction="LONG")
+            return make_l3_struct(direction="LONG")
+
+        mock_get.side_effect = side_effect
+        mock_macd.return_value = make_macd_result(passed=True)
+        mock_stability.return_value = make_stability_result(stable=True)
+        mock_breakout.return_value = make_breakout_result(
+            triggered=True, is_fresh=True, direction="LONG",
+            breakout_price=3580.0, trigger_price=3585.0,
+        )
+
+        result = evaluate("RB", "rb2510", _test_db)
+        # 重置未触发 → 保持3分入场
+        assert result.overall_score == 3
+        assert result.signal_type == "ENTRY"
+
+    # ── TC4: 反向N型 LONG（出现SHORT方向信号重置LONG）───────
+
+    @patch("futures.scorer._apply_score_reset", return_value=True)
+    @patch("futures.scorer._check_bonus", return_value=[])
+    @patch("futures.scorer.check_realtime_breakout")
+    @patch("futures.scorer.check_3m_stability")
+    @patch("futures.scorer._get_active_n_structure")
+    @patch("futures.scorer.check_macd_trajectory")
+    def test_tc4_reverse_n_long(
+        self, mock_macd: MagicMock, mock_get: MagicMock, mock_stability: MagicMock,
+        mock_breakout: MagicMock, mock_bonus: MagicMock, mock_reset: MagicMock,
+    ) -> None:
+        """TC4: 反向N型 LONG — SHORT方向N型+MACD死叉 → LONG评分重置为0"""
+        def side_effect(db, symbol, contract, timeframe):
+            if timeframe == LEVEL1_TIMEFRAME:
+                return make_l1_struct(direction="LONG")
+            elif timeframe == LEVEL2_TIMEFRAME:
+                return make_l2_struct(direction="LONG")
+            return make_l3_struct(direction="LONG")
+
+        mock_get.side_effect = side_effect
+        mock_macd.return_value = make_macd_result(passed=True)
+        mock_stability.return_value = make_stability_result(stable=True)
+        mock_breakout.return_value = make_breakout_result(
+            triggered=True, is_fresh=True, direction="LONG",
+            breakout_price=3580.0, trigger_price=3585.0,
+        )
+
+        result = evaluate("RB", "rb2510", _test_db)
+        # 虽然L1/L2/L3全通过（score可达3），但反向结构触发重置
+        assert result.overall_score == 0
+        assert result.signal_type == "NONE"
+
+    # ── TC5: 反向N型 SHORT（出现LONG方向信号重置SHORT）──────
+
+    @patch("futures.scorer._apply_score_reset", return_value=True)
+    @patch("futures.scorer._check_bonus", return_value=[])
+    @patch("futures.scorer.check_realtime_breakout")
+    @patch("futures.scorer.check_3m_stability")
+    @patch("futures.scorer._get_active_n_structure")
+    @patch("futures.scorer.check_macd_trajectory")
+    def test_tc5_reverse_n_short(
+        self, mock_macd: MagicMock, mock_get: MagicMock, mock_stability: MagicMock,
+        mock_breakout: MagicMock, mock_bonus: MagicMock, mock_reset: MagicMock,
+    ) -> None:
+        """TC5: 反向N型 SHORT — LONG方向N型+MACD金叉 → SHORT评分重置为0"""
+        def side_effect(db, symbol, contract, timeframe):
+            if timeframe == LEVEL1_TIMEFRAME:
+                return make_l1_struct(direction="SHORT")
+            elif timeframe == LEVEL2_TIMEFRAME:
+                return make_l2_struct(direction="SHORT")
+            return make_l3_struct(direction="SHORT")
+
+        mock_get.side_effect = side_effect
+        mock_macd.return_value = make_macd_result(passed=True)
+        mock_stability.return_value = make_stability_result(stable=True)
+        mock_breakout.return_value = make_breakout_result(
+            triggered=True, is_fresh=True, direction="SHORT",
+            breakout_price=3520.0, trigger_price=3515.0,
+        )
+
+        result = evaluate("RB", "rb2510", _test_db)
+        assert result.overall_score == 0
+        assert result.signal_type == "NONE"
+
+    # ── TC6: score=2 时重置 ─────────────────────────────────
+
+    @patch("futures.scorer._apply_score_reset", return_value=True)
+    @patch("futures.scorer._check_bonus", return_value=[])
+    @patch("futures.scorer.check_realtime_breakout")
+    @patch("futures.scorer.check_3m_stability")
+    @patch("futures.scorer._get_active_n_structure")
+    @patch("futures.scorer.check_macd_trajectory")
+    def test_tc6_reset_at_score_2(
+        self, mock_macd: MagicMock, mock_get: MagicMock, mock_stability: MagicMock,
+        mock_breakout: MagicMock, mock_bonus: MagicMock, mock_reset: MagicMock,
+    ) -> None:
+        """TC6: score=2 时重置 — L1+L2通过（2分），L3无突破，B点突破 → score=0"""
+        def side_effect(db, symbol, contract, timeframe):
+            if timeframe == LEVEL1_TIMEFRAME:
+                return make_l1_struct(direction="LONG")
+            elif timeframe == LEVEL2_TIMEFRAME:
+                return make_l2_struct(direction="LONG")
+            return make_l3_struct(direction="LONG")  # L3结构存在但突破未触发
+
+        mock_get.side_effect = side_effect
+        mock_macd.return_value = make_macd_result(passed=True)
+        mock_stability.return_value = make_stability_result(stable=True)
+        mock_breakout.return_value = make_breakout_result(triggered=False, is_fresh=False)
+
+        result = evaluate("RB", "rb2510", _test_db)
+        # L1+L2通过=2分，但重置触发 → score=0, NONE
+        assert result.overall_score == 0
+        assert result.signal_type == "NONE"
+        assert result.level1["passed"] is True
+        assert result.level2["passed"] is True
+
+    # ── TC7: 无重置条件（正常） ──────────────────────────────
+
+    @patch("futures.scorer._apply_score_reset", return_value=False)
+    @patch("futures.scorer._check_bonus", return_value=[])
+    @patch("futures.scorer.check_realtime_breakout")
+    @patch("futures.scorer.check_3m_stability")
+    @patch("futures.scorer._get_active_n_structure")
+    @patch("futures.scorer.check_macd_trajectory")
+    def test_tc7_no_reset_condition(
+        self, mock_macd: MagicMock, mock_get: MagicMock, mock_stability: MagicMock,
+        mock_breakout: MagicMock, mock_bonus: MagicMock, mock_reset: MagicMock,
+    ) -> None:
+        """TC7: 无重置条件 — 全通过，无B点突破无反向结构 → score=3, ENTRY"""
+        def side_effect(db, symbol, contract, timeframe):
+            if timeframe == LEVEL1_TIMEFRAME:
+                return make_l1_struct(direction="LONG")
+            elif timeframe == LEVEL2_TIMEFRAME:
+                return make_l2_struct(direction="LONG")
+            return make_l3_struct(direction="LONG")
+
+        mock_get.side_effect = side_effect
+        mock_macd.return_value = make_macd_result(passed=True)
+        mock_stability.return_value = make_stability_result(stable=True)
+        mock_breakout.return_value = make_breakout_result(
+            triggered=True, is_fresh=True, direction="LONG",
+            breakout_price=3580.0, trigger_price=3585.0,
+        )
+
+        result = evaluate("RB", "rb2510", _test_db)
+        # 重置未触发 → 保持3分入场
+        assert result.overall_score == 3
+        assert result.signal_type == "ENTRY"
+        assert result.entry_price == 3585.0
+        assert result.stop_loss is not None
+        assert result.take_profit is not None
+
+    # ── TC8: NONE 方向不重置 ─────────────────────────────────
+
+    @patch("futures.scorer._get_active_n_structure", return_value=None)
+    def test_tc8_no_direction_no_reset(self, mock_get: MagicMock) -> None:
+        """TC8: NONE方向不重置 — direction=NONE, score=0 → 不调重置函数即返回"""
+        result = evaluate("RB", "rb2510", _test_db)
+        # Level1未通过 → direction=NONE → 在重置检查之前已返回
+        assert result.overall_score == 0
+        assert result.signal_type == "NONE"
+        assert result.direction == "NONE"
+        assert result.level1["passed"] is False

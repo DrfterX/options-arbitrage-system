@@ -88,6 +88,7 @@ class NStr:
     pc_time: int
     pc_price: float
     detected_ts: int     # 检测时的 1d bar 时间戳
+    tp_mult: float = 1.0  # TP 倍数（B1 实验参数）
 
     @property
     def b_price(self) -> float:
@@ -107,11 +108,13 @@ class NStr:
 
     def target_1(self) -> float:
         d = self.ref_dist()
-        return self.pb_price + d if self.direction == "LONG" else self.pb_price - d
+        tp = self.tp_mult * d
+        return self.pb_price + tp if self.direction == "LONG" else self.pb_price - tp
 
     def target_2(self) -> float:
         d = self.ref_dist()
-        return self.pb_price + 2 * d if self.direction == "LONG" else self.pb_price - 2 * d
+        tp = 2 * self.tp_mult * d
+        return self.pb_price + tp if self.direction == "LONG" else self.pb_price - tp
 
     def valid(self, close_1d: float) -> bool:
         """C 未突破 A 且最新收盘未突破 A。"""
@@ -221,7 +224,8 @@ def _merge_same(pts: List[SwingPoint]) -> List[SwingPoint]:
     return out
 
 
-def _detect_n(sym: str, klines_1d: List[KlineBar], lookback: int = 40) -> Optional[NStr]:
+def _detect_n(sym: str, klines_1d: List[KlineBar], lookback: int = 40,
+              tp_mult: float = 1.0) -> Optional[NStr]:
     """在 1d K 线序列上检测最新 N 型结构。"""
     if len(klines_1d) < SWING_WINDOW * 2 + 1:
         return None
@@ -251,8 +255,10 @@ def _detect_n(sym: str, klines_1d: List[KlineBar], lookback: int = 40) -> Option
         return None
     pa, pb, pc = best
     dr = "LONG" if pb.price > pa.price else "SHORT"
-    return NStr(sym, dr, pa.timestamp, pa.price, pb.timestamp, pb.price,
-                pc.timestamp, pc.price, klines_1d[-1].timestamp)
+    ns = NStr(sym, dr, pa.timestamp, pa.price, pb.timestamp, pb.price,
+              pc.timestamp, pc.price, klines_1d[-1].timestamp)
+    ns.tp_mult = tp_mult
+    return ns
 
 
 # ═══════════════════════════════════════════════════════════
@@ -555,13 +561,14 @@ def _aggregate(trades: List[Trade], summaries: List[PerfSummary], capital: float
 
 def run_symbol(
     sym_data: Dict[str, Any], capital: float = 100000.0,
-    entry_mode: str = "pullback",
+    entry_mode: str = "pullback", tp_mult: float = 1.0,
 ) -> Tuple[PerfSummary, List[Trade]]:
     """单个品种 Paper Trading 回测。
 
     Args:
         sym_data: load_one() 返回的品种数据。
         entry_mode: "direct" = B 点首次突破即入场；"pullback" = 等待回撤二次突破。
+        tp_mult: TP 倍数（B1 实验参数），影响 target_1 和 target_2 的距离。
 
     Returns:
         (PerfSummary, 交易记录列表)
@@ -621,7 +628,7 @@ def run_symbol(
             close_1d = _get_1d_close(ts)
             # 只有没有活跃结构时才检测新的
             if active_ns is None:
-                ns = _detect_n(symbol, k1d[:k1d_idx + 1], lookback=40)
+                ns = _detect_n(symbol, k1d[:k1d_idx + 1], lookback=40, tp_mult=tp_mult)
                 if ns and ns.fresh(ts) and ns.valid(close_1d):
                     key = (ns.direction, ns.pa_time, ns.pb_time)
                     if key not in processed_ns:
@@ -752,19 +759,20 @@ def run_symbol(
 # ═══════════════════════════════════════════════════════════
 
 def run_all(db_path: str, capital: float = 100000.0,
-             entry_mode: str = "pullback") -> Tuple[PerfSummary, List[PerfSummary], List[Trade]]:
+             entry_mode: str = "pullback",
+             tp_mult: float = 1.0) -> Tuple[PerfSummary, List[PerfSummary], List[Trade]]:
     summaries: List[PerfSummary] = []
     all_trades: List[Trade] = []
 
     data = load_all(db_path)
 
     for sym in TARGET_SYMBOLS:
-        logger.info("===== %s =====", sym)
+        logger.info("===== %s (tp_mult=%.1f) =====", sym, tp_mult)
         sym_data = data.get(sym)
         if not sym_data:
             summaries.append(PerfSummary(symbol=sym))
             continue
-        perf, trades = run_symbol(sym_data, capital, entry_mode=entry_mode)
+        perf, trades = run_symbol(sym_data, capital, entry_mode=entry_mode, tp_mult=tp_mult)
         summaries.append(perf)
         all_trades.extend(trades)
 
@@ -773,8 +781,14 @@ def run_all(db_path: str, capital: float = 100000.0,
     return agg, summaries, all_trades
 
 
-def run_comparison(db_path: str, capital: float = 100000.0) -> Dict[str, Any]:
+def run_comparison(db_path: str, capital: float = 100000.0,
+                   tp_mult: float = 1.0) -> Dict[str, Any]:
     """运行直接入场与 Pullback 入场的对比回测。
+
+    Args:
+        db_path: 数据库路径。
+        capital: 初始资金。
+        tp_mult: TP 倍数（B1 实验参数）。
 
     Returns:
         包含两种模式结果和对比的字典。
@@ -784,12 +798,12 @@ def run_comparison(db_path: str, capital: float = 100000.0) -> Dict[str, Any]:
     print("\n" + "=" * 60)
     print("  ═══ 基线：直接入场 (Direct Entry) ═══")
     print("=" * 60)
-    agg_direct, summaries_direct, trades_direct = run_all(db_path, capital, entry_mode="direct")
+    agg_direct, summaries_direct, trades_direct = run_all(db_path, capital, entry_mode="direct", tp_mult=tp_mult)
 
     print("\n" + "=" * 60)
     print("  ═══ P2：Pullback 入场 ═══")
     print("=" * 60)
-    agg_pullback, summaries_pullback, trades_pullback = run_all(db_path, capital, entry_mode="pullback")
+    agg_pullback, summaries_pullback, trades_pullback = run_all(db_path, capital, entry_mode="pullback", tp_mult=tp_mult)
 
     return {
         "direct": {"agg": agg_direct, "summaries": summaries_direct, "trades": trades_direct},

@@ -143,6 +143,7 @@ SWING_WINDOWS = {
 # detect_and_save 滑动窗口（避免历史极值干扰 N 型状态机）
 # ============================================================
 DETECT_WINDOWS = {
+    "3m": 15,
     "15m": 20,
     "1h": 25,
     "1d": 30,
@@ -156,8 +157,8 @@ LEVEL1_TIMEFRAME = "1w"
 LEVEL1_MACD_TIMEFRAME = "1d"
 LEVEL2_TIMEFRAME = "1h"
 LEVEL2_MACD_TIMEFRAME = "15m"
-LEVEL3_TIMEFRAME = "15m"
-LEVEL3_STABILITY_TIMEFRAME = "15m"
+LEVEL3_TIMEFRAME = "3m"
+LEVEL3_STABILITY_TIMEFRAME = "3m"
 LEVEL3_STABILITY_WINDOW = 8
 LEVEL3_STABILITY_MAX_SWITCHES = 3
 
@@ -168,19 +169,38 @@ TRANSITION_WINDOW_BEFORE = 3
 TRANSITION_WINDOW_AFTER = 3
 
 # ============================================================
-# 加分项配置
+# 加分项配置（每项+1分，用于3分基础之上的4分加仓判定）
 # ============================================================
 BONUS_CHECKS = [
-    ("1mon", "1w", 0.15),
-    ("1d", "1h", 0.10),
+    ("1mon", "1w", 1),
+    ("1d", "1h", 1),
 ]
 
 # ============================================================
-# 三级验证评分门槛
+# 梯度策略配置（Phase 1 — 信号密度实验）
 # ============================================================
-LEVEL1_MIN_SCORE = 0.3
-LEVEL2_MIN_SCORE = 0.6
-LEVEL3_MIN_SCORE = 1.0
+# CEO Bezos 2026-06-15 最终裁定：选 C（梯度策略+仓位管理+100笔模拟期）
+# Munger Pre-Mortem 确认：1%风险敞口、57%盈亏平衡线
+# 决策文档: docs/ceo/p2-direction-decision.md
+GRADIENT_STRATEGY = {
+    # ── 开关 ──
+    "enabled": False,                # Phase 1 梯度策略已关闭（被纯3分硬条件系统取代）
+
+    # ── 入场/加仓阈值（离散分制） ──
+    "entry_threshold": 3,            # ≥3分（L1+L2+L3+MACD硬）→ 入场
+    "add_position_threshold": 3,     # ≥3分（L1+L2+L3）→ 入场+加仓
+    "skip_threshold": 1,             # ≤1分（L1_ONLY）→ 跳过，不满足入场条件
+
+    # ── 风险控制 ──
+    "risk_per_trade": 0.01,          # 单笔风险敞口 ≤ 总资本 1%
+
+    # ── Phase 1 实验约束（Munger 确认） ──
+    "phase1_sample_size": 100,       # 样本量 100 笔
+    "phase1_win_rate_target": 0.57,  # 盈亏平衡线 57%（含双边 0.2% 交易成本，7个百分点安全边际）
+
+    # ── 时间军规（CEO 新增） ──
+    "phase1_deadline_days": 30,      # 30 天内必须完成 100 笔，否则废弃系统
+}
 
 # ============================================================
 # 推送配置

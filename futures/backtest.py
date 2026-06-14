@@ -30,11 +30,11 @@ logger = logging.getLogger(__name__)
 LOOKAHEAD_DAYS = [1, 2, 5, 10]
 
 SCORE_BANDS: List[Tuple[float, float, str]] = [
-    (0.00, 0.30, "0.00-0.30"),
-    (0.30, 0.40, "0.30-0.40"),
-    (0.40, 0.50, "0.40-0.50"),
-    (0.50, 0.60, "0.50-0.60"),
-    (0.60, 1.01, "0.60+"),
+    (0.0, 1.0, "0(NONE)"),
+    (1.0, 2.0, "1(L1_ONLY)"),
+    (2.0, 3.0, "2(L1+L2)"),
+    (3.0, 4.0, "3(ENTRY)"),
+    (4.0, 5.0, "4(ADD)"),
 ]
 
 SECTOR_MAP: Dict[str, List[str]] = {
@@ -321,7 +321,7 @@ def _compute_by_signal_type(
     trades: List[Dict], lookahead: List[int]
 ) -> List[Dict]:
     result = []
-    for st in ("ENTRY", "CANDIDATE", "WATCH"):
+    for st in ("ENTRY", "ADD_POSITION"):
         filt = [t for t in trades if t["signal_type"] == st]
         if not filt:
             continue

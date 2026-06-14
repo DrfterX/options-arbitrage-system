@@ -211,6 +211,80 @@ class Orchestrator:
 
     # ── 风控自动执行 ──────────────────────────────────────────
 
+    def _check_and_handle_phase1_abort(self) -> Optional[str]:
+        """检查 Phase 1 废弃条件，触发时推送告警并记录到 DB。
+
+        Phase 1 废弃条件（二选一）：
+          1. 超过 30 天未达 100 笔且胜率未达标 → 废弃
+          2. 达成 100 笔但胜率 < 57% → 废弃
+
+        触发时自动执行：
+          - 写入 system_config 表（phase1_abort_reason / gradient_strategy_enabled=0）
+          - macOS 桌面通知
+          - Telegram 推送（如已配置）
+
+        Returns:
+            None = 继续运行；str = 废弃原因描述。
+        """
+        from futures.win_tracker import check_phase1_abort_condition
+
+        # 先检查是否已废弃（避免重复告警）
+        with self.db.get_conn() as conn:
+            existing = conn.execute(
+                "SELECT value FROM system_config WHERE key='gradient_strategy_enabled'"
+            ).fetchone()
+        if existing and existing["value"] == "0":
+            return None  # 已废弃，不再重复触发
+
+        abort_reason = check_phase1_abort_condition(self.db)
+        if abort_reason is None:
+            return None
+
+        logger.critical("Phase 1 废弃条件触发: %s", abort_reason)
+
+        # 1. 记录到 DB
+        now_ts = int(time_module.time())
+        with self.db.get_conn() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO system_config (key, value) VALUES (?, ?)",
+                ("phase1_abort_reason", abort_reason),
+            )
+            conn.execute(
+                "INSERT OR REPLACE INTO system_config (key, value) VALUES (?, ?)",
+                ("phase1_abort_time", str(now_ts)),
+            )
+            conn.execute(
+                "INSERT OR REPLACE INTO system_config (key, value) VALUES (?, ?)",
+                ("gradient_strategy_enabled", "0"),
+            )
+            conn.commit()
+
+        # 2. macOS 桌面通知
+        from signals.macos_notifier import notify
+        notify(
+            title="🚨 Phase 1 废弃",
+            subtitle=abort_reason[:100],
+            text=abort_reason,
+            sound=True,
+        )
+
+        # 3. Telegram 推送（如已配置）
+        if self._enable_telegram:
+            dispatch(
+                f"🚨 **Phase 1 废弃**\n\n{abort_reason}\n\n"
+                f"梯度策略已自动关闭。请评估是否需要替代方向。",
+                level="URGENT",
+                mode="telegram",
+            )
+
+        # 4. stdout 醒目日志
+        print("=" * 60)
+        print(f"  🚨 PHASE 1 ABORTED: {abort_reason}")
+        print("  gradient_strategy_enabled → 0 (自动关闭)")
+        print("=" * 60)
+
+        return abort_reason
+
     def _execute_single_trigger(
         self,
         result: RiskCheckTriggerResult,
@@ -579,6 +653,12 @@ class Orchestrator:
                     time_module.sleep(0.3)
 
         logger.info("期货扫描完成: %d 条推送, %d 条被过滤抑制", pushed_count, suppressed_count)
+
+        # ── Phase 1 废弃条件检查 ──────────────────────────────
+        try:
+            self._check_and_handle_phase1_abort()
+        except Exception as e:
+            logger.error("Phase 1 废弃检查异常(已跳过): %s", e)
 
         # ── 风控检查 + 自动执行：为 open 持仓检查 SL/TP/Trailing ────────
         try:
