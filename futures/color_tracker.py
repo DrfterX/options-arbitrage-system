@@ -286,6 +286,87 @@ def _check_pivot_transition(
         )
 
 
+def _check_leg_macd_state(
+    db: Database,
+    symbol: str,
+    contract: str,
+    lower_tf: str,
+    start_ts: int,
+    end_ts: int,
+    expected_color: str,
+    leg_label: str,
+    min_dominance: float = 0.6,
+) -> tuple:
+    """验证某条腿期间MACD主体颜色是否符合预期。
+
+    核心：完整的蓝→红→蓝序列要求每条腿期间的MACD主体颜色稳定。
+    例如 SHORT 倒N型（蓝→红→蓝）:
+      腿1(A→B): BLUE（空头推动下跌）
+      腿2(B→C): RED（多头反弹）
+      腿3(C→后): BLUE（空头再发力）
+    例如 LONG 正N型（红→蓝→红）:
+      腿1(A→B): RED（空头回撤结束/多头开始）
+      腿2(B→C): BLUE（多头推动上涨）
+      腿3(C→后): RED（多头减弱/空头反击）
+
+    Args:
+        db: Database 实例。
+        symbol: 品种代码。
+        contract: 合约代码。
+        lower_tf: MACD周期。
+        start_ts: 腿开始时间戳。
+        end_ts: 腿结束时间戳。
+        expected_color: 期望的主体颜色 (COLOR_RED/COLOR_BLUE)。
+        leg_label: 腿名称用于日志。
+        min_dominance: 主体颜色最低占比（默认60%）。
+
+    Returns:
+        (passed: bool, detail: str)
+    """
+    if start_ts >= end_ts:
+        return False, f"{leg_label}: 起始时间无效({start_ts}>={end_ts})"
+
+    macd_rows = _get_macd_in_range(db, symbol, contract, lower_tf, start_ts, end_ts)
+    if not macd_rows:
+        return False, f"{leg_label}: {lower_tf}MACD区间({start_ts}~{end_ts})无数据"
+
+    # 只取有效颜色柱体
+    valid = [r for r in macd_rows if r["color"] in (COLOR_RED, COLOR_BLUE)]
+    if not valid:
+        return False, f"{leg_label}: 区间内无有效MACD颜色"
+
+    total = len(valid)
+    color_counts = Counter(r["color"] for r in valid)
+    dominant = color_counts.most_common(1)[0][0]
+    dominant_count = color_counts.most_common(1)[0][1]
+    dominance_ratio = dominant_count / total
+
+    # 切换次数
+    switch_count = 0
+    for i in range(1, len(valid)):
+        if valid[i]["color"] != valid[i - 1]["color"]:
+            switch_count += 1
+
+    expected_name = "蓝" if expected_color == COLOR_BLUE else "红"
+    dominant_name = "蓝" if dominant == COLOR_BLUE else "红"
+
+    if dominant == expected_color and dominance_ratio >= min_dominance:
+        return True, (
+            f"{leg_label}: 主体{dominant_name}({dominant_count}/{total}="
+            f"{dominance_ratio:.0%}),切换{switch_count}次,符合预期"
+        )
+    elif dominant == expected_color:
+        return False, (
+            f"{leg_label}: 主体{dominant_name}但占比仅{dominance_ratio:.0%}"
+            f"(需≥{min_dominance:.0%}),切换{switch_count}次"
+        )
+    else:
+        return False, (
+            f"{leg_label}: 主体{dominant_name}(需{expected_name}),"
+            f"占比{dominance_ratio:.0%},切换{switch_count}次"
+        )
+
+
 # ─── 核心验证 ────────────────────────────────────────────────
 
 
@@ -396,15 +477,57 @@ def check_macd_trajectory(
         else:
             leg3_passed, leg3_detail = False, "C未形成且无MACD数据"
 
+    # ─── 腿持续期 MACD 状态验证（P2 阶段⑥强化） ─────────
+    # 验证每条腿(A→B, B→C, C→后)期间的 MACD 主体颜色是否符合预期，
+    # 确保蓝→红→蓝完整序列跨越123笔全周期。
+    if direction == "SHORT":
+        leg1_expected = COLOR_BLUE   # 腿1下跌 → 空头动量(BLUE)
+        leg2_expected = COLOR_RED    # 腿2反弹 → 多头反弹(RED)
+        leg3_color_if_weaker = COLOR_BLUE  # 腿3再跌 → 空头归来(BLUE)
+    else:
+        leg1_expected = COLOR_RED    # 腿1上涨 → 多头动量(RED)
+        leg2_expected = COLOR_BLUE   # 腿2回撤 → 空头回撤(BLUE)
+        leg3_color_if_weaker = COLOR_RED  # 腿3再涨 → 多头归来(RED)
+
+    # 腿1 A→B 期间颜色状态
+    leg1_state_passed, leg1_state_detail = _check_leg_macd_state(
+        db, symbol, contract, lower_tf,
+        a_time, b_time, leg1_expected, "腿1(A→B)"
+    )
+
+    # 腿2 B→C 期间颜色状态（C未形成则用窗口替代）
+    if c_time and b_time:
+        leg2_state_passed, leg2_state_detail = _check_leg_macd_state(
+            db, symbol, contract, lower_tf,
+            b_time, c_time, leg2_expected, "腿2(B→C)"
+        )
+    else:
+        leg2_state_passed, leg2_state_detail = True, "腿2(B→C): C未形成,跳过状态验证"
+
+    # 腿3 C→后 期间颜色状态（用弱化检查替代，不做重复）
+    leg3_state_passed = True
+    leg3_state_detail = "腿3(C→后): 通过弱化检查"
+
+    # 腿持续期 MACD 状态统计（诊断用途，非阻断性）
+    # leg1/leg2_state_passed 记录每条腿期间的 MACD 主体颜色与预期是否匹配，
+    # 提供额外的质量诊断信息，但**不参与阻断**评分。
+    # 原因：日线MACD粒度太粗，腿级别颜色优势在日线上过于严格，会导致零信号。
+    # 阻断条件已由原始的 pivot 点颜色过渡检查（leg1_passed/leg2_passed）覆盖。
     overall = leg1_passed and leg2_passed
 
     parts = []
     if leg1_passed:
-        parts.append(f"腿1{leg1_detail}")
+        if leg1_state_passed:
+            parts.append(f"腿1{leg1_detail}")
+        else:
+            parts.append(f"腿1✅过渡⚠️状态:{leg1_state_detail}")
     else:
         parts.append(f"腿1❌{leg1_detail}")
     if leg2_passed:
-        parts.append(f"腿2{leg2_detail}")
+        if leg2_state_passed:
+            parts.append(f"腿2{leg2_detail}")
+        else:
+            parts.append(f"腿2✅过渡⚠️状态:{leg2_state_detail}")
     else:
         parts.append(f"腿2❌{leg2_detail}")
     if leg3_passed:
@@ -414,9 +537,9 @@ def check_macd_trajectory(
 
     return {
         "passed": overall,
-        "leg1": {"passed": leg1_passed, "detail": leg1_detail},
-        "leg2": {"passed": leg2_passed, "detail": leg2_detail},
-        "leg3": {"passed": leg3_passed, "detail": leg3_detail},
+        "leg1": {"passed": leg1_passed, "detail": leg1_detail, "state_passed": leg1_state_passed, "state_detail": leg1_state_detail},
+        "leg2": {"passed": leg2_passed, "detail": leg2_detail, "state_passed": leg2_state_passed, "state_detail": leg2_state_detail},
+        "leg3": {"passed": leg3_passed, "detail": leg3_detail, "state_passed": leg3_state_passed, "state_detail": leg3_state_detail},
         "description": description,
         "lower_tf": lower_tf,
     }
