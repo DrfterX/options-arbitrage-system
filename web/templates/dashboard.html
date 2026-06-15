@@ -90,7 +90,7 @@
             {% if cell.a %}
             {% set alpha = [0.9, item.score * 1.2]|min %}
             {% if alpha < 0.25 %}{% set alpha = 0.25 %}{% endif %}
-            <td><div class="signal-cell kline-trigger" style="opacity:{{ alpha }}" onclick="showKlinePopup(this)" data-sym="{{ item.sym }}" data-tf="{{ cell.tf }}" data-dir="{{ cell.dir }}" data-a="{{ cell.a }}" data-b="{{ cell.b }}" data-c="{{ cell.c }}" title="N型结构: {{ cell.state or '' }}"><span class="inner-text">{{ '多' if is_long else '空' }}</span></div></td>
+            <td><div class="signal-cell kline-trigger" style="opacity:{{ alpha }}" onclick="showKlinePopup(this)" data-sym="{{ item.sym }}" data-tf="{{ cell.tf }}" data-dir="{{ cell.dir }}" data-a="{{ "%.2f"|format(cell.a) }}" data-b="{{ "%.2f"|format(cell.b) }}" data-c="{{ "%.2f"|format(cell.c) }}" title="N型结构: {{ cell.state or '' }}"><span class="inner-text">{{ '多' if is_long else '空' }}</span></div></td>
             {% else %}
             <td><div class="signal-cell kline-trigger" style="opacity:0.45" onclick="showKlinePopup(this)" data-sym="{{ item.sym }}" data-tf="{{ cell.tf }}" data-dir="{{ cell.dir }}" data-a="" data-b="" data-c="" title="信号方向（待N型确认）"><span class="inner-text">{{ '多' if is_long else '空' }}</span></div></td>
             {% endif %}
@@ -363,6 +363,9 @@ function drawKline(bars) {
     bars.forEach(function(b) { pmin = Math.min(pmin, b.l); pmax = Math.max(pmax, b.h); vmax = Math.max(vmax, b.v); });
     var pad = (pmax - pmin) * 0.08 || 1; pmin -= pad; pmax += pad;
     var prange = pmax - pmin;
+    // P1-C3: 动态精度 — prange<1 用3位, <10 用2位, 否则1位
+    function pricePrecision(r) { if (r < 1) return 3; if (r < 10) return 2; return 1; }
+    var prec = pricePrecision(prange);
     var priceToY = function(p) { return 10 + (1 - (p - pmin) / prange) * (H - 30); };
     var chartLeft = 40, chartRight = W - 8, chartW = chartRight - chartLeft;
     var gap = chartW / bars.length;
@@ -372,15 +375,26 @@ function drawKline(bars) {
         var y = 10 + i * (H - 30) / 4;
         ctx.beginPath(); ctx.moveTo(chartLeft, y); ctx.lineTo(chartRight, y); ctx.stroke();
         ctx.fillStyle = '#5a6173'; ctx.font = '9px sans-serif'; ctx.textAlign = 'right';
-        ctx.fillText((pmax - (i / 4) * prange).toFixed(1), chartLeft - 4, y + 3);
+        ctx.fillText((pmax - (i / 4) * prange).toFixed(prec), chartLeft - 4, y + 3);
+    }
+    // P1-C2: 计算稳定的 baseline gap（从第一个非零间隔采样，防止被断档污染）
+    var baseGap = 0;
+    for (var gi = 1; gi < bars.length; gi++) {
+        if (bars[gi].t && bars[gi-1].t) {
+            baseGap = bars[gi].t - bars[gi-1].t;
+            break;
+        }
     }
     var prevX = 0;
     bars.forEach(function(bar, i) {
         var x;
         if (i > 0 && bar.t && bars[i-1].t) {
-            var timeGap = bar.t - bars[i-1].t;
-            var normalGap = (i > 1 && bars[i-1].t && bars[i-2].t) ? (bars[i-1].t - bars[i-2].t) : gap * 5;
-            x = (timeGap > normalGap * 2.5) ? prevX + gap + Math.min(barW * 3, gap * 0.3) : prevX + gap;
+            if (baseGap > 0) {
+                var timeGap = bar.t - bars[i-1].t;
+                x = (timeGap > baseGap * 2.5) ? prevX + gap + Math.min(barW * 3, gap * 0.3) : prevX + gap;
+            } else {
+                x = prevX + gap;
+            }
         } else {
             x = chartLeft + gap / 2;
         }
@@ -397,6 +411,10 @@ function drawKline(bars) {
             ctx.fillRect(x - barW/2, H - volH, barW, volH);
         }
     });
+    // 成交量区域分隔线
+    ctx.strokeStyle = 'rgba(90,97,115,0.08)';
+    ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.moveTo(chartLeft, H - 16); ctx.lineTo(chartRight, H - 16); ctx.stroke();
     var last = bars[bars.length - 1];
     var lastY = priceToY(last.c);
     ctx.setLineDash([3,3]);
@@ -421,19 +439,30 @@ async function showKlinePopup(el) {
     popup.style.left = left + 'px'; popup.style.top = top + 'px';
     popup.style.bottom = 'auto'; popup.style.transform = 'none';
     try {
-        var resp = await fetch('/api/klines?symbol=' + sym + '&timeframe=' + tf);
-        var data = await resp.json();
-        if (!data.bars || !data.bars.length) return;
+        // 加载状态：清空 Canvas，显示加载提示
         document.getElementById('kpTitle').textContent = sym;
         document.getElementById('kpTF').textContent = tf;
         var dirEl = document.getElementById('kpDir');
         dirEl.textContent = dir === 'LONG' ? '做多' : '做空';
         dirEl.className = 'kp-dir ' + (dir === 'LONG' ? 'long' : 'short');
-        document.getElementById('kpPrice').textContent = a && b && c_val ? 'A:'+a+' B:'+b+' C:'+c_val : '';
-        document.getElementById('kpTime').textContent = data.bars.length + '根K线 | 最新:' + data.bars[data.bars.length-1].c;
+        document.getElementById('kpPrice').textContent = '';
+        document.getElementById('kpTime').textContent = '加载中…';
         popup.classList.add('show');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        var resp = await fetch('/api/klines?symbol=' + sym + '&timeframe=' + tf);
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        var data = await resp.json();
+        if (!data.bars || !data.bars.length) {
+            document.getElementById('kpTime').textContent = '暂无K线数据';
+            return;
+        }
+        document.getElementById('kpPrice').textContent = a && b && c_val ? 'A:'+parseFloat(a).toFixed(2)+' B:'+parseFloat(b).toFixed(2)+' C:'+parseFloat(c_val).toFixed(2) : '';
+        document.getElementById('kpTime').textContent = data.bars.length + '根K线 | 最新:' + data.bars[data.bars.length-1].c;
         requestAnimationFrame(function() { drawKline(data.bars); });
-    } catch(err) { console.error('Kline popup error:', err); }
+    } catch(err) {
+        console.error('Kline popup error:', err);
+        document.getElementById('kpTime').textContent = '⚠️ 加载失败';
+    }
 }
 
 document.addEventListener('click', function(e) {

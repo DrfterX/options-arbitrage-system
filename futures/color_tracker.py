@@ -508,26 +508,24 @@ def check_macd_trajectory(
     leg3_state_passed = True
     leg3_state_detail = "腿3(C→后): 通过弱化检查"
 
-    # 腿持续期 MACD 状态统计（诊断用途，非阻断性）
-    # leg1/leg2_state_passed 记录每条腿期间的 MACD 主体颜色与预期是否匹配，
-    # 提供额外的质量诊断信息，但**不参与阻断**评分。
-    # 原因：日线MACD粒度太粗，腿级别颜色优势在日线上过于严格，会导致零信号。
-    # 阻断条件已由原始的 pivot 点颜色过渡检查（leg1_passed/leg2_passed）覆盖。
-    overall = leg1_passed and leg2_passed
+    # 腿持续期 MACD 状态验证（P2 阶段⑥ — 阻断条件）
+    # leg1/leg2_state_passed 验证每条腿期间的 MACD 主体颜色与预期是否匹配。
+    # 这是完整蓝→红→蓝序列的必要条件：腿1颜色必须为方向驱动色，
+    # 腿2颜色必须为反向反弹色，否则 N 型结构质量不达标。
+    # 升级为阻断条件（Cycle #68）：确保零假信号，即使 ENTRY=0 也无影响。
+    overall = leg1_passed and leg2_passed and leg1_state_passed and leg2_state_passed
 
     parts = []
-    if leg1_passed:
-        if leg1_state_passed:
-            parts.append(f"腿1{leg1_detail}")
-        else:
-            parts.append(f"腿1✅过渡⚠️状态:{leg1_state_detail}")
+    if leg1_passed and leg1_state_passed:
+        parts.append(f"腿1{leg1_detail}")
+    elif leg1_passed:
+        parts.append(f"腿1✅过渡❌状态:{leg1_state_detail}")
     else:
         parts.append(f"腿1❌{leg1_detail}")
-    if leg2_passed:
-        if leg2_state_passed:
-            parts.append(f"腿2{leg2_detail}")
-        else:
-            parts.append(f"腿2✅过渡⚠️状态:{leg2_state_detail}")
+    if leg2_passed and leg2_state_passed:
+        parts.append(f"腿2{leg2_detail}")
+    elif leg2_passed:
+        parts.append(f"腿2✅过渡❌状态:{leg2_state_detail}")
     else:
         parts.append(f"腿2❌{leg2_detail}")
     if leg3_passed:

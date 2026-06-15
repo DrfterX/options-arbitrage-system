@@ -177,29 +177,34 @@ BONUS_CHECKS = [
 ]
 
 # ============================================================
-# 梯度策略配置（Phase 1 — 信号密度实验）
+# 评分策略配置（★ P0指令覆盖：3分硬条件入场制 — Cycle #59）
 # ============================================================
-# CEO Bezos 2026-06-15 最终裁定：选 C（梯度策略+仓位管理+100笔模拟期）
-# Munger Pre-Mortem 确认：1%风险敞口、57%盈亏平衡线
-# 决策文档: docs/ceo/p2-direction-decision.md
+# scorer.py evaluate() 实现（由 P0 指令覆盖 Cycle #35 梯度策略）：
+#   score=3(L1+L2+L3+MACD硬) → ENTRY（3分硬条件，缺一分不行）
+#   score=4(+加分项)         → ADD_POSITION（加仓）
+#   score<3                  → NONE
+# 决策文档: docs/strategy/p2-signal-rebuild.md
+#
+# 以下 GRADIENT_STRATEGY 配置已被 P0 指令覆盖，
+# entry_threshold=2 不再生效，保留仅作历史参考。
 GRADIENT_STRATEGY = {
     # ── 开关 ──
-    "enabled": False,                # Phase 1 梯度策略已关闭（被纯3分硬条件系统取代）
+    "enabled": False,                # ❌ 已由 P0 指令禁用（3分硬条件入场制）
 
     # ── 入场/加仓阈值（离散分制） ──
-    "entry_threshold": 3,            # ≥3分（L1+L2+L3+MACD硬）→ 入场
-    "add_position_threshold": 3,     # ≥3分（L1+L2+L3）→ 入场+加仓
-    "skip_threshold": 1,             # ≤1分（L1_ONLY）→ 跳过，不满足入场条件
+    "entry_threshold": 2,            # ⛔ 被覆盖：原2分入场 → 现要求3分硬条件
+    "add_position_threshold": 3,     # 保留：3分+加分项 → 加仓
+    "skip_threshold": 1,             # ≤1分 → NONE
 
     # ── 风险控制 ──
-    "risk_per_trade": 0.01,          # 单笔风险敞口 ≤ 总资本 1%
+    "risk_per_trade": 0.01,
 
-    # ── Phase 1 实验约束（Munger 确认） ──
-    "phase1_sample_size": 100,       # 样本量 100 笔
-    "phase1_win_rate_target": 0.57,  # 盈亏平衡线 57%（含双边 0.2% 交易成本，7个百分点安全边际）
+    # ── Phase 1 实验约束 ──
+    "phase1_sample_size": 100,
+    "phase1_win_rate_target": 0.57,
 
-    # ── 时间军规（CEO 新增） ──
-    "phase1_deadline_days": 30,      # 30 天内必须完成 100 笔，否则废弃系统
+    # ── 时间军规 ──
+    "phase1_deadline_days": 30,
 }
 
 # ============================================================
