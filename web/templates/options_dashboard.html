@@ -357,6 +357,33 @@
   user-select: none;
   vertical-align: middle;
 }
+
+/* Strategy panel loading state */
+.strategy-panel.is-loading .strat-table { opacity: .5; transition: opacity .2s var(--ease-out); }
+.strategy-panel .strat-table { transition: opacity .3s var(--ease-out); }
+.strategy-panel.is-loading .options-cards { opacity: .5; transition: opacity .2s var(--ease-out); }
+.strategy-panel .options-cards { transition: opacity .3s var(--ease-out); }
+
+.loading-dot {
+  display: none;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--brand);
+  margin-left: 6px;
+  animation: loading-pulse .8s ease-in-out infinite alternate;
+}
+.strategy-panel.is-loading .loading-dot { display: inline-block; }
+@keyframes loading-pulse {
+  0% { opacity: .2; transform: scale(.7); }
+  100% { opacity: 1; transform: scale(1.1); }
+}
+.is-loading .skeleton {
+  animation: skeleton-shimmer 1.5s ease-in-out infinite, skeleton-fade-in .3s ease-out both;
+}
+@keyframes skeleton-fade-in {
+  0% { opacity: 0; transform: translateY(2px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
 </style>
 </head>
 <body>
@@ -412,8 +439,8 @@
   </div>
 
   <!-- CENTER: Options Strategy Table -->
-  <div class="strategy-panel">
-    <h2>🟡 期权策略信号 <span class="badge" id="strat-badge"><span class="skeleton" style="width:60px;height:.7em">&nbsp;</span></span></h2>
+  <div class="strategy-panel" id="stratPanel">
+    <h2>🟡 期权策略信号 <span class="badge" id="strat-badge"><span class="skeleton" style="width:60px;height:.7em">&nbsp;</span></span><span class="loading-dot"></span></h2>
     <div id="stratContent">
       <table class="strat-table">
         <thead>
@@ -441,8 +468,8 @@
   </div>
 
   <!-- RIGHT: Options Signal Cards -->
-  <div class="strategy-panel">
-    <h2>📊 策略卡片 <span class="badge" id="card-badge">{{ options|length }} 个</span></h2>
+  <div class="strategy-panel" id="cardPanel">
+    <h2>📊 策略卡片 <span class="badge" id="card-badge">{{ options|length }} 个</span><span class="loading-dot"></span></h2>
     <div class="options-cards" id="optionsCards">
       {% if options %}
       {% for s in options[:20] %}
@@ -843,6 +870,210 @@ document.addEventListener('click', function(e) {
     if (!document.hidden) refresh();
   }, 30000);
 })();
+
+// ── SKELETON LOADING: strategy table + option cards ──
+function createStratSkeleton(n) {
+  var html = '';
+  for (var i = 0; i < n; i++) {
+    html += '<tr>'
+      + '<td style="padding:6px 8px"><div class="skeleton" style="width:56px;height:.85em">&nbsp;</div></td>'
+      + '<td style="padding:6px 8px"><div class="skeleton" style="width:50px;height:.85em">&nbsp;</div></td>'
+      + '<td style="padding:6px 8px"><div class="skeleton" style="width:40px;height:.85em">&nbsp;</div></td>'
+      + '<td style="padding:6px 8px"><div class="skeleton" style="width:52px;height:.85em">&nbsp;</div></td>'
+      + '<td style="padding:6px 8px"><div class="skeleton" style="width:58px;height:.85em">&nbsp;</div></td>'
+      + '<td style="padding:6px 8px"><div class="skeleton" style="width:32px;height:.85em">&nbsp;</div></td>'
+      + '<td style="padding:6px 8px"><div class="skeleton" style="width:20px;height:.85em">&nbsp;</div></td>'
+      + '</tr>';
+  }
+  return html;
+}
+function createCardSkeleton(n) {
+  var html = '';
+  for (var i = 0; i < n; i++) {
+    html += '<div class="option-card" style="border-left-color:var(--text3)">'
+      + '<div class="option-card-header">'
+      + '<div><span class="skeleton" style="width:64px;height:.78em">&nbsp;</span> <span class="skeleton" style="width:48px;height:.58em">&nbsp;</span></div>'
+      + '<span class="skeleton" style="width:54px;height:.58em">&nbsp;</span>'
+      + '</div>'
+      + '<div class="option-card-iv" style="justify-content:flex-start;gap:6px">'
+      + '<span class="skeleton" style="width:36px;height:.62em">&nbsp;</span>'
+      + '<span class="skeleton" style="width:24px;height:.62em">&nbsp;</span>'
+      + '<span class="skeleton" style="width:32px;height:.62em">&nbsp;</span>'
+      + '</div>'
+      + '<div class="option-card-pnl" style="justify-content:flex-start;gap:8px">'
+      + '<span class="skeleton" style="width:40px;height:.62em">&nbsp;</span>'
+      + '<span class="skeleton" style="width:28px;height:.62em">&nbsp;</span>'
+      + '<span class="skeleton" style="width:24px;height:.62em">&nbsp;</span>'
+      + '</div>'
+      + '<div class="option-card-detail"><div class="skeleton" style="width:100%;height:.58em">&nbsp;</div></div>'
+      + '</div>';
+  }
+  return html;
+}
+function renderOptionsSignals(signals) {
+  var tbody = document.getElementById('stratBody');
+  if (!tbody) return;
+  if (!signals || !signals.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="strat-empty">暂无期权策略信号</td></tr>';
+    return;
+  }
+  var theadHtml = '';
+  signals.slice(0, 20).forEach(function(s) {
+    var sym = s.symbol || '';
+    var contract = s.contract || '';
+    var strategy = (s.strategy || '').replace(/_/g, ' ');
+    var stratClass = 'strat-other';
+    if (s.strategy === 'iron_condor') stratClass = 'strat-ic';
+    else if (s.strategy === 'vertical_spread') stratClass = 'strat-vs';
+    else if (s.strategy === 'calendar_spread') stratClass = 'strat-cs';
+    var ivPct = s.iv_avg ? (s.iv_avg * 100).toFixed(1) : '—';
+    var ivClass = 'strat-iv-normal';
+    if (s.iv_level === '极端高' || s.iv_level === '偏高') ivClass = 'strat-iv-high';
+    else if (s.iv_level === '偏低') ivClass = 'strat-iv-low';
+    else if (s.iv_level === '极端低') ivClass = 'strat-iv-extreme';
+    var score = s.unified_score || 0;
+    var scoreClr = score >= 70 ? 'var(--brand)' : (score >= 50 ? '#f0b429' : 'var(--text3)');
+    var detailStr = '';
+    if (s.strategy_details) {
+      detailStr = typeof s.strategy_details === 'string' ? s.strategy_details : JSON.stringify(s.strategy_details);
+    }
+    theadHtml += '<tr>'
+      + '<td><span class="strat-sym">' + sym + '</span> <span class="strat-name">' + contract + '</span></td>'
+      + '<td><span class="strat-type ' + stratClass + '">' + strategy + '</span></td>'
+      + '<td class="' + ivClass + '">' + ivPct + '%</td>'
+      + '<td class="strat-greeks">Δ:' + (s.net_delta != null ? s.net_delta.toFixed(2) : '0.00') + '<br>Θ:' + (s.net_theta != null ? s.net_theta.toFixed(2) : '0.00') + '</td>'
+      + '<td><span class="strat-pnl-pos">+' + (s.max_profit != null ? s.max_profit.toFixed(0) : '0') + '</span> / <span class="strat-pnl-neg">' + (s.max_loss != null ? s.max_loss.toFixed(0) : '0') + '</span></td>'
+      + '<td><span class="strat-strength" style="color:' + scoreClr + '">' + score.toFixed(1) + '</span></td>'
+      + '<td><span class="strat-detail-link" onclick="showStratDetailFromData(this)" data-idx="' + signals.indexOf(s) + '">📋</span></td>'
+      + '</tr>';
+  });
+  tbody.innerHTML = theadHtml;
+  window._signalsData = signals;
+  var badge = document.getElementById('strat-badge');
+  if (badge) badge.textContent = signals.length + ' 个策略';
+  var countBadge = document.getElementById('optionCount');
+  if (countBadge) countBadge.textContent = signals.length + ' 策略';
+  var cardBadge = document.getElementById('card-badge');
+  if (cardBadge) cardBadge.textContent = signals.length + ' 个';
+  renderOptionCards(signals);
+}
+function renderOptionCards(signals) {
+  var container = document.getElementById('optionsCards');
+  if (!container) return;
+  if (!signals || !signals.length) {
+    container.innerHTML = '<div class="strat-empty">暂无期权策略信号</div>';
+    return;
+  }
+  var html = '';
+  signals.slice(0, 20).forEach(function(s) {
+    var score = s.unified_score || 0;
+    var strengthCls = score >= 70 ? 'strength-high' : (score >= 50 ? 'strength-mid' : 'strength-low');
+    var ivClr = 'var(--iv-normal)';
+    if (s.iv_level === '极端高') ivClr = '#f04438';
+    else if (s.iv_level === '偏高') ivClr = '#f0b429';
+    else if (s.iv_level === '偏低') ivClr = 'var(--iv-low)';
+    else if (s.iv_level === '极端低') ivClr = 'var(--iv-extreme)';
+    var scoreClr = score >= 70 ? 'var(--brand)' : (score >= 50 ? '#f0b429' : 'var(--text3)');
+    var reason = s.reason || '';
+    html += '<div class="option-card ' + strengthCls + '">'
+      + '<div class="option-card-header">'
+      + '<div><span class="option-card-sym">' + (s.symbol || '') + '</span> <span class="option-card-contract">' + (s.contract || '') + '</span></div>'
+      + '<span class="option-card-strat">' + (s.strategy || '').replace(/_/g, ' ') + '</span>'
+      + '</div>'
+      + '<div class="option-card-iv">'
+      + '<span>' + (s.iv_avg ? (s.iv_avg * 100).toFixed(1) : '—') + '% IV</span>'
+      + '<span style="color:' + ivClr + '">' + (s.iv_level || '') + '</span>'
+      + '<span>Pctl ' + (s.iv_percentile != null ? s.iv_percentile.toFixed(0) : '—') + '%</span>'
+      + '</div>'
+      + '<div class="option-card-pnl">'
+      + '<span class="strat-pnl-pos">P+' + (s.max_profit != null ? s.max_profit.toFixed(0) : '0') + '</span>'
+      + '<span class="strat-pnl-neg">L' + (s.max_loss != null ? s.max_loss.toFixed(0) : '0') + '</span>'
+      + '<span class="strat-strength" style="color:' + scoreClr + '">' + (s.unified_score != null ? s.unified_score.toFixed(1) : '—') + '</span>'
+      + '</div>'
+      + '<div class="option-card-detail">' + reason + '</div>'
+      + '</div>';
+  });
+  container.innerHTML = html;
+}
+function showStratDetailFromData(el) {
+  var idx = parseInt(el.dataset.idx);
+  var signals = window._signalsData;
+  if (!signals || idx == null || !signals[idx]) return;
+  var s = signals[idx];
+  var detail = s.strategy_details;
+  if (!detail) return;
+  if (typeof detail === 'string') { try { detail = JSON.parse(detail); } catch(e) { return; } }
+  var popup = document.getElementById('stratPopup');
+  document.getElementById('spTitle').textContent = s.symbol + ' ' + (s.contract || '') + ' — ' + (s.strategy || '').replace(/_/g, ' ');
+  var html = '';
+  var fields = [
+    { label: '类型', value: (s.strategy || '').replace(/_/g, ' ') },
+    { label: '标的价', value: s.underlying ? s.underlying.toFixed(1) : '—' },
+    { label: 'IV 均值', value: s.iv_avg ? (s.iv_avg * 100).toFixed(1) + '%' : '—' },
+    { label: '到期天数', value: s.days_to_expiry || '—' },
+    { label: '净 Delta', value: s.net_delta != null ? s.net_delta.toFixed(4) : '—' },
+    { label: '净 Theta', value: s.net_theta != null ? s.net_theta.toFixed(4) : '—' },
+    { label: '净 Vega', value: s.net_vega != null ? s.net_vega.toFixed(2) : '—' },
+    { label: '净成本', value: s.net_cost != null ? s.net_cost.toFixed(0) : '—' },
+    { label: '最大盈利', value: s.max_profit != null ? '+' + s.max_profit.toFixed(0) : '—' },
+    { label: '最大亏损', value: s.max_loss != null ? s.max_loss.toFixed(0) : '—' },
+  ];
+  fields.forEach(function(f) {
+    html += '<div class="strat-popup-row"><span class="sp-label">' + f.label + '</span><span class="sp-value">' + f.value + '</span></div>';
+  });
+  if (detail.score_components) {
+    var sc = detail.score_components;
+    var labels = { theta: 'Θ 贡献', vega: 'V 贡献', win_rate: '胜率贡献', width: '区间贡献', efficiency: '效率贡献', delta: '中性贡献', iv_bonus: 'IV 奖励' };
+    var compHtml = '';
+    Object.keys(labels).forEach(function(k) {
+      if (sc[k] !== undefined && sc[k] !== null) {
+        compHtml += '<div class="strat-popup-row" style="font-size:.62rem"><span class="sp-label">' + labels[k] + '</span><span class="sp-value" style="font-size:.62rem">' + sc[k].toFixed(1) + '</span></div>';
+      }
+    });
+    if (compHtml) {
+      html += '<div style="margin-top:6px;padding-top:4px;border-top:1px solid rgba(26,32,64,.5)">';
+      html += '<div style="font-size:.6rem;color:var(--text3);margin-bottom:3px;letter-spacing:.05em">评分分解</div>';
+      html += compHtml;
+      html += '</div>';
+    }
+  }
+  if (detail.legs_detail) html += '<div class="strat-popup-desc"><strong>腿组合:</strong> ' + detail.legs_detail + '</div>';
+  if (detail.description) html += '<div class="strat-popup-desc"><strong>描述:</strong> ' + detail.description + '</div>';
+  if (detail.strikes && detail.strikes.length) html += '<div class="strat-popup-desc"><strong>行权价:</strong> ' + detail.strikes.map(function(s) { return s.toFixed(0); }).join(', ') + '</div>';
+  document.getElementById('spBody').innerHTML = html;
+  var rect = el.getBoundingClientRect();
+  var left = rect.right + 10;
+  var top = rect.top - 20;
+  if (left + 420 > window.innerWidth) left = rect.left - 430;
+  if (top < 10) top = 10;
+  popup.style.left = left + 'px';
+  popup.style.top = top + 'px';
+  popup.classList.add('show');
+}
+// ── 5min strategy table refresh: show skeleton while loading ──
+setInterval(function() {
+  if (document.hidden) return;
+  var stratPanel = document.getElementById('stratPanel');
+  var cardPanel = document.getElementById('cardPanel');
+  var tbody = document.getElementById('stratBody');
+  var cards = document.getElementById('optionsCards');
+  if (!tbody || !cards) return;
+  stratPanel.classList.add('is-loading');
+  cardPanel.classList.add('is-loading');
+  tbody.innerHTML = createStratSkeleton(8);
+  cards.innerHTML = createCardSkeleton(6);
+  fetch('/api/signals/options?limit=20', { cache: 'no-cache' })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      renderOptionsSignals(d);
+      stratPanel.classList.remove('is-loading');
+      cardPanel.classList.remove('is-loading');
+    })
+    .catch(function(e) {
+      stratPanel.classList.remove('is-loading');
+      cardPanel.classList.remove('is-loading');
+    });
+}, 300000); // 5 minutes
 </script>
 </body>
 </html>
