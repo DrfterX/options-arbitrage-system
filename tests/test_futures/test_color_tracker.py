@@ -56,7 +56,9 @@ class TestMacdTrajectoryBothLegsPass:
         after_b = make_red_rows(8, start_ts=T2, gap=100, histogram_start=5.0)
         after_c = make_red_rows(6, start_ts=T3, gap=100, histogram_start=3.0)
 
-        mock_get_macd.side_effect = [before_a, after_a, before_b, after_b, after_c]
+        mock_get_macd.side_effect = [before_a, after_a, before_b, after_b, after_c,
+                                       make_blue_rows(5, start_ts=T1, gap=100),
+                                       make_red_rows(5, start_ts=T2, gap=100)]
 
         n_struct = {
             "point_a_time": T1,
@@ -77,7 +79,9 @@ class TestMacdTrajectoryBothLegsPass:
         after_b = make_blue_rows(8, start_ts=T2, gap=100, histogram_start=-5.0)
         after_c = make_blue_rows(6, start_ts=T3, gap=100, histogram_start=-3.0)
 
-        mock_get_macd.side_effect = [before_a, after_a, before_b, after_b, after_c]
+        mock_get_macd.side_effect = [before_a, after_a, before_b, after_b, after_c,
+                                       make_red_rows(5, start_ts=T1, gap=100),
+                                       make_blue_rows(5, start_ts=T2, gap=100)]
 
         n_struct = {
             "point_a_time": T1,
@@ -97,14 +101,16 @@ class TestMacdTrajectoryLeg1Fail:
 
     @patch("futures.color_tracker._get_macd_in_range")
     def test_leg1_wrong_dominant_color(self, mock_get_macd: MagicMock) -> None:
-        """做空腿1：转折前主体应为RED但实际是BLUE → 不通过"""
+        """做空腿1：转折前主体应为RED但实际是BLUE → leg1_state 不通过"""
         before_a = make_blue_rows(5, start_ts=T1 - 500, gap=100, histogram_start=-5.0)
         after_a = make_blue_rows(8, start_ts=T1, gap=100, histogram_start=-5.0)
         before_b = make_blue_rows(5, start_ts=T2 - 500, gap=100, histogram_start=-5.0)
         after_b = make_red_rows(8, start_ts=T2, gap=100, histogram_start=5.0)
         after_c = make_red_rows(6, start_ts=T3, gap=100, histogram_start=3.0)
 
-        mock_get_macd.side_effect = [before_a, after_a, before_b, after_b, after_c]
+        mock_get_macd.side_effect = [before_a, after_a, before_b, after_b, after_c,
+                                       make_red_rows(5, start_ts=T1, gap=100),   # leg1状态: RED(错,需BLUE)
+                                       make_red_rows(5, start_ts=T2, gap=100)]
 
         n_struct = {
             "point_a_time": T1,
@@ -113,18 +119,19 @@ class TestMacdTrajectoryLeg1Fail:
         }
         result = check_macd_trajectory("RB", "rb2510", n_struct, "1d", "SHORT", _test_db)
         assert result["passed"] is False
-        assert result["leg1"]["passed"] is False
-        assert "RED" in result["leg1"]["detail"] or "BLUE" in result["leg1"]["detail"]
+        assert result["leg1"]["state_passed"] is False
 
     @patch("futures.color_tracker._get_macd_in_range")
     def test_leg1_no_data_before_pivot(self, mock_get_macd: MagicMock) -> None:
-        """转折前无MACD数据 → 腿1不通过"""
+        """转折前无MACD数据 → leg1_state 不通过"""
         mock_get_macd.side_effect = [
             [],  # before_a: 无数据
             make_blue_rows(8, start_ts=T1, gap=100),
             make_blue_rows(5, start_ts=T2 - 500, gap=100),
             make_red_rows(8, start_ts=T2, gap=100),
             make_red_rows(6, start_ts=T3, gap=100),
+            make_red_rows(5, start_ts=T1, gap=100),   # leg1状态: RED(错,需BLUE)
+            make_red_rows(5, start_ts=T2, gap=100),
         ]
 
         n_struct = {
@@ -133,7 +140,8 @@ class TestMacdTrajectoryLeg1Fail:
             "point_c_time": T3,
         }
         result = check_macd_trajectory("RB", "rb2510", n_struct, "1d", "SHORT", _test_db)
-        assert result["leg1"]["passed"] is False
+        assert result["leg1"]["state_passed"] is False
+        assert result["passed"] is False
 
 
 # ═══════════════════════════════════════════════════════
@@ -143,7 +151,7 @@ class TestMacdTrajectoryLeg2Fail:
 
     @patch("futures.color_tracker._get_macd_in_range")
     def test_leg2_wrong_dominant_color(self, mock_get_macd: MagicMock) -> None:
-        """做空腿2：B点前主体应为BLUE但实际是RED → 不通过"""
+        """做空腿2：B点前主体应为BLUE但实际是RED → leg2_state 不通过"""
         before_a = make_red_rows(5, start_ts=T1 - 500, gap=100, histogram_start=5.0)
         after_a = make_blue_rows(8, start_ts=T1, gap=100, histogram_start=-5.0)
         # B点前应为BLUE但实际是RED
@@ -151,7 +159,9 @@ class TestMacdTrajectoryLeg2Fail:
         after_b = make_red_rows(8, start_ts=T2, gap=100, histogram_start=5.0)
         after_c = make_red_rows(6, start_ts=T3, gap=100, histogram_start=3.0)
 
-        mock_get_macd.side_effect = [before_a, after_a, before_b, after_b, after_c]
+        mock_get_macd.side_effect = [before_a, after_a, before_b, after_b, after_c,
+                                       make_blue_rows(5, start_ts=T1, gap=100),
+                                       make_blue_rows(5, start_ts=T2, gap=100)]   # leg2状态: BLUE(错,需RED)
 
         n_struct = {
             "point_a_time": T1,
@@ -160,7 +170,7 @@ class TestMacdTrajectoryLeg2Fail:
         }
         result = check_macd_trajectory("RB", "rb2510", n_struct, "1d", "SHORT", _test_db)
         assert result["passed"] is False
-        assert result["leg2"]["passed"] is False
+        assert result["leg2"]["state_passed"] is False
 
 
 # ═══════════════════════════════════════════════════════
@@ -181,7 +191,9 @@ class TestMacdTrajectoryBoundaryWindow:
                                 start_ts=T2, gap=100, histogram_start=5.0)
         after_c = make_red_rows(6, start_ts=T3, gap=100, histogram_start=3.0)
 
-        mock_get_macd.side_effect = [before_a, after_a, before_b, after_b, after_c]
+        mock_get_macd.side_effect = [before_a, after_a, before_b, after_b, after_c,
+                                       make_blue_rows(5, start_ts=T1, gap=100),
+                                       make_red_rows(5, start_ts=T2, gap=100)]
 
         n_struct = {
             "point_a_time": T1,
@@ -207,7 +219,9 @@ class TestMacdTrajectoryInsufficientData:
         after_b = make_red_rows(8, start_ts=T2, gap=100, histogram_start=5.0)
         after_c = make_red_rows(6, start_ts=T3, gap=100, histogram_start=3.0)
 
-        mock_get_macd.side_effect = [before_a, after_a, before_b, after_b, after_c]
+        mock_get_macd.side_effect = [before_a, after_a, before_b, after_b, after_c,
+                                       make_blue_rows(5, start_ts=T1, gap=100),
+                                       make_red_rows(5, start_ts=T2, gap=100)]
 
         n_struct = {
             "point_a_time": T1,
@@ -251,7 +265,9 @@ class TestTransitionWindowParameters:
         after_b = make_red_rows(8, start_ts=T2, gap=100, histogram_start=5.0)
         after_c = make_red_rows(6, start_ts=T3, gap=100, histogram_start=3.0)
 
-        mock_get_macd.side_effect = [before_a_data, after_a, before_b, after_b, after_c]
+        mock_get_macd.side_effect = [before_a_data, after_a, before_b, after_b, after_c,
+                                       make_blue_rows(5, start_ts=T1, gap=100),
+                                       make_red_rows(5, start_ts=T2, gap=100)]
 
         n_struct = {
             "point_a_time": T1,
@@ -276,7 +292,9 @@ class TestTransitionWindowParameters:
         after_b = make_red_rows(8, start_ts=T2, gap=100, histogram_start=5.0)
         after_c = make_red_rows(6, start_ts=T3, gap=100, histogram_start=3.0)
 
-        mock_get_macd.side_effect = [before_a, after_a_data, before_b, after_b, after_c]
+        mock_get_macd.side_effect = [before_a, after_a_data, before_b, after_b, after_c,
+                                       make_blue_rows(5, start_ts=T1, gap=100),
+                                       make_red_rows(5, start_ts=T2, gap=100)]
 
         n_struct = {
             "point_a_time": T1,
@@ -301,7 +319,9 @@ class TestTransitionWindowParameters:
         after_b = make_red_rows(8, start_ts=T2, gap=100, histogram_start=5.0)
         after_c = make_red_rows(6, start_ts=T3, gap=100, histogram_start=3.0)
 
-        mock_get_macd.side_effect = [before_a_mixed, after_a, before_b, after_b, after_c]
+        mock_get_macd.side_effect = [before_a_mixed, after_a, before_b, after_b, after_c,
+                                       make_blue_rows(5, start_ts=T1, gap=100),
+                                       make_red_rows(5, start_ts=T2, gap=100)]
 
         n_struct = {
             "point_a_time": T1,

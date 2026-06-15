@@ -985,6 +985,8 @@ def main():
     import argparse
     parser = argparse.ArgumentParser(description="P1-B Paper Trading 回测引擎")
     parser.add_argument("--symbol", "-s", default="", help="单品种")
+    parser.add_argument("--tp-mult", type=float, default=1.0,
+                        help="TP 倍数（B1 实验参数），默认 1.0")
     parser.add_argument("--db", default=str(DEFAULT_DB_PATH), help="数据库路径")
     parser.add_argument("--capital", "-c", type=float, default=100000.0, help="初始资金")
     parser.add_argument("--entry-mode", default="pullback",
@@ -995,7 +997,7 @@ def main():
     db_path = args.db
 
     if args.entry_mode == "compare":
-        result = run_comparison(db_path, args.capital)
+        result = run_comparison(db_path, args.capital, tp_mult=args.tp_mult)
         print_comparison(result)
         return
 
@@ -1006,12 +1008,12 @@ def main():
             print(f"不支持 {args.symbol}，可选: {', '.join(TARGET_SYMBOLS)}")
             sys.exit(1)
         sym_data = load_one(db_path, args.symbol)
-        perf, trades = run_symbol(sym_data, args.capital, entry_mode=entry_mode)
+        perf, trades = run_symbol(sym_data, args.capital, entry_mode=entry_mode, tp_mult=args.tp_mult)
         print_report(perf, [perf])
         save_results(trades, perf, [perf], db_path, entry_mode=entry_mode)
     else:
         start = time_module.time()
-        agg, summaries, trades = run_all(db_path, args.capital, entry_mode=entry_mode)
+        agg, summaries, trades = run_all(db_path, args.capital, entry_mode=entry_mode, tp_mult=args.tp_mult)
         print_report(agg, summaries)
         save_results(trades, agg, summaries, db_path, entry_mode=entry_mode)
         elapsed = time_module.time() - start

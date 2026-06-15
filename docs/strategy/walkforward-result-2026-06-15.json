@@ -1,0 +1,664 @@
+INFO Walk-Forward: RB 时间范围 2005-01 ~ 2026-06
+INFO Fold: train=2005-01~2008-01 valid=2008-01~2008-07 (180 checkpoints)
+INFO   checkpoint 1/180 @ 2008-01
+INFO   checkpoint 51/180 @ 2008-02
+INFO   checkpoint 101/180 @ 2008-04
+INFO   checkpoint 151/180 @ 2008-06
+INFO Fold: train=2006-10~2009-10 valid=2009-10~2010-03 (180 checkpoints)
+INFO   checkpoint 1/180 @ 2009-10
+INFO   checkpoint 51/180 @ 2009-11
+INFO   checkpoint 101/180 @ 2010-01
+INFO   checkpoint 151/180 @ 2010-03
+INFO Fold: train=2008-07~2011-07 valid=2011-07~2011-12 (180 checkpoints)
+INFO   checkpoint 1/180 @ 2011-07
+INFO   checkpoint 51/180 @ 2011-08
+INFO   checkpoint 101/180 @ 2011-10
+INFO   checkpoint 151/180 @ 2011-11
+INFO Fold: train=2010-03~2013-03 valid=2013-03~2013-09 (180 checkpoints)
+INFO   checkpoint 1/180 @ 2013-03
+INFO   checkpoint 51/180 @ 2013-05
+INFO   checkpoint 101/180 @ 2013-07
+INFO   checkpoint 151/180 @ 2013-08
+INFO Fold: train=2011-12~2014-12 valid=2014-12~2015-06 (180 checkpoints)
+INFO   checkpoint 1/180 @ 2014-12
+INFO   checkpoint 51/180 @ 2015-02
+INFO   checkpoint 101/180 @ 2015-04
+INFO   checkpoint 151/180 @ 2015-05
+INFO Fold: train=2013-09~2016-09 valid=2016-09~2017-03 (180 checkpoints)
+INFO   checkpoint 1/180 @ 2016-09
+INFO   checkpoint 51/180 @ 2016-11
+INFO   checkpoint 101/180 @ 2017-01
+INFO   checkpoint 151/180 @ 2017-02
+INFO Fold: train=2015-06~2018-06 valid=2018-06~2018-12 (180 checkpoints)
+INFO   checkpoint 1/180 @ 2018-06
+INFO   checkpoint 51/180 @ 2018-08
+INFO   checkpoint 101/180 @ 2018-10
+INFO   checkpoint 151/180 @ 2018-11
+INFO Fold: train=2017-03~2020-03 valid=2020-03~2020-09 (180 checkpoints)
+INFO   checkpoint 1/180 @ 2020-03
+INFO   checkpoint 51/180 @ 2020-05
+INFO   checkpoint 101/180 @ 2020-07
+INFO   checkpoint 151/180 @ 2020-08
+INFO Fold: train=2018-12~2021-12 valid=2021-12~2022-06 (180 checkpoints)
+INFO   checkpoint 1/180 @ 2021-12
+INFO   checkpoint 51/180 @ 2022-02
+INFO   checkpoint 101/180 @ 2022-03
+INFO   checkpoint 151/180 @ 2022-05
+INFO Fold: train=2020-09~2023-09 valid=2023-09~2024-03 (180 checkpoints)
+INFO   checkpoint 1/180 @ 2023-09
+INFO   checkpoint 51/180 @ 2023-11
+INFO   checkpoint 101/180 @ 2023-12
+INFO   checkpoint 151/180 @ 2024-02
+INFO Fold: train=2022-06~2025-06 valid=2025-06~2025-12 (180 checkpoints)
+INFO   checkpoint 1/180 @ 2025-06
+INFO   checkpoint 51/180 @ 2025-08
+INFO   checkpoint 101/180 @ 2025-09
+INFO   checkpoint 151/180 @ 2025-11
+{
+  "symbol": "RB",
+  "contract": "RB",
+  "total_checkpoints": 1980,
+  "folds": [
+    {
+      "train_start": "2005-01",
+      "train_end": "2008-01",
+      "valid_start": "2008-01",
+      "valid_end": "2008-07",
+      "checkpoints": 180,
+      "with_reset": {
+        "signal_count": 0,
+        "signal_rate": 0.0,
+        "reset_trigger_count": 0,
+        "accuracy_1d": 0,
+        "signals_1d": 0,
+        "avg_return_1d": 0,
+        "accuracy_2d": 0,
+        "signals_2d": 0,
+        "avg_return_2d": 0,
+        "accuracy_5d": 0,
+        "signals_5d": 0,
+        "avg_return_5d": 0,
+        "accuracy_10d": 0,
+        "signals_10d": 0,
+        "avg_return_10d": 0,
+        "accuracy_20d": 0,
+        "signals_20d": 0,
+        "avg_return_20d": 0
+      },
+      "without_reset": {
+        "signal_count": 0,
+        "signal_rate": 0.0,
+        "reset_trigger_count": 0,
+        "accuracy_1d": 0,
+        "signals_1d": 0,
+        "avg_return_1d": 0,
+        "accuracy_2d": 0,
+        "signals_2d": 0,
+        "avg_return_2d": 0,
+        "accuracy_5d": 0,
+        "signals_5d": 0,
+        "avg_return_5d": 0,
+        "accuracy_10d": 0,
+        "signals_10d": 0,
+        "avg_return_10d": 0,
+        "accuracy_20d": 0,
+        "signals_20d": 0,
+        "avg_return_20d": 0
+      },
+      "improvement": {
+        "accuracy_1d": 0,
+        "accuracy_2d": 0,
+        "accuracy_5d": 0,
+        "accuracy_10d": 0,
+        "accuracy_20d": 0
+      }
+    },
+    {
+      "train_start": "2006-10",
+      "train_end": "2009-10",
+      "valid_start": "2009-10",
+      "valid_end": "2010-03",
+      "checkpoints": 180,
+      "with_reset": {
+        "signal_count": 0,
+        "signal_rate": 0.0,
+        "reset_trigger_count": 0,
+        "accuracy_1d": 0,
+        "signals_1d": 0,
+        "avg_return_1d": 0,
+        "accuracy_2d": 0,
+        "signals_2d": 0,
+        "avg_return_2d": 0,
+        "accuracy_5d": 0,
+        "signals_5d": 0,
+        "avg_return_5d": 0,
+        "accuracy_10d": 0,
+        "signals_10d": 0,
+        "avg_return_10d": 0,
+        "accuracy_20d": 0,
+        "signals_20d": 0,
+        "avg_return_20d": 0
+      },
+      "without_reset": {
+        "signal_count": 0,
+        "signal_rate": 0.0,
+        "reset_trigger_count": 0,
+        "accuracy_1d": 0,
+        "signals_1d": 0,
+        "avg_return_1d": 0,
+        "accuracy_2d": 0,
+        "signals_2d": 0,
+        "avg_return_2d": 0,
+        "accuracy_5d": 0,
+        "signals_5d": 0,
+        "avg_return_5d": 0,
+        "accuracy_10d": 0,
+        "signals_10d": 0,
+        "avg_return_10d": 0,
+        "accuracy_20d": 0,
+        "signals_20d": 0,
+        "avg_return_20d": 0
+      },
+      "improvement": {
+        "accuracy_1d": 0,
+        "accuracy_2d": 0,
+        "accuracy_5d": 0,
+        "accuracy_10d": 0,
+        "accuracy_20d": 0
+      }
+    },
+    {
+      "train_start": "2008-07",
+      "train_end": "2011-07",
+      "valid_start": "2011-07",
+      "valid_end": "2011-12",
+      "checkpoints": 180,
+      "with_reset": {
+        "signal_count": 0,
+        "signal_rate": 0.0,
+        "reset_trigger_count": 0,
+        "accuracy_1d": 0,
+        "signals_1d": 0,
+        "avg_return_1d": 0,
+        "accuracy_2d": 0,
+        "signals_2d": 0,
+        "avg_return_2d": 0,
+        "accuracy_5d": 0,
+        "signals_5d": 0,
+        "avg_return_5d": 0,
+        "accuracy_10d": 0,
+        "signals_10d": 0,
+        "avg_return_10d": 0,
+        "accuracy_20d": 0,
+        "signals_20d": 0,
+        "avg_return_20d": 0
+      },
+      "without_reset": {
+        "signal_count": 0,
+        "signal_rate": 0.0,
+        "reset_trigger_count": 0,
+        "accuracy_1d": 0,
+        "signals_1d": 0,
+        "avg_return_1d": 0,
+        "accuracy_2d": 0,
+        "signals_2d": 0,
+        "avg_return_2d": 0,
+        "accuracy_5d": 0,
+        "signals_5d": 0,
+        "avg_return_5d": 0,
+        "accuracy_10d": 0,
+        "signals_10d": 0,
+        "avg_return_10d": 0,
+        "accuracy_20d": 0,
+        "signals_20d": 0,
+        "avg_return_20d": 0
+      },
+      "improvement": {
+        "accuracy_1d": 0,
+        "accuracy_2d": 0,
+        "accuracy_5d": 0,
+        "accuracy_10d": 0,
+        "accuracy_20d": 0
+      }
+    },
+    {
+      "train_start": "2010-03",
+      "train_end": "2013-03",
+      "valid_start": "2013-03",
+      "valid_end": "2013-09",
+      "checkpoints": 180,
+      "with_reset": {
+        "signal_count": 0,
+        "signal_rate": 0.0,
+        "reset_trigger_count": 0,
+        "accuracy_1d": 0,
+        "signals_1d": 0,
+        "avg_return_1d": 0,
+        "accuracy_2d": 0,
+        "signals_2d": 0,
+        "avg_return_2d": 0,
+        "accuracy_5d": 0,
+        "signals_5d": 0,
+        "avg_return_5d": 0,
+        "accuracy_10d": 0,
+        "signals_10d": 0,
+        "avg_return_10d": 0,
+        "accuracy_20d": 0,
+        "signals_20d": 0,
+        "avg_return_20d": 0
+      },
+      "without_reset": {
+        "signal_count": 0,
+        "signal_rate": 0.0,
+        "reset_trigger_count": 0,
+        "accuracy_1d": 0,
+        "signals_1d": 0,
+        "avg_return_1d": 0,
+        "accuracy_2d": 0,
+        "signals_2d": 0,
+        "avg_return_2d": 0,
+        "accuracy_5d": 0,
+        "signals_5d": 0,
+        "avg_return_5d": 0,
+        "accuracy_10d": 0,
+        "signals_10d": 0,
+        "avg_return_10d": 0,
+        "accuracy_20d": 0,
+        "signals_20d": 0,
+        "avg_return_20d": 0
+      },
+      "improvement": {
+        "accuracy_1d": 0,
+        "accuracy_2d": 0,
+        "accuracy_5d": 0,
+        "accuracy_10d": 0,
+        "accuracy_20d": 0
+      }
+    },
+    {
+      "train_start": "2011-12",
+      "train_end": "2014-12",
+      "valid_start": "2014-12",
+      "valid_end": "2015-06",
+      "checkpoints": 180,
+      "with_reset": {
+        "signal_count": 0,
+        "signal_rate": 0.0,
+        "reset_trigger_count": 0,
+        "accuracy_1d": 0,
+        "signals_1d": 0,
+        "avg_return_1d": 0,
+        "accuracy_2d": 0,
+        "signals_2d": 0,
+        "avg_return_2d": 0,
+        "accuracy_5d": 0,
+        "signals_5d": 0,
+        "avg_return_5d": 0,
+        "accuracy_10d": 0,
+        "signals_10d": 0,
+        "avg_return_10d": 0,
+        "accuracy_20d": 0,
+        "signals_20d": 0,
+        "avg_return_20d": 0
+      },
+      "without_reset": {
+        "signal_count": 0,
+        "signal_rate": 0.0,
+        "reset_trigger_count": 0,
+        "accuracy_1d": 0,
+        "signals_1d": 0,
+        "avg_return_1d": 0,
+        "accuracy_2d": 0,
+        "signals_2d": 0,
+        "avg_return_2d": 0,
+        "accuracy_5d": 0,
+        "signals_5d": 0,
+        "avg_return_5d": 0,
+        "accuracy_10d": 0,
+        "signals_10d": 0,
+        "avg_return_10d": 0,
+        "accuracy_20d": 0,
+        "signals_20d": 0,
+        "avg_return_20d": 0
+      },
+      "improvement": {
+        "accuracy_1d": 0,
+        "accuracy_2d": 0,
+        "accuracy_5d": 0,
+        "accuracy_10d": 0,
+        "accuracy_20d": 0
+      }
+    },
+    {
+      "train_start": "2013-09",
+      "train_end": "2016-09",
+      "valid_start": "2016-09",
+      "valid_end": "2017-03",
+      "checkpoints": 180,
+      "with_reset": {
+        "signal_count": 0,
+        "signal_rate": 0.0,
+        "reset_trigger_count": 0,
+        "accuracy_1d": 0,
+        "signals_1d": 0,
+        "avg_return_1d": 0,
+        "accuracy_2d": 0,
+        "signals_2d": 0,
+        "avg_return_2d": 0,
+        "accuracy_5d": 0,
+        "signals_5d": 0,
+        "avg_return_5d": 0,
+        "accuracy_10d": 0,
+        "signals_10d": 0,
+        "avg_return_10d": 0,
+        "accuracy_20d": 0,
+        "signals_20d": 0,
+        "avg_return_20d": 0
+      },
+      "without_reset": {
+        "signal_count": 0,
+        "signal_rate": 0.0,
+        "reset_trigger_count": 0,
+        "accuracy_1d": 0,
+        "signals_1d": 0,
+        "avg_return_1d": 0,
+        "accuracy_2d": 0,
+        "signals_2d": 0,
+        "avg_return_2d": 0,
+        "accuracy_5d": 0,
+        "signals_5d": 0,
+        "avg_return_5d": 0,
+        "accuracy_10d": 0,
+        "signals_10d": 0,
+        "avg_return_10d": 0,
+        "accuracy_20d": 0,
+        "signals_20d": 0,
+        "avg_return_20d": 0
+      },
+      "improvement": {
+        "accuracy_1d": 0,
+        "accuracy_2d": 0,
+        "accuracy_5d": 0,
+        "accuracy_10d": 0,
+        "accuracy_20d": 0
+      }
+    },
+    {
+      "train_start": "2015-06",
+      "train_end": "2018-06",
+      "valid_start": "2018-06",
+      "valid_end": "2018-12",
+      "checkpoints": 180,
+      "with_reset": {
+        "signal_count": 0,
+        "signal_rate": 0.0,
+        "reset_trigger_count": 0,
+        "accuracy_1d": 0,
+        "signals_1d": 0,
+        "avg_return_1d": 0,
+        "accuracy_2d": 0,
+        "signals_2d": 0,
+        "avg_return_2d": 0,
+        "accuracy_5d": 0,
+        "signals_5d": 0,
+        "avg_return_5d": 0,
+        "accuracy_10d": 0,
+        "signals_10d": 0,
+        "avg_return_10d": 0,
+        "accuracy_20d": 0,
+        "signals_20d": 0,
+        "avg_return_20d": 0
+      },
+      "without_reset": {
+        "signal_count": 0,
+        "signal_rate": 0.0,
+        "reset_trigger_count": 0,
+        "accuracy_1d": 0,
+        "signals_1d": 0,
+        "avg_return_1d": 0,
+        "accuracy_2d": 0,
+        "signals_2d": 0,
+        "avg_return_2d": 0,
+        "accuracy_5d": 0,
+        "signals_5d": 0,
+        "avg_return_5d": 0,
+        "accuracy_10d": 0,
+        "signals_10d": 0,
+        "avg_return_10d": 0,
+        "accuracy_20d": 0,
+        "signals_20d": 0,
+        "avg_return_20d": 0
+      },
+      "improvement": {
+        "accuracy_1d": 0,
+        "accuracy_2d": 0,
+        "accuracy_5d": 0,
+        "accuracy_10d": 0,
+        "accuracy_20d": 0
+      }
+    },
+    {
+      "train_start": "2017-03",
+      "train_end": "2020-03",
+      "valid_start": "2020-03",
+      "valid_end": "2020-09",
+      "checkpoints": 180,
+      "with_reset": {
+        "signal_count": 0,
+        "signal_rate": 0.0,
+        "reset_trigger_count": 0,
+        "accuracy_1d": 0,
+        "signals_1d": 0,
+        "avg_return_1d": 0,
+        "accuracy_2d": 0,
+        "signals_2d": 0,
+        "avg_return_2d": 0,
+        "accuracy_5d": 0,
+        "signals_5d": 0,
+        "avg_return_5d": 0,
+        "accuracy_10d": 0,
+        "signals_10d": 0,
+        "avg_return_10d": 0,
+        "accuracy_20d": 0,
+        "signals_20d": 0,
+        "avg_return_20d": 0
+      },
+      "without_reset": {
+        "signal_count": 0,
+        "signal_rate": 0.0,
+        "reset_trigger_count": 0,
+        "accuracy_1d": 0,
+        "signals_1d": 0,
+        "avg_return_1d": 0,
+        "accuracy_2d": 0,
+        "signals_2d": 0,
+        "avg_return_2d": 0,
+        "accuracy_5d": 0,
+        "signals_5d": 0,
+        "avg_return_5d": 0,
+        "accuracy_10d": 0,
+        "signals_10d": 0,
+        "avg_return_10d": 0,
+        "accuracy_20d": 0,
+        "signals_20d": 0,
+        "avg_return_20d": 0
+      },
+      "improvement": {
+        "accuracy_1d": 0,
+        "accuracy_2d": 0,
+        "accuracy_5d": 0,
+        "accuracy_10d": 0,
+        "accuracy_20d": 0
+      }
+    },
+    {
+      "train_start": "2018-12",
+      "train_end": "2021-12",
+      "valid_start": "2021-12",
+      "valid_end": "2022-06",
+      "checkpoints": 180,
+      "with_reset": {
+        "signal_count": 23,
+        "signal_rate": 12.8,
+        "reset_trigger_count": 0,
+        "accuracy_1d": 0,
+        "signals_1d": 0,
+        "avg_return_1d": 0,
+        "accuracy_2d": 0,
+        "signals_2d": 0,
+        "avg_return_2d": 0,
+        "accuracy_5d": 0,
+        "signals_5d": 0,
+        "avg_return_5d": 0,
+        "accuracy_10d": 0,
+        "signals_10d": 0,
+        "avg_return_10d": 0,
+        "accuracy_20d": 0,
+        "signals_20d": 0,
+        "avg_return_20d": 0
+      },
+      "without_reset": {
+        "signal_count": 23,
+        "signal_rate": 12.8,
+        "reset_trigger_count": 0,
+        "accuracy_1d": 0,
+        "signals_1d": 0,
+        "avg_return_1d": 0,
+        "accuracy_2d": 0,
+        "signals_2d": 0,
+        "avg_return_2d": 0,
+        "accuracy_5d": 0,
+        "signals_5d": 0,
+        "avg_return_5d": 0,
+        "accuracy_10d": 0,
+        "signals_10d": 0,
+        "avg_return_10d": 0,
+        "accuracy_20d": 0,
+        "signals_20d": 0,
+        "avg_return_20d": 0
+      },
+      "improvement": {
+        "accuracy_1d": 0,
+        "accuracy_2d": 0,
+        "accuracy_5d": 0,
+        "accuracy_10d": 0,
+        "accuracy_20d": 0
+      }
+    },
+    {
+      "train_start": "2020-09",
+      "train_end": "2023-09",
+      "valid_start": "2023-09",
+      "valid_end": "2024-03",
+      "checkpoints": 180,
+      "with_reset": {
+        "signal_count": 0,
+        "signal_rate": 0.0,
+        "reset_trigger_count": 0,
+        "accuracy_1d": 0,
+        "signals_1d": 0,
+        "avg_return_1d": 0,
+        "accuracy_2d": 0,
+        "signals_2d": 0,
+        "avg_return_2d": 0,
+        "accuracy_5d": 0,
+        "signals_5d": 0,
+        "avg_return_5d": 0,
+        "accuracy_10d": 0,
+        "signals_10d": 0,
+        "avg_return_10d": 0,
+        "accuracy_20d": 0,
+        "signals_20d": 0,
+        "avg_return_20d": 0
+      },
+      "without_reset": {
+        "signal_count": 0,
+        "signal_rate": 0.0,
+        "reset_trigger_count": 0,
+        "accuracy_1d": 0,
+        "signals_1d": 0,
+        "avg_return_1d": 0,
+        "accuracy_2d": 0,
+        "signals_2d": 0,
+        "avg_return_2d": 0,
+        "accuracy_5d": 0,
+        "signals_5d": 0,
+        "avg_return_5d": 0,
+        "accuracy_10d": 0,
+        "signals_10d": 0,
+        "avg_return_10d": 0,
+        "accuracy_20d": 0,
+        "signals_20d": 0,
+        "avg_return_20d": 0
+      },
+      "improvement": {
+        "accuracy_1d": 0,
+        "accuracy_2d": 0,
+        "accuracy_5d": 0,
+        "accuracy_10d": 0,
+        "accuracy_20d": 0
+      }
+    },
+    {
+      "train_start": "2022-06",
+      "train_end": "2025-06",
+      "valid_start": "2025-06",
+      "valid_end": "2025-12",
+      "checkpoints": 180,
+      "with_reset": {
+        "signal_count": 0,
+        "signal_rate": 0.0,
+        "reset_trigger_count": 0,
+        "accuracy_1d": 0,
+        "signals_1d": 0,
+        "avg_return_1d": 0,
+        "accuracy_2d": 0,
+        "signals_2d": 0,
+        "avg_return_2d": 0,
+        "accuracy_5d": 0,
+        "signals_5d": 0,
+        "avg_return_5d": 0,
+        "accuracy_10d": 0,
+        "signals_10d": 0,
+        "avg_return_10d": 0,
+        "accuracy_20d": 0,
+        "signals_20d": 0,
+        "avg_return_20d": 0
+      },
+      "without_reset": {
+        "signal_count": 0,
+        "signal_rate": 0.0,
+        "reset_trigger_count": 0,
+        "accuracy_1d": 0,
+        "signals_1d": 0,
+        "avg_return_1d": 0,
+        "accuracy_2d": 0,
+        "signals_2d": 0,
+        "avg_return_2d": 0,
+        "accuracy_5d": 0,
+        "signals_5d": 0,
+        "avg_return_5d": 0,
+        "accuracy_10d": 0,
+        "signals_10d": 0,
+        "avg_return_10d": 0,
+        "accuracy_20d": 0,
+        "signals_20d": 0,
+        "avg_return_20d": 0
+      },
+      "improvement": {
+        "accuracy_1d": 0,
+        "accuracy_2d": 0,
+        "accuracy_5d": 0,
+        "accuracy_10d": 0,
+        "accuracy_20d": 0
+      }
+    }
+  ],
+  "avg_improvement": {
+    "accuracy_1d": 0.0,
+    "accuracy_2d": 0.0,
+    "accuracy_5d": 0.0,
+    "accuracy_10d": 0.0,
+    "accuracy_20d": 0.0
+  }
+}

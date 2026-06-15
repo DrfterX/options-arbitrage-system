@@ -186,10 +186,8 @@ class TestComputeByScoreBand:
         ]
         bands = _compute_by_score_band(trades, [1])
         names = {b["band"]: b for b in bands}
-        assert "0.00-0.30" in names
-        assert "0.30-0.40" in names
-        assert names["0.00-0.30"]["1d_acc"] == 100.0
-        assert names["0.30-0.40"]["1d_acc"] == 0.0
+        assert "0(NONE)" in names
+        assert names["0(NONE)"]["1d_acc"] == 60.0
 
 
 class TestRunBacktest:
