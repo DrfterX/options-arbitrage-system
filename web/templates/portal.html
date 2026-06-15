@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>信号矩阵 · 期货 × 期权 交易仪表盘</title>
+<link rel="stylesheet" href="/static/style.css">
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   Portal Entry — signals.drifter.indevs.in
+   Aesthetic: dual-product landing, terminal-luxe, minimalist
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── topbar accent line ── */
+.topbar::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 20px;
+  width: 180px;
+  height: 2px;
+  background: linear-gradient(90deg, var(--brand), var(--purple), transparent 100%);
+  border-radius: 1px;
+}
+
+/* ── tab-style nav ── */
+.nav-tabs {
+  display: flex;
+  gap: 4px;
+  margin-left: 14px;
+}
+.nav-tab {
+  font-size: .65rem;
+  color: var(--text3);
+  text-decoration: none;
+  padding: 4px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  transition: all .2s var(--ease-out);
+  font-family: var(--font-ui);
+  letter-spacing: .03em;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.nav-tab.active {
+  color: var(--brand);
+  border-color: var(--border-light);
+  background: rgba(240, 180, 41, .06);
+}
+.nav-tab:not(.active):hover {
+  color: var(--text2);
+  border-color: var(--border);
+  background: rgba(30, 38, 50, .3);
+}
+.nav-tab-icon { font-size: .7rem; opacity: .7; }
+
+/* ── portal hero section ── */
+.portal-hero {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.portal-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 18px;
+  position: relative;
+  overflow: hidden;
+  transition: border-color .25s var(--ease-out), transform .2s var(--ease-out), box-shadow .25s var(--ease-out);
+  will-change: transform;
+}
+.portal-card:hover {
+  border-color: var(--border-light);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 32px rgba(0,0,0,.3);
+}
+
+.portal-card:active {
+  transform: translateY(0);
+}
+
+/* Futures card — amber accent glow */
+.portal-card.futures {
+  --accent: var(--brand);
+  --accent-bg: var(--brand-bg);
+  --accent-dim: var(--brand-dim);
+}
+.portal-card.futures::before {
+  content: '';
+  position: absolute;
+  top: -60px;
+  right: -40px;
+  width: 160px;
+  height: 160px;
+  background: radial-gradient(circle, rgba(240, 180, 41, .05) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+/* Options card — purple accent glow */
+.portal-card.options {
+  --accent: var(--purple);
+  --accent-bg: rgba(139, 92, 246, .10);
+  --accent-dim: rgba(139, 92, 246, .06);
+}
+.portal-card.options::before {
+  content: '';
+  position: absolute;
+  top: -60px;
+  right: -40px;
+  width: 160px;
+  height: 160px;
+  background: radial-gradient(circle, rgba(139, 92, 246, .05) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+/* card header */
+.portal-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.portal-card-title {
+  font-size: .95rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.portal-card-title .accent-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.portal-card-subtitle {
+  font-size: .6rem;
+  color: var(--text3);
+  font-family: var(--font-mono);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-dim);
+  border: 1px solid rgba(255,255,255,.04);
+}
+
+/* ── portal stats row (mini) ── */
+.portal-stats {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+.portal-stat {
+  flex: 1;
+  min-width: 65px;
+  background: rgba(14, 17, 24, .5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 7px 10px;
+  text-align: center;
+  transition: border-color .15s var(--ease-out), background .15s var(--ease-out);
+}
+.portal-stat:hover {
+  border-color: var(--border-light);
+  background: rgba(14, 17, 24, .7);
+}
+.portal-stat .ps-label {
+  font-size: .55rem;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  margin-bottom: 2px;
+}
+.portal-stat .ps-value {
+  font-size: 1.05rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  letter-spacing: -.02em;
+}
+.portal-stat .ps-value.gold { color: var(--brand); }
+.portal-stat .ps-value.long { color: var(--long); }
+.portal-stat .ps-value.short { color: var(--short); }
+
+/* ── portal sector mini cards ── */
+.portal-sector-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  margin-bottom: 14px;
+}
+.portal-sector {
+  background: rgba(14, 17, 24, .3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 5px 8px;
+  text-align: center;
+  font-size: .6rem;
+  transition: border-color .15s var(--ease-out), background .15s var(--ease-out);
+}
+.portal-sector:hover {
+  border-color: var(--border-light);
+  background: rgba(14, 17, 24, .5);
+}
+.portal-sector .ps-name {
+  font-weight: 600;
+  font-size: .62rem;
+  color: var(--text2);
+  margin-bottom: 1px;
+}
+.portal-sector .ps-detail {
+  font-family: var(--font-mono);
+  font-size: .55rem;
+  color: var(--text3);
+}
+.portal-sector .ps-detail .l { color: var(--long); }
+.portal-sector .ps-detail .s { color: var(--short); }
+.portal-sector .ps-bias {
+  font-size: .58rem;
+  font-weight: 700;
+  letter-spacing: .08em;
+}
+
+/* ── options IV mini chart container ── */
+.portal-iv-mini {
+  height: 60px;
+  margin-bottom: 12px;
+  border-radius: var(--radius-sm);
+  background: rgba(8, 11, 16, .4);
+  overflow: hidden;
+}
+
+/* ── options strat list ── */
+.portal-strat-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 14px;
+}
+.portal-strat-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px 9px;
+  border-radius: var(--radius-sm);
+  background: rgba(14, 17, 24, .2);
+  border-left: 2px solid var(--accent, var(--purple));
+  font-size: .64rem;
+  transition: background .1s;
+}
+.portal-strat-item:hover {
+  background: rgba(14, 17, 24, .4);
+}
+.portal-strat-item .si-sym {
+  font-weight: 600;
+  color: var(--text);
+}
+.portal-strat-item .si-strat {
+  color: var(--text2);
+  font-size: .6rem;
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.portal-strat-item .si-greeks {
+  font-family: var(--font-mono);
+  font-size: .55rem;
+  color: var(--text3);
+}
+.portal-strat-item .si-greeks .pos { color: #22c55e; }
+.portal-strat-item .si-greeks .neg { color: var(--long); }
+.portal-strat-item .si-iv {
+  font-family: var(--font-mono);
+  font-size: .55rem;
+  padding: 1px 5px;
+  border-radius: 2px;
+}
+
+/* IV level badge colors */
+.iv-high { color: var(--long); background: rgba(240, 68, 56, .12); }
+.iv-mid { color: var(--brand); background: var(--brand-bg); }
+.iv-low { color: var(--teal); background: rgba(14, 165, 233, .08); }
+.iv-extreme { color: var(--blue); background: rgba(59, 130, 246, .08); }
+.iv-normal { color: var(--text3); background: rgba(90, 97, 115, .10); }
+
+/* ── enter button ── */
+.portal-enter-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  background: var(--accent-bg);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-md);
+  color: var(--accent);
+  font-size: .72rem;
+  font-weight: 600;
+  text-decoration: none;
+  letter-spacing: .04em;
+  transition: all .2s var(--ease-out);
+  margin-top: auto;
+  will-change: transform;
+}
+.portal-enter-btn:hover {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 2px 20px rgba(139, 92, 246, .15);
+}
+.portal-enter-btn:active {
+  transform: scale(.97);
+}
+.portal-enter-btn.futures-btn:hover {
+  box-shadow: 0 2px 20px rgba(240, 180, 41, .15);
+}
+.portal-enter-btn .arrow {
+  transition: transform .2s var(--ease-out);
+}
+.portal-enter-btn:hover .arrow {
+  transform: translateX(3px);
+}
+
+/* ── portal card body flex ── */
+.portal-card-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 180px;
+}
+
+/* ── tagline ── */
+.portal-tagline {
+  text-align: center;
+  padding: 12px;
+  margin-bottom: 14px;
+  color: var(--text3);
+  font-size: .68rem;
+  letter-spacing: .12em;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: rgba(14, 17, 24, .3);
+  border-radius: var(--radius-md);
+}
+.portal-tagline span {
+  color: var(--text2);
+  font-weight: 500;
+}
+
+/* ── empty state ── */
+.portal-empty {
+  text-align: center;
+  padding: 20px;
+  color: var(--text3);
+  font-size: .7rem;
+}
+.portal-empty .icon { font-size: 1.2rem; opacity: .3; margin-bottom: 4px; }
+
+/* ── health footer ── */
+.portal-footer {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 20px;
+  font-size: .62rem;
+  color: var(--text3);
+  border-top: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.portal-footer .dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+.portal-footer .dot.green { background: #22c55e; animation: pulse-dot 2s ease infinite; }
+
+/* ═══════════════════════════════════════════════════════════════
+   Responsive
+   ═══════════════════════════════════════════════════════════════ */
+
+@media (max-width: 900px) {
+  .portal-hero { grid-template-columns: 1fr; }
+  .portal-sector-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 640px) {
+  .main { padding: 10px; }
+  .topbar { flex-direction: column; gap: 6px; text-align: center; }
+  .topbar-right { flex-wrap: wrap; justify-content: center; }
+  .nav-tabs { margin-left: 0; justify-content: center; }
+  .portal-hero { grid-template-columns: 1fr; }
+  .portal-sector-grid { grid-template-columns: repeat(2, 1fr); }
+  .portal-card { padding: 14px; }
+  .portal-stats { gap: 4px; }
+  .portal-stat { min-width: 55px; padding: 5px 6px; }
+}
+
+@media (max-width: 400px) {
+  .portal-sector-grid { grid-template-columns: 1fr; }
+}
+
+/* ── Skeleton loading ── */
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg,
+    rgba(90, 97, 115, 0.07) 25%,
+    rgba(90, 97, 115, 0.18) 50%,
+    rgba(90, 97, 115, 0.07) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+  border-radius: 3px;
+  color: transparent !important;
+  display: inline-block;
+  line-height: 1;
+  pointer-events: none;
+  user-select: none;
+  vertical-align: middle;
+}
+.skeleton-inline {
+  display: inline-block;
+  height: .85em;
+  width: 100%;
+}
+.skeleton-block {
+  display: block;
+  height: 12px;
+  margin: 6px 0;
+  width: 100%;
+}
+.skeleton-chart {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg,
+    rgba(90, 97, 115, 0.07) 25%,
+    rgba(90, 97, 115, 0.18) 50%,
+    rgba(90, 97, 115, 0.07) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+  border-radius: 2px;
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- ─── TOPBAR ─── -->
+<div class="topbar">
+  <h1><span class="dot"></span><span class="accent">▣</span> 信号矩阵 <span class="data-badge" style="color:var(--brand)">期货 × 期权</span></h1>
+  <div class="topbar-right">
+    <div class="nav-tabs">
+      <span class="nav-tab active"><span class="nav-tab-icon">◈</span> 总览</span>
+      <a href="https://futures.drifter.indevs.in" class="nav-tab"><span class="nav-tab-icon">📈</span> 期货</a>
+      <a href="https://options.drifter.indevs.in" class="nav-tab"><span class="nav-tab-icon">📉</span> 期权</a>
+    </div>
+    <span class="data-badge" id="totalBadge"><span class="skeleton" style="width:72px;height:.7em">&nbsp;</span></span>
+    <span class="topbar-time">{{ now }}</span>
+  </div>
+</div>
+
+<div class="main">
+
+<!-- ─── Tagline ─── -->
+<div class="portal-tagline">
+  <span>实时 N 型结构共振</span> · <span>IV 百分位闪电图</span> · 专业交易仪表盘
+</div>
+
+<!-- ─── Portal Hero: 2-column grid ─── -->
+<div class="portal-hero">
+
+  <!-- ── 期货卡片 ── -->
+  <div class="portal-card futures">
+    <div class="portal-card-header">
+      <div class="portal-card-title">
+        <span class="accent-dot"></span>
+        📈 期货信号矩阵
+      </div>
+      <span class="portal-card-subtitle">多周期 N 型共振</span>
+    </div>
+    <div class="portal-card-body">
+      <!-- Stats row (live) -->
+      <div class="portal-stats" id="futuresStats">
+        <div class="portal-stat"><div class="ps-label">最高评分</div><div class="ps-value gold" id="fs-maxScore"><span class="skeleton" style="width:36px;height:1em">&nbsp;</span></div></div>
+        <div class="portal-stat"><div class="ps-label">做多</div><div class="ps-value long" id="fs-long"><span class="skeleton" style="width:28px;height:1em">&nbsp;</span></div></div>
+        <div class="portal-stat"><div class="ps-label">做空</div><div class="ps-value short" id="fs-short"><span class="skeleton" style="width:28px;height:1em">&nbsp;</span></div></div>
+        <div class="portal-stat"><div class="ps-label">品种</div><div class="ps-value gold" id="fs-total"><span class="skeleton" style="width:28px;height:1em">&nbsp;</span></div></div>
+      </div>
+      <!-- Sector bias grid (live) -->
+      <div class="portal-sector-grid" id="fs-sectors">
+        <div class="portal-sector"><div class="ps-name skeleton" style="width:48px;height:.7em">&nbsp;</div><div class="ps-detail skeleton" style="width:60px;height:.55em;margin-top:3px">&nbsp;</div><div class="ps-bias skeleton" style="width:20px;height:.6em;margin-top:2px">&nbsp;</div></div>
+        <div class="portal-sector"><div class="ps-name skeleton" style="width:48px;height:.7em">&nbsp;</div><div class="ps-detail skeleton" style="width:60px;height:.55em;margin-top:3px">&nbsp;</div><div class="ps-bias skeleton" style="width:20px;height:.6em;margin-top:2px">&nbsp;</div></div>
+        <div class="portal-sector"><div class="ps-name skeleton" style="width:48px;height:.7em">&nbsp;</div><div class="ps-detail skeleton" style="width:60px;height:.55em;margin-top:3px">&nbsp;</div><div class="ps-bias skeleton" style="width:20px;height:.6em;margin-top:2px">&nbsp;</div></div>
+        <div class="portal-sector"><div class="ps-name skeleton" style="width:48px;height:.7em">&nbsp;</div><div class="ps-detail skeleton" style="width:60px;height:.55em;margin-top:3px">&nbsp;</div><div class="ps-bias skeleton" style="width:20px;height:.6em;margin-top:2px">&nbsp;</div></div>
+        <div class="portal-sector"><div class="ps-name skeleton" style="width:48px;height:.7em">&nbsp;</div><div class="ps-detail skeleton" style="width:60px;height:.55em;margin-top:3px">&nbsp;</div><div class="ps-bias skeleton" style="width:20px;height:.6em;margin-top:2px">&nbsp;</div></div>
+        <div class="portal-sector"><div class="ps-name skeleton" style="width:48px;height:.7em">&nbsp;</div><div class="ps-detail skeleton" style="width:60px;height:.55em;margin-top:3px">&nbsp;</div><div class="ps-bias skeleton" style="width:20px;height:.6em;margin-top:2px">&nbsp;</div></div>
+      </div>
+      <!-- Enter button -->
+      <a href="https://futures.drifter.indevs.in" class="portal-enter-btn futures-btn">
+        <span>进入期货面板</span><span class="arrow">→</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- ── 期权卡片 ── -->
+  <div class="portal-card options">
+    <div class="portal-card-header">
+      <div class="portal-card-title">
+        <span class="accent-dot"></span>
+        📉 期权信号仪表盘
+      </div>
+      <span class="portal-card-subtitle">IV 状态监控</span>
+    </div>
+    <div class="portal-card-body">
+      <!-- IV mini bar chart -->
+      <div class="portal-iv-mini" id="ivMiniChart"><div class="skeleton-chart"></div></div>
+      <!-- Top strategies (live) -->
+      <div class="portal-strat-list" id="optionsStrats">
+        <div class="portal-strat-item"><span class="skeleton" style="width:36px;height:.65em">&nbsp;</span><span class="skeleton" style="width:70px;height:.6em">&nbsp;</span><span class="skeleton" style="width:44px;height:.55em">&nbsp;</span><span class="skeleton" style="width:32px;height:.55em">&nbsp;</span></div>
+        <div class="portal-strat-item"><span class="skeleton" style="width:36px;height:.65em">&nbsp;</span><span class="skeleton" style="width:70px;height:.6em">&nbsp;</span><span class="skeleton" style="width:44px;height:.55em">&nbsp;</span><span class="skeleton" style="width:32px;height:.55em">&nbsp;</span></div>
+        <div class="portal-strat-item"><span class="skeleton" style="width:36px;height:.65em">&nbsp;</span><span class="skeleton" style="width:70px;height:.6em">&nbsp;</span><span class="skeleton" style="width:44px;height:.55em">&nbsp;</span><span class="skeleton" style="width:32px;height:.55em">&nbsp;</span></div>
+        <div class="portal-strat-item"><span class="skeleton" style="width:36px;height:.65em">&nbsp;</span><span class="skeleton" style="width:70px;height:.6em">&nbsp;</span><span class="skeleton" style="width:44px;height:.55em">&nbsp;</span><span class="skeleton" style="width:32px;height:.55em">&nbsp;</span></div>
+      </div>
+      <!-- Enter button -->
+      <a href="https://options.drifter.indevs.in" class="portal-enter-btn">
+        <span>进入期权面板</span><span class="arrow">→</span>
+      </a>
+    </div>
+  </div>
+
+</div><!-- /.portal-hero -->
+
+</div><!-- /.main -->
+
+<!-- ─── Footer with health status ─── -->
+<div class="portal-footer">
+  <span><span class="dot green" id="healthDot"></span><span id="healthStatus">系统运行中</span></span>
+  <span>●</span>
+  <span id="footerBadge"><span class="skeleton" style="width:90px;height:.65em">&nbsp;</span></span>
+  <span>●</span>
+  <span class="topbar-time">{{ now }}</span>
+</div>
+
+</div><!-- /.app -->
+
+<script>
+// ═══════════════════════════════════════════════════════════════════
+//  Portal Live Data Loader  —  fetches from existing API endpoints
+// ═══════════════════════════════════════════════════════════════════
+
+var NOW = '{{ now }}';
+
+// ── Futures stats + sectors ──
+function loadFuturesData() {
+  fetch('/api/stats', { cache: 'no-cache' })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      document.getElementById('fs-maxScore').textContent = d.max_score ? d.max_score.toFixed(2) : '0';
+      document.getElementById('fs-long').textContent = d.long || 0;
+      document.getElementById('fs-short').textContent = d.short || 0;
+      document.getElementById('fs-total').textContent = (d.long + d.short) || 0;
+
+      // sector bias grid
+      var secHtml = '';
+      (d.sectors || []).slice(0, 6).forEach(function(s) {
+        var biasColor = s.bias === '多' ? 'var(--long)' : (s.bias === '空' ? 'var(--short)' : 'var(--text3)');
+        secHtml += '<div class="portal-sector">'
+          + '<div class="ps-name">' + s.name + '</div>'
+          + '<div class="ps-detail"><span class="l">多' + s.long + '</span> <span class="s">空' + s.short + '</span></div>'
+          + '<div class="ps-bias" style="color:' + biasColor + '">' + s.bias + '</div>'
+          + '</div>';
+      });
+      if (secHtml) document.getElementById('fs-sectors').innerHTML = secHtml;
+    })
+    .catch(function(e) { /* silent */ });
+}
+
+// ── Options IV mini chart + top strats ──
+var IV_DATA = [];
+
+function initIVMini() {
+  if (typeof echarts === 'undefined') { setTimeout(initIVMini, 500); return; }
+  var el = document.getElementById('ivMiniChart');
+  if (!el) return;
+
+  fetch('/api/iv/status', { cache: 'no-cache' })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      IV_DATA = data || [];
+      if (!IV_DATA.length) return;
+      var chart = echarts.init(el, null, { width: 'auto', height: 60 });
+      chart.setOption({
+        backgroundColor: 'transparent',
+        grid: { top: 2, right: 4, bottom: 2, left: 4 },
+        xAxis: { type: 'category', show: false, data: IV_DATA.map(function(d) { return d.symbol; }) },
+        yAxis: { type: 'value', show: false, max: 100 },
+        series: [{
+          type: 'bar',
+          barWidth: '60%',
+          data: IV_DATA.map(function(d) {
+            var color;
+            if (d.level === '极端高') color = '#f04438';
+            else if (d.level === '偏高') color = '#f0b429';
+            else if (d.level === '偏低') color = '#0ea5e9';
+            else if (d.level === '极端低') color = '#3b82f6';
+            else if (d.level === '数据不足') color = '#5a6173';
+            else color = '#5a6173';
+            return { value: d.percentile, itemStyle: { color: color, borderRadius: [1, 1, 0, 0] } };
+          })
+        }]
+      });
+      // Resize with container
+      window.addEventListener('resize', function() { chart.resize(); });
+    })
+    .catch(function(e) { /* silent */ });
+}
+
+function loadOptionsStrats() {
+  fetch('/api/signals/options', { cache: 'no-cache' })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var list = document.getElementById('optionsStrats');
+      if (!list) return;
+      if (!data || !data.length) {
+        list.innerHTML = '<div class="portal-empty"><div class="icon">📭</div><div>暂无期权策略信号</div></div>';
+        return;
+      }
+      var html = '';
+      data.slice(0, 5).forEach(function(s) {
+        var stratLabel = s.strategy === 'iron_condor' ? '铁鹰'
+          : s.strategy === 'short_strangle' ? '卖跨'
+          : s.strategy === 'bull_put' ? '牛沽'
+          : s.strategy === 'bear_call' ? '熊购'
+          : s.strategy === 'covered_call' ? '备兑'
+          : s.strategy === 'protective_put' ? '保护沽'
+          : s.strategy || '—';
+        var thetaStr = s.net_theta > 0 ? '<span class="pos">+'+s.net_theta.toFixed(2)+'Θ</span>' : '<span class="neg">'+s.net_theta.toFixed(2)+'Θ</span>';
+        var ivLevelClass = 'iv-normal';
+        if (s.iv_level === '极端高') ivLevelClass = 'iv-high';
+        else if (s.iv_level === '偏高') ivLevelClass = 'iv-mid';
+        else if (s.iv_level === '偏低') ivLevelClass = 'iv-low';
+        else if (s.iv_level === '极端低') ivLevelClass = 'iv-extreme';
+        html += '<div class="portal-strat-item">'
+          + '<span class="si-sym">' + s.symbol + '</span>'
+          + '<span class="si-strat">' + stratLabel + ((s.contract) ? ' · ' + s.contract : '') + '</span>'
+          + '<span class="si-greeks">' + thetaStr + '</span>'
+          + '<span class="si-iv ' + ivLevelClass + '">' + (s.iv_avg ? (s.iv_avg * 100).toFixed(1) + '%' : '—') + '</span>'
+          + '</div>';
+      });
+      list.innerHTML = html;
+    })
+    .catch(function(e) { /* silent */ });
+}
+
+// ── Health + summary ──
+function loadHealth() {
+  fetch('/api/health', { cache: 'no-cache' })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      var statusEl = document.getElementById('healthStatus');
+      var dotEl = document.getElementById('healthDot');
+      if (!statusEl) return;
+      if (d.status === 'healthy') {
+        statusEl.textContent = '✅ 系统运行正常';
+        if (dotEl) dotEl.style.background = '#22c55e';
+      } else if (d.status === 'degraded') {
+        statusEl.textContent = '⚠️ 系统降级';
+        if (dotEl) dotEl.style.background = '#f0b429';
+      } else {
+        statusEl.textContent = '❌ 系统异常';
+        if (dotEl) dotEl.style.background = '#f04438';
+      }
+    })
+    .catch(function(e) { /* silent */ });
+}
+
+function loadSummary() {
+  fetch('/api/summary', { cache: 'no-cache' })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      var badge = document.getElementById('totalBadge');
+      var footer = document.getElementById('footerBadge');
+      var cnt = d.futures_count || 0;
+      if (badge) badge.textContent = cnt + ' 期货品种';
+      if (footer) footer.textContent = cnt + ' 期货品种 · IV 监控中';
+    })
+    .catch(function(e) { /* silent */ });
+}
+
+// ── Initial load ──
+loadFuturesData();
+initIVMini();
+loadOptionsStrats();
+loadHealth();
+loadSummary();
+
+// ── Auto-refresh every 30s ──
+setInterval(function() {
+  if (document.hidden) return;
+  loadFuturesData();
+  loadOptionsStrats();
+  loadHealth();
+  loadSummary();
+}, 30000);
+
+// Also reload IV mini chart periodically as a full re-init
+setTimeout(function() { location.reload(); }, 3600000); // 1h fallback
+</script>
+</body>
+</html>

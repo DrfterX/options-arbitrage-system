@@ -48,8 +48,8 @@ def calc_unified_score(
     max_profit: float,
     percentile: float,
     net_delta: float,
-) -> float:
-    """跨策略统一评分 (0-100)。
+) -> dict:
+    """跨策略统一评分 (0-100)，返回含维度分解的 dict。
 
     各维度:
     - Theta贡献: 25 (做空波动率核心收益)
@@ -72,7 +72,7 @@ def calc_unified_score(
         net_delta: 组合Delta。
 
     Returns:
-        综合评分 (0-100)。
+        {"score": 综合评分(0-100), "components": {"theta": ..., "vega": ..., ...}}。
     """
     theta_contrib = max(0, -net_theta) / underlying * 100
     theta_score = min(theta_contrib * 150, 25)
@@ -112,7 +112,19 @@ def calc_unified_score(
         + delta_score
         + pct_bonus
     )
-    return min(score, 100)
+
+    return {
+        "score": min(score, 100),
+        "components": {
+            "theta": round(theta_score, 1),
+            "vega": round(vega_score, 1),
+            "win_rate": round(win_score, 1),
+            "width": round(width_score, 1),
+            "efficiency": round(eff_score, 1),
+            "delta": round(delta_score, 1),
+            "iv_bonus": round(pct_bonus, 1),
+        },
+    }
 
 
 # ====== Short Strangle ======
@@ -235,7 +247,7 @@ def _calc_short_strangle(
     if win_rate <= 0:
         return None
 
-    score = calc_unified_score(
+    score_result = calc_unified_score(
         underlying, margin, net_theta, net_vega,
         win_rate, profit_zone_width, max_profit,
         percentile=50, net_delta=net_delta_in,
@@ -258,7 +270,8 @@ def _calc_short_strangle(
         "breakeven_high": round(breakeven_high, 2),
         "profit_zone_width": round(profit_zone_width, 2),
         "win_rate": round(win_rate, 4),
-        "score": round(score, 1),
+        "score": round(score_result["score"], 1),
+        "score_components": score_result["components"],
         "margin_required": round(margin, 0),
         "description": (
             f"Short Strangle(卖Call@{call.strike:.0f} 卖Put@{put.strike:.0f})"
@@ -444,7 +457,7 @@ def _calc_iron_condor(
     if win_rate <= 0:
         return None
 
-    score = calc_unified_score(
+    score_result = calc_unified_score(
         underlying, margin, net_theta, net_vega,
         win_rate, profit_zone_width, max_profit,
         percentile=50, net_delta=net_delta,
@@ -467,7 +480,8 @@ def _calc_iron_condor(
         "breakeven_high": round(breakeven_high, 2),
         "profit_zone_width": round(profit_zone_width, 2),
         "win_rate": round(win_rate, 4),
-        "score": round(score, 1),
+        "score": round(score_result["score"], 1),
+        "score_components": score_result["components"],
         "margin_required": round(margin, 0),
         "description": (
             f"Iron Condor(买Put@{long_put.strike:.0f} "

@@ -318,7 +318,7 @@ class SignalHub:
         try:
             rows = conn.execute(
                 """SELECT * FROM options_signals
-                   ORDER BY created_at DESC LIMIT ?""",
+                   ORDER BY unified_score DESC, created_at DESC LIMIT ?""",
                 (limit,),
             ).fetchall()
             return [dict(r) for r in rows]

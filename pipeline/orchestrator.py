@@ -417,7 +417,7 @@ class Orchestrator:
         from futures.aggregator import aggregate_all
         from futures.macd import calculate_all_timeframes
         from futures.swing_points import update_all_timeframes
-        from futures.n_structure import detect_and_save
+        from futures.n_structure import detect_and_save, dynamic_restructure
 
         # 1. 采集K线
         logger.info("[1/5] 采集K线数据...")
@@ -502,6 +502,11 @@ class Orchestrator:
                     ns = detect_and_save(sym, contract, tf, self.db)
                     if ns.get("is_active"):
                         n_total += 1
+                    # 动态重算：检查活跃结构是否需要 A 突破迁移
+                    try:
+                        dynamic_restructure(sym, contract, tf, self.db)
+                    except Exception as e2:
+                        logger.debug("  动态重算跳过 %s %s: %s", sym, tf, e2)
                 except Exception as e:
                     logger.warning("  N型失败 %s %s: %s", sym, tf, e)
             if idx % 10 == 0:
@@ -815,7 +820,7 @@ class Orchestrator:
             iv_level: str = iv_status.get("level", "正常")
 
             # 5. 策略计算
-            from options.ratio_spread import find_all_strategies
+            from options.ratio_spread import find_all_strategies, get_contract_multiplier
             from options.multi_strategy import find_best_short_strangle, find_best_iron_condor
 
             dte: int = 30  # 默认到期天数估计
@@ -886,11 +891,27 @@ class Orchestrator:
                     "strategy_details": {
                         "type": "ratio_spread",
                         "side": "call",
+                        "underlying": spread.underlying,
+                        "iv_avg": iv_avg,
+                        "days_to_expiry": dte,
                         "buy_strike": spread.buy_leg.strike,
                         "sell_strike": spread.sell_leg.strike,
-                        "net_cost": spread.net_cost,
-                        "win_rate": spread.win_rate,
                         "net_delta": spread.net_delta,
+                        "net_theta": spread.net_theta,
+                        "net_vega": spread.net_vega,
+                        "net_cost": spread.net_cost,
+                        "max_profit": spread.max_profit,
+                        "max_loss": spread.max_profit * 3 + spread.net_cost,
+                        "breakeven_low": spread.breakeven_low,
+                        "breakeven_high": spread.breakeven_high,
+                        "profit_zone_width": spread.profit_zone_width,
+                        "win_rate": spread.win_rate,
+                        "score": spread.score,
+                        "score_components": spread.score_components or {},
+                        "margin_required": round(spread.underlying * get_contract_multiplier(self.registry, symbol) * 0.15 * 2, 0),
+                        "description": f"Call RatioSpread K1={spread.buy_leg.strike:.0f} K2={spread.sell_leg.strike:.0f}",
+                        "legs_detail": f"买Call@{spread.buy_leg.strike:.0f} x1, 卖Call@{spread.sell_leg.strike:.0f} x2",
+                        "strikes": [spread.buy_leg.strike, spread.sell_leg.strike],
                     },
                     "strikes": [spread.buy_leg.strike, spread.sell_leg.strike],
                 })
@@ -917,11 +938,27 @@ class Orchestrator:
                     "strategy_details": {
                         "type": "ratio_spread",
                         "side": "put",
+                        "underlying": spread.underlying,
+                        "iv_avg": iv_avg,
+                        "days_to_expiry": dte,
                         "buy_strike": spread.buy_leg.strike,
                         "sell_strike": spread.sell_leg.strike,
-                        "net_cost": spread.net_cost,
-                        "win_rate": spread.win_rate,
                         "net_delta": spread.net_delta,
+                        "net_theta": spread.net_theta,
+                        "net_vega": spread.net_vega,
+                        "net_cost": spread.net_cost,
+                        "max_profit": spread.max_profit,
+                        "max_loss": spread.max_profit * 3 + spread.net_cost,
+                        "breakeven_low": spread.breakeven_low,
+                        "breakeven_high": spread.breakeven_high,
+                        "profit_zone_width": spread.profit_zone_width,
+                        "win_rate": spread.win_rate,
+                        "score": spread.score,
+                        "score_components": spread.score_components or {},
+                        "margin_required": round(spread.underlying * get_contract_multiplier(self.registry, symbol) * 0.15 * 2, 0),
+                        "description": f"Put RatioSpread K1={spread.buy_leg.strike:.0f} K2={spread.sell_leg.strike:.0f}",
+                        "legs_detail": f"买Put@{spread.buy_leg.strike:.0f} x1, 卖Put@{spread.sell_leg.strike:.0f} x2",
+                        "strikes": [spread.sell_leg.strike, spread.buy_leg.strike],
                     },
                     "strikes": [spread.sell_leg.strike, spread.buy_leg.strike],
                 })

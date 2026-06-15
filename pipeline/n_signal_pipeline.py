@@ -31,6 +31,7 @@ from futures.n_structure import (
     _get_active_n_structure,
     check_15m_breakout,
     check_realtime_breakout,
+    dynamic_restructure,
     get_current_price,
     get_last_bar,
 )
@@ -355,6 +356,14 @@ class NSignalPipeline:
     def scan_symbol(self, symbol: str, contract: str) -> Optional[NBreakoutSignal]:
         """扫描单个品种的 N 型突破信号。
 
+        流程：
+            0. 动态重算：检查 N 型结构是否需要 A 突破迁移（确保结构最新）
+            1. 获取活跃 N 型结构（1d 周期）
+            2. 检查 15m B 点突破
+            3. 计算入场价、止损止盈
+            4. 计算评分和信号类型
+            5. 构建指纹
+
         Args:
             symbol: 品种代码。
             contract: 合约代码。
@@ -362,6 +371,13 @@ class NSignalPipeline:
         Returns:
             NBreakoutSignal 或 None（无信号）。
         """
+        # 0. 动态重算：检查 N 型结构是否需要 A 突破迁移
+        #     确保 breakout 检测基于最新结构，而非可能已失效的旧结构
+        try:
+            dynamic_restructure(symbol, contract, N_TIMEFRAME, self.db)
+        except Exception as e:
+            logger.debug("  %s: 动态重算跳过 (%s)", symbol, e)
+
         # 1. 获取活跃 N 型结构
         n_structure = self._get_active_n_structure(symbol, contract)
         if not n_structure:

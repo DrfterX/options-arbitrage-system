@@ -330,6 +330,151 @@ def detect_and_save(
     return ns
 
 
+# ─── 动态重算 ────────────────────────────────────────────────
+
+
+def dynamic_restructure(
+    symbol: str,
+    contract: str,
+    timeframe: str,
+    db: Database,
+) -> Dict[str, Any]:
+    """动态重算 N 型结构 — A 点被行情突破时执行结构迁移。
+
+    当价格在同方向超越旧 A 点时执行增量迁移：
+      1. old_B → new_A（原 B 点成为新结构的起点）
+      2. 找 old_B 之后第一个交替类型极值点 → new_B
+      3. 找 new_B 之后第一个交替类型极值点 → new_C
+      4. 方向重算 + 状态重判 + DB 更新
+
+    当无活跃结构（已被 _get_active_n_structure 的收盘价淘汰）或
+    极值点不足以形成新 3 点结构时 → 回退 detect_and_save() 全量重算。
+
+    所有周期共用同一套逻辑。
+
+    Args:
+        symbol: 品种代码。
+        contract: 合约代码。
+        timeframe: 周期。
+        db: Database 实例。
+
+    Returns:
+        更新后的 N 型结构字典（含 is_active 标记）。
+    """
+    # 1. 读取当前活跃结构
+    active = _get_active_n_structure(db, symbol, contract, timeframe)
+    if not active:
+        # 已被收盘价检查淘汰（方向翻转）→ 全量重算
+        return detect_and_save(symbol, contract, timeframe, db)
+
+    # 2. 读取最新 K 线
+    klines = _get_klines(db, symbol, contract, timeframe, limit=3)
+    if not klines:
+        return active
+
+    direction = active["direction"]
+    a_price = active["point_a_price"]
+    b_price = active["point_b_price"]
+    b_time = active["point_b_time"]
+
+    latest_high = max(k["high"] for k in klines)
+    latest_low = min(k["low"] for k in klines)
+
+    # 3. A 突破检查 — 结构的极端点被相反方向的价格超越触发迁移
+    #    LONG: A=TROUGH（低点），最新最低价跌破 A → 原有低点失效，结构需迁移
+    #    SHORT: A=PEAK（高点），最新最高价突破 A → 原有高点失效，结构需迁移
+    a_broken = (direction == "LONG" and latest_low < a_price) or \
+               (direction == "SHORT" and latest_high > a_price)
+
+    if not a_broken:
+        return active  # 结构仍有效，无需变动
+
+    # 4. A 被突破 → 执行结构迁移
+    swing_points = _get_swing_points(db, symbol, contract, timeframe, limit=40)
+
+    # 只取 B 时间之后的极值点（_get_swing_points 已按时间升序）
+    new_sp = [sp for sp in swing_points if sp["timestamp"] > b_time]
+
+    if len(new_sp) < 2:
+        # 极值点不足以形成新 3 点结构 → 回退全量检测
+        return detect_and_save(symbol, contract, timeframe, db)
+
+    # 4a. old_B → new_A
+    #     LONG: A=TROUGH, B=PEAK → old_B(P) → new_A(P)
+    #     SHORT: A=PEAK, B=TROUGH → old_B(T) → new_A(T)
+    old_b_type = "PEAK" if direction == "LONG" else "TROUGH"
+    new_a_price = b_price
+    new_a_time = b_time
+
+    # 4b. 找 new_B（与 new_A 交替类型）
+    new_b_type = "TROUGH" if old_b_type == "PEAK" else "PEAK"
+    new_b = next((sp for sp in new_sp if sp["point_type"] == new_b_type), None)
+    if not new_b:
+        return detect_and_save(symbol, contract, timeframe, db)
+
+    # 4c. 找 new_C（与 new_B 交替类型）
+    new_c_type = "PEAK" if new_b_type == "TROUGH" else "TROUGH"
+    new_c = next(
+        (sp for sp in new_sp
+         if sp["timestamp"] > new_b["timestamp"]
+         and sp["point_type"] == new_c_type),
+        None,
+    )
+    if not new_c:
+        # 不足 3 点 → 回退全量检测
+        return detect_and_save(symbol, contract, timeframe, db)
+
+    # 4d. 方向重算
+    new_direction = _determine_direction(new_a_price, new_b["price"])
+
+    # 4e. 状态重判
+    if new_direction == "LONG":
+        state = (
+            NState.LEG3.value
+            if new_c["price"] >= new_b["price"]
+            else NState.LEG2.value
+        )
+    else:
+        state = (
+            NState.LEG3.value
+            if new_c["price"] <= new_b["price"]
+            else NState.LEG2.value
+        )
+
+    # 5. 构建迁移后结构
+    migrated = {
+        "symbol": symbol,
+        "contract": contract,
+        "timeframe": timeframe,
+        "direction": new_direction,
+        "state": state,
+        "point_a_time": new_a_time,
+        "point_a_price": new_a_price,
+        "point_b_time": new_b["timestamp"],
+        "point_b_price": new_b["price"],
+        "point_c_time": new_c["timestamp"],
+        "point_c_price": new_c["price"],
+    }
+
+    _save_n_structure(db, migrated)
+    migrated["is_active"] = state not in (
+        NState.COMPLETED.value,
+        NState.IDLE.value,
+    )
+
+    logger.info(
+        "[dynamic_restructure] %s/%s %s: %s→%s | "
+        "A %.2f→%.2f B %.2f→%.2f C %.2f→%.2f",
+        symbol, contract, timeframe,
+        direction, new_direction,
+        a_price, new_a_price,
+        b_price, new_b["price"],
+        active.get("point_c_price", 0), new_c["price"],
+    )
+
+    return migrated
+
+
 # ─── 突破检测 ────────────────────────────────────────────────
 
 

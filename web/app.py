@@ -16,7 +16,7 @@ Flask Web 看板应用 — 期货期权统一信号平台。
 import logging
 import json
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from functools import wraps
 from flask import Flask, render_template, jsonify, request
 
@@ -46,6 +46,16 @@ SYMBOL_NAMES = {
     "L":"塑料","SH":"烧碱","SI":"工业硅","LC":"碳酸锂","AO":"氧化铝",
 }
 
+def _enrich_iv_status(status_list):
+    """为 IV 状态列表添加中文名 + 清洗上期所合约 n 前缀。"""
+    import re
+    for item in status_list:
+        item["name"] = SYMBOL_NAMES.get(item["symbol"], item["symbol"])
+        # 上期所主力合约 n 前缀清洗: nag2607 → ag2607
+        item["contract"] = re.sub(r'^n', '', item.get("contract", ""))
+    return status_list
+
+
 SECTORS = {
     "有色": ["CU","AL","ZN","PB","NI","SN","AO"],
     "贵金属": ["AU","AG"],
@@ -74,9 +84,18 @@ def _get_position_tracker():
 
 @app.route("/")
 def index() -> str:
-    """统一看板首页 — 服务端渲染，数据嵌入HTML。"""
+    """信号矩阵门户 — 根据 Host 头选择模板。
+
+      - futures.drifter.indevs.in → futures_dashboard.html（仅期货数据）
+      - options.drifter.indevs.in → options_dashboard.html（仅期权数据）
+      - signals.drifter.indevs.in → portal.html（期货×期权门户入口页）
+      - 其他/默认 → dashboard.html（完整统一看板，含期货+期权）
+    """
     conn = db.get_conn()
     try:
+        # 0. 动态重算：所有活跃 N 型结构（确保初始页面显示最新数据）
+        _restructure_active_structures(conn)
+
         # 1. 信号矩阵数据
         sig_rows = conn.execute('''
             SELECT s.symbol, s.contract, s.direction, s.signal_type,
@@ -94,7 +113,7 @@ def index() -> str:
                 "type": d["signal_type"], "score": round(d["score"], 2) if d["score"] else 0,
                 "l1": bool(d["level1_pass"]), "l2": bool(d["level2_pass"]), "l3": bool(d["level3_pass"]),
             }
-        
+
         n_rows = conn.execute('''
             SELECT symbol, timeframe, direction, state,
                    point_a_price, point_b_price, point_c_price, updated_at
@@ -136,7 +155,7 @@ def index() -> str:
                     "dir": sig.get("dir"), "resonance": resonance, "cells": cells,
                 })
         matrix.sort(key=lambda x: (x["resonance"], x["score"]), reverse=True)
-        
+
         # 2. 信号卡片
         cards = []
         for r in sig_rows[:15]:
@@ -148,13 +167,13 @@ def index() -> str:
                 "l3": bool(d["level3_pass"]),
                 "score": round(d["score"], 2) if d["score"] else 0,
             })
-        
+
         # 3. 统计数据
         signal_list = [dict(r) for r in sig_rows]
         long_count = sum(1 for s in signal_list if s["direction"] == "LONG")
         short_count = sum(1 for s in signal_list if s["direction"] == "SHORT")
         max_score = max((s["score"] for s in signal_list), default=0)
-        
+
         sector_stats = []
         for sector_name, symbols in SECTORS.items():
             sec_rows = [s for s in signal_list if s["symbol"] in symbols]
@@ -169,32 +188,114 @@ def index() -> str:
                 "avg_score": round(avg_score, 2),
                 "bias": "多" if longs > shorts else ("空" if shorts > longs else "平"),
             })
-        
-        # 4. 期权信号
-        hub = _get_hub()
-        options = [dict(s) for s in hub.get_recent_options(15)]
-        
-        # 5. IV状态
-        iv_recorder = _get_iv_recorder()
-        iv_status = iv_recorder.get_all_status(days=180)
-        
+
         now = datetime.now().strftime("%Y-%m-%d %H:%M")
-        
-        return render_template("dashboard.html",
-            now=now, matrix=matrix, cards=cards,
-            long_count=long_count, short_count=short_count,
-            total_signals=len(signal_list), max_score=max_score,
-            sector_stats=sector_stats, options=options,
-            iv_status=iv_status, iv_json=json.dumps(iv_status, ensure_ascii=False))
+
+        # 根据 Host 头选择模板
+        host = request.headers.get("Host", "")
+        if "futures.drifter.indevs.in" in host:
+            # 期货独立面板 — 不加载期权/IV 数据
+            return render_template("futures_dashboard.html",
+                now=now, matrix=matrix, cards=cards,
+                long_count=long_count, short_count=short_count,
+                total_signals=len(signal_list), max_score=max_score,
+                sector_stats=sector_stats)
+        elif "options.drifter.indevs.in" in host:
+            # 期权独立面板 — 只加载期权/IV 数据
+            hub = _get_hub()
+            options = [dict(s) for s in hub.get_recent_options(20)]
+
+            iv_recorder = _get_iv_recorder()
+            iv_status = _enrich_iv_status(iv_recorder.get_all_status(days=180))
+
+            return render_template("options_dashboard.html",
+                now=now, options=options,
+                iv_status=iv_status, iv_json=json.dumps(iv_status, ensure_ascii=False))
+        elif "signals.drifter.indevs.in" in host:
+            # 信号矩阵门户页 — 期货×期权入口，数据由 JS 实时拉取
+            return render_template("portal.html", now=now)
+        else:
+            # 统一看板（默认）— 含期权信号 + IV 状态
+            hub = _get_hub()
+            options = [dict(s) for s in hub.get_recent_options(15)]
+
+            iv_recorder = _get_iv_recorder()
+            iv_status = _enrich_iv_status(iv_recorder.get_all_status(days=180))
+
+            return render_template("dashboard.html",
+                now=now, matrix=matrix, cards=cards,
+                long_count=long_count, short_count=short_count,
+                total_signals=len(signal_list), max_score=max_score,
+                sector_stats=sector_stats, options=options,
+                iv_status=iv_status, iv_json=json.dumps(iv_status, ensure_ascii=False))
     finally:
         pass  # 连接由 Database 管理生命周期
 
 
+# ── N 型结构动态重算辅助 ───────────────────────────────────────
+
+
+def _restructure_active_structures(conn):
+    """对所有有活跃 N 型结构的品种执行动态重算（A 突破迁移）。
+
+    KISS 原则：在 API 读取 N 型结构前按需刷新，不引入后台进程。
+    仅对活跃（非 COMPLETED/IDLE）结构执行，开销可控。
+
+    修复 v2：在 dynamic_restructure 前先增量更新极值点（swing points），
+    确保 N 型检测基于最新 K 线数据，而非上次 pipeline 运行时的快照。
+    """
+    try:
+        from futures.n_structure import dynamic_restructure
+        from futures.swing_points import incremental_update
+
+        active = conn.execute(
+            """SELECT DISTINCT symbol, contract FROM futures_n_structures
+               WHERE state NOT IN ('COMPLETED', 'IDLE')
+                 AND updated_at > datetime('now', '-30 days')"""
+        ).fetchall()
+
+        if not active:
+            return
+
+        timeframes = ["15m", "1h", "1d", "1w"]
+        for row in active:
+            sym, contract = row["symbol"], row["contract"]
+            # 0. 先刷新极值点 — 确保 dynamic_restructure 基于最新 swing points
+            for tf in timeframes:
+                try:
+                    incremental_update(sym, contract, tf, db)
+                except Exception:
+                    pass  # 单周期极值点失败不阻塞整体
+            # 1. 再执行 N 型动态重算
+            for tf in timeframes:
+                try:
+                    dynamic_restructure(sym, contract, tf, db)
+                except Exception:
+                    pass  # 单品种/周期失败不阻塞整体
+    except Exception:
+        pass  # 动态重算整体失败不阻塞矩阵渲染
+
+
+def _get_futures_contract(conn, symbol: str) -> str:
+    """获取品种的主力合约代码。"""
+    row = conn.execute(
+        "SELECT contract FROM futures_klines WHERE symbol=? AND timeframe='1d' ORDER BY timestamp DESC LIMIT 1",
+        (symbol,),
+    ).fetchone()
+    return row["contract"] if row else ""
+
+
 @app.route("/api/matrix")
 def api_matrix():
-    """多周期信号矩阵：品种×周期(15m/1h/1d/1w) N型状态 + 共振。"""
+    """多周期信号矩阵：品种×周期(15m/1h/1d/1w) N型状态 + 共振。
+
+    每次请求先触发 N 型结构动态重算，确保矩阵显示最新结构。
+    """
     conn = db.get_conn()
     try:
+        # 0. 动态重算：对所有有活跃结构的品种执行 A 突破迁移
+        _restructure_active_structures(conn)
+
         # 最新信号（每个品种取最新一条）
         rows = conn.execute('''
             SELECT s.symbol, s.contract, s.direction, s.signal_type,
@@ -276,16 +377,96 @@ def api_matrix():
         pass  # 连接由 Database 管理生命周期
 
 
+def _bar_key(bar, tf):
+    """生成 bar 的周期键（同日期→同key）。"""
+    dt = datetime.fromtimestamp(bar["t"])
+    if tf == "1d":
+        return dt.strftime("%Y-%m-%d")
+    iso = dt.isocalendar()
+    return f"{iso[0]}-W{iso[1]:02d}"
+
+
+def _compute_realtime_bar(conn, sym, sub_tf, days):
+    """从子周期K线计算当前进行中的日/周 K 线。
+
+    Args:
+        conn: DB 连接
+        sym: 品种代码
+        sub_tf: 子周期（"1h"→1d, "1d"→1w）
+        days: 回溯天数（0=今天, 7=本周）
+
+    Returns:
+        {"key": str, "bar": dict} 或 None（无数据时）
+    """
+    import time
+    now_ts = int(time.time())
+    bj_offset = 8 * 3600
+
+    if days == 0:
+        # 当日 0 点（北京时间）
+        period_start = ((now_ts + bj_offset) // 86400) * 86400 - bj_offset
+    else:
+        # 本周一 0 点（北京时间）
+        bj_ts = now_ts + bj_offset
+        weekday = datetime.fromtimestamp(bj_ts).weekday()
+        period_start = bj_ts - weekday * 86400
+        period_start = (period_start // 86400) * 86400 - bj_offset
+
+    rows = conn.execute(
+        """SELECT timestamp, open, high, low, close, volume
+           FROM futures_klines
+           WHERE symbol=? AND timeframe=? AND timestamp>=?
+           ORDER BY timestamp ASC""",
+        (sym, sub_tf, period_start),
+    ).fetchall()
+
+    # 过滤无效行
+    rows = [r for r in rows if r["open"] and r["high"] and r["low"] and r["close"] and r["open"] > 0]
+    if not rows:
+        return None
+
+    # 聚合为单根K线
+    o = rows[0]["open"]
+    h = max(r["high"] for r in rows)
+    l = min(r["low"] for r in rows)
+    c = rows[-1]["close"]
+    v = sum(r["volume"] or 0 for r in rows)
+
+    bar = {"t": rows[0]["timestamp"], "o": o, "h": h, "l": l, "c": c, "v": v}
+
+    # 生成周期 key（与 _bar_key 一致）
+    dt = datetime.fromtimestamp(bar["t"])
+    if days == 7:
+        iso = dt.isocalendar()
+        key = f"{iso[0]}-W{iso[1]:02d}"
+    else:
+        key = dt.strftime("%Y-%m-%d")
+
+    return {"key": key, "bar": bar}
+
+
 @app.route("/api/klines")
 def api_klines():
-    """获取各品种各周期K线数据（浮窗蜡烛图用）。"""
+    """获取各品种各周期K线数据（浮窗蜡烛图用）。
+
+    每次请求先触发 N 型结构动态重算，确保 K 线图中的 A/B/C 标记最新。
+    """
     sym = request.args.get("symbol")
     tf = request.args.get("timeframe", "1h")
     if not sym:
         return jsonify({"error": "symbol required"}), 400
-    
+
     conn = db.get_conn()
     try:
+        # 0. 动态重算：该品种的 N 型结构（确保标记线基于最新结构）
+        try:
+            from futures.n_structure import dynamic_restructure
+            contract = _get_futures_contract(conn, sym)
+            if contract:
+                dynamic_restructure(sym, contract, tf, db)
+        except Exception:
+            pass  # 重算失败不阻塞 K 线返回
+
         rows = conn.execute('''
             SELECT k.timestamp, k.open, k.high, k.low, k.close, k.volume
             FROM futures_klines k
@@ -320,6 +501,20 @@ def api_klines():
                 if key not in seen or bar["t"] > seen[key]["t"]:
                     seen[key] = bar
             bars = sorted(seen.values(), key=lambda x: x["t"])
+
+            # ── 实时日/周 K 线注入 ──
+            # 用子周期 K 线（1h→1d, 1d→1w）计算当前进行中周期并追加
+            if tf == "1d":
+                rt_bars = _compute_realtime_bar(conn, sym, "1h", days=0)
+            else:
+                rt_bars = _compute_realtime_bar(conn, sym, "1d", days=7)
+            if rt_bars:
+                rt_key = rt_bars["key"]
+                # 如果最后一条 DB bar 属于同一周期 → 替换；否则追加
+                if bars and _bar_key(bars[-1], tf) == rt_key:
+                    bars[-1] = rt_bars["bar"]
+                else:
+                    bars.append(rt_bars["bar"])
         else:
             bars.reverse()
         
@@ -398,7 +593,7 @@ def api_options_signals():
 def api_iv_status():
     """获取所有品种当前 IV 状态（百分位+等级）。"""
     iv_recorder = _get_iv_recorder()
-    status = iv_recorder.get_all_status()
+    status = _enrich_iv_status(iv_recorder.get_all_status())
     return jsonify(status)
 
 

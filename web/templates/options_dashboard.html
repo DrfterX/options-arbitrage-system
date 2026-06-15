@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>期权信号仪表盘 · IV 状态监控</title>
+<link rel="stylesheet" href="/static/options.css">
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<style>
+/* ─── Options-specific overrides ─── */
+.topbar::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 20px;
+  width: 140px;
+  height: 2px;
+  background: linear-gradient(90deg, var(--brand) 0%, transparent 100%);
+  border-radius: 1px;
+}
+
+.nav-tabs {
+  display: flex;
+  gap: 2px;
+}
+.nav-tab {
+  font-size: .65rem;
+  color: var(--text3);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-radius: var(--radius-sm);
+  transition: all .15s var(--ease-out);
+  font-family: var(--font-ui);
+  letter-spacing: .03em;
+  cursor: pointer;
+  line-height: 1.2;
+}
+.nav-tab:hover {
+  color: var(--text);
+  background: rgba(90, 97, 115, .08);
+}
+.nav-tab.active {
+  color: var(--brand);
+  background: var(--brand-bg);
+  font-weight: 500;
+}
+.nav-tab-icon {
+  font-size: .7rem;
+  opacity: .7;
+}
+
+/* Three-column layout */
+.options-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.5fr 0.8fr;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+@media (max-width: 1200px) {
+  .options-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 768px) {
+  .options-grid { grid-template-columns: 1fr; }
+}
+
+/* IV Section — left column */
+.iv-panel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 12px;
+  overflow: hidden;
+}
+.iv-panel h2 {
+  font-size: .74rem;
+  font-weight: 600;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.iv-panel h2 .badge {
+  font-size: .58rem;
+  color: var(--text3);
+  background: rgba(79, 91, 128, .10);
+  padding: 2px 7px;
+  border-radius: 3px;
+  font-family: var(--font-mono);
+}
+#ivChart { width: 100%; height: 380px; }
+
+/* IV Legend */
+.iv-legend {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 6px 0;
+}
+.iv-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: .6rem;
+  color: var(--text3);
+}
+.iv-legend-dot {
+  width: 8px; height: 8px;
+  border-radius: 2px;
+}
+
+/* IV summary cards */
+.iv-summary {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 4px;
+  margin-top: 6px;
+}
+.iv-stat {
+  background: rgba(12, 15, 26, .4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+  text-align: center;
+}
+.iv-stat-label {
+  font-size: .58rem;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+.iv-stat-value {
+  font-size: .85rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  margin-top: 1px;
+}
+
+/* Option Strategy Section — center column */
+.strategy-panel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 12px;
+}
+.strategy-panel h2 {
+  font-size: .74rem;
+  font-weight: 600;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.strategy-panel h2 .badge {
+  font-size: .58rem;
+  color: var(--brand);
+  background: var(--brand-bg);
+  padding: 2px 7px;
+  border-radius: 3px;
+  font-family: var(--font-mono);
+}
+.strat-table {
+  border-collapse: collapse;
+  font-size: .68rem;
+  width: 100%;
+}
+.strat-table th {
+  padding: 4px 6px;
+  color: var(--text3);
+  font-weight: 500;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  font-size: .58rem;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  white-space: nowrap;
+}
+.strat-table td {
+  padding: 4px 6px;
+  border-bottom: 1px solid rgba(26, 32, 64, .2);
+  font-family: var(--font-mono);
+  font-size: .64rem;
+  vertical-align: middle;
+}
+.strat-table tbody tr:hover { background: var(--brand-dim); }
+.strat-sym { font-weight: 600; color: var(--text); font-size: .7rem; }
+.strat-name { font-size: .6rem; color: var(--text3); font-weight: 400; }
+.strat-type { padding: 1px 5px; border-radius: 3px; font-size: .58rem; font-weight: 600; letter-spacing: .03em; }
+.strat-ic { background: rgba(168, 85, 247, .15); color: var(--brand); }
+.strat-vs { background: rgba(34, 197, 94, .12); color: #22c55e; }
+.strat-cs { background: rgba(59, 130, 246, .12); color: #3b82f6; }
+.strat-other { background: var(--brand-dim); color: var(--text2); }
+.strat-strength { font-weight: 700; }
+.strat-iv-high { color: var(--iv-high); }
+.strat-iv-normal { color: var(--iv-normal); }
+.strat-iv-low { color: var(--iv-low); }
+.strat-iv-extreme { color: var(--iv-extreme); }
+.strat-pnl-pos { color: #22c55e; }
+.strat-pnl-neg { color: var(--short); }
+.strat-greeks { font-size: .58rem; color: var(--text2); }
+.strat-detail-link {
+  color: var(--brand);
+  cursor: pointer;
+  font-size: .6rem;
+  text-decoration: underline dotted;
+  opacity: .7;
+}
+.strat-detail-link:hover { opacity: 1; }
+.strat-empty {
+  padding: 24px;
+  text-align: center;
+  color: var(--text3);
+  font-size: .72rem;
+}
+
+/* Option Cards — right column */
+.options-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-height: 560px;
+  overflow-y: auto;
+}
+.option-card {
+  background: rgba(12, 15, 26, .45);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+  transition: border-color .15s, transform .1s;
+  cursor: default;
+  border-left: 3px solid var(--brand);
+}
+.option-card:hover {
+  border-color: var(--border-light);
+  transform: translateY(-1px);
+}
+.option-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+.option-card-sym {
+  font-weight: 700;
+  font-size: .78rem;
+}
+.option-card-contract {
+  color: var(--text3);
+  font-size: .58rem;
+  font-family: var(--font-mono);
+}
+.option-card-strat {
+  font-size: .58rem;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--brand-bg);
+  color: var(--brand);
+}
+.option-card-iv {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: .62rem;
+  color: var(--text2);
+  font-family: var(--font-mono);
+}
+.option-card-pnl {
+  display: flex;
+  justify-content: space-between;
+  font-size: .62rem;
+  margin-top: 3px;
+  padding-top: 3px;
+  border-top: 1px solid rgba(26, 32, 64, .3);
+}
+.option-card-pnl span { font-family: var(--font-mono); }
+.option-card-detail {
+  font-size: .58rem;
+  color: var(--text3);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.option-card.strength-high { border-left-color: var(--brand); background: rgba(168, 85, 247, .06); }
+.option-card.strength-mid { border-left-color: #f0b429; }
+.option-card.strength-low { border-left-color: var(--text3); }
+
+/* Strategy detail popup */
+.strat-popup {
+  position: fixed;
+  z-index: 9999;
+  min-width: 320px;
+  max-width: 420px;
+  background: rgba(7, 10, 18, .94);
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  padding: 16px;
+  box-shadow: 0 16px 48px rgba(0,0,0,.5);
+  display: none;
+  backdrop-filter: blur(16px);
+}
+.strat-popup.show { display: block; animation: popupIn .2s var(--ease-out); }
+@keyframes popupIn {
+  from { opacity: 0; transform: translateY(8px) scale(.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.strat-popup-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+.strat-popup-title { font-size: .82rem; font-weight: 700; }
+.strat-popup-close {
+  cursor: pointer;
+  color: var(--text3);
+  font-size: .9rem;
+  line-height: 1;
+}
+.strat-popup-close:hover { color: #fff; }
+.strat-popup-body { font-size: .68rem; line-height: 1.6; }
+.strat-popup-row { display: flex; justify-content: space-between; padding: 2px 0; }
+.strat-popup-row .sp-label { color: var(--text3); }
+.strat-popup-row .sp-value { color: var(--text2); font-family: var(--font-mono); }
+.strat-popup-desc {
+  margin-top: 6px;
+  padding: 6px 8px;
+  background: rgba(12, 15, 26, .5);
+  border-radius: var(--radius-sm);
+  font-size: .62rem;
+  color: var(--text3);
+  word-break: break-all;
+}
+
+/* ── Skeleton loading ── */
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg,
+    rgba(90, 97, 115, 0.07) 25%,
+    rgba(90, 97, 115, 0.18) 50%,
+    rgba(90, 97, 115, 0.07) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+  border-radius: 3px;
+  color: transparent !important;
+  display: inline-block;
+  line-height: 1;
+  pointer-events: none;
+  user-select: none;
+  vertical-align: middle;
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- ─── TOPBAR ─── -->
+<div class="topbar">
+  <h1><span class="dot"></span><span class="accent">◈</span> 期权信号仪表盘 <span class="data-badge">IV · 策略信号</span></h1>
+  <div class="topbar-right">
+    <div class="nav-tabs">
+      <a href="https://signals.drifter.indevs.in" class="nav-tab"><span class="nav-tab-icon">◈</span> 总览</a>
+      <a href="https://futures.drifter.indevs.in" class="nav-tab"><span class="nav-tab-icon">📈</span> 期货</a>
+      <span class="nav-tab active"><span class="nav-tab-icon">📉</span> 期权</span>
+    </div>
+    <span class="data-badge" id="optionCount">{{ options|length }} 策略</span>
+    <span class="topbar-time">{{ now }}</span>
+  </div>
+</div>
+
+<div class="main">
+
+<!-- ─── STATS BAR ─── -->
+<div class="stats-bar">
+  <div class="stat-item brand"><div class="label">IV 品种</div><div class="value" id="iv-total">{{ iv_status|length }}</div><div class="stat-glow"></div></div>
+  <div class="stat-item" style="--stat-color:var(--iv-high)"><div class="label">极端高</div><div class="value iv-high" id="iv-high-count"><span class="skeleton" style="width:20px;height:.85em">&nbsp;</span></div><div class="stat-glow"></div></div>
+  <div class="stat-item" style="--stat-color:#f0b429"><div class="label">偏高</div><div class="value" style="color:#f0b429" id="iv-elevated-count"><span class="skeleton" style="width:20px;height:.85em">&nbsp;</span></div><div class="stat-glow"></div></div>
+  <div class="stat-item" style="--stat-color:var(--iv-normal)"><div class="label">正常</div><div class="value" style="color:var(--iv-normal)" id="iv-normal-count"><span class="skeleton" style="width:20px;height:.85em">&nbsp;</span></div><div class="stat-glow"></div></div>
+  <div class="stat-item" style="--stat-color:var(--iv-low)"><div class="label">偏低</div><div class="value" style="color:var(--iv-low)" id="iv-low-count"><span class="skeleton" style="width:20px;height:.85em">&nbsp;</span></div><div class="stat-glow"></div></div>
+  <div class="stat-item" style="--stat-color:var(--iv-extreme)"><div class="label">极端低</div><div class="value" style="color:var(--iv-extreme)" id="iv-extreme-count"><span class="skeleton" style="width:20px;height:.85em">&nbsp;</span></div><div class="stat-glow"></div></div>
+</div>
+
+<!-- ─── THREE-COLUMN LAYOUT ─── -->
+<div class="options-grid">
+
+  <!-- LEFT: IV Heatmap -->
+  <div class="iv-panel">
+    <h2>📈 IV 百分位 <span class="badge">{{ iv_status|length }} 品种 · 180 日</span></h2>
+    <div class="iv-legend">
+      <span class="iv-legend-item"><span class="iv-legend-dot" style="background:#f04438"></span>极端高</span>
+      <span class="iv-legend-item"><span class="iv-legend-dot" style="background:#f0b429"></span>偏高</span>
+      <span class="iv-legend-item"><span class="iv-legend-dot" style="background:var(--iv-normal)"></span>正常</span>
+      <span class="iv-legend-item"><span class="iv-legend-dot" style="background:var(--iv-low)"></span>偏低</span>
+      <span class="iv-legend-item"><span class="iv-legend-dot" style="background:var(--iv-extreme)"></span>极端低</span>
+      <span class="iv-legend-item"><span class="iv-legend-dot" style="background:var(--text3)"></span>数据不足</span>
+    </div>
+    <div id="ivChart"></div>
+    <div class="iv-summary" id="ivSummary">
+      <div class="iv-stat"><div class="iv-stat-label">最高 IV</div><div class="iv-stat-value" id="iv-max-val"><span class="skeleton" style="width:44px;height:.85em">&nbsp;</span></div></div>
+      <div class="iv-stat"><div class="iv-stat-label">最低 IV</div><div class="iv-stat-value" id="iv-min-val"><span class="skeleton" style="width:44px;height:.85em">&nbsp;</span></div></div>
+      <div class="iv-stat"><div class="iv-stat-label">平均 IV</div><div class="iv-stat-value" id="iv-avg-val"><span class="skeleton" style="width:44px;height:.85em">&nbsp;</span></div></div>
+      <div class="iv-stat"><div class="iv-stat-label">P50 中位</div><div class="iv-stat-value" id="iv-p50-val"><span class="skeleton" style="width:44px;height:.85em">&nbsp;</span></div></div>
+    </div>
+  </div>
+
+  <!-- CENTER: Options Strategy Table -->
+  <div class="strategy-panel">
+    <h2>🟡 期权策略信号 <span class="badge" id="strat-badge"><span class="skeleton" style="width:60px;height:.7em">&nbsp;</span></span></h2>
+    <div id="stratContent">
+      <table class="strat-table">
+        <thead>
+          <tr><th>品种</th><th>类型</th><th>IV</th><th>Δ/Θ</th><th>盈亏比</th><th>评分</th><th>详情</th></tr>
+        </thead>
+        <tbody id="stratBody">
+          {% if options %}
+          {% for s in options[:20] %}
+          <tr>
+            <td><span class="strat-sym">{{ s.symbol }}</span> <span class="strat-name">{{ s.contract or '' }}</span></td>
+            <td><span class="strat-type {% if s.strategy == 'iron_condor' %}strat-ic{% elif s.strategy == 'vertical_spread' %}strat-vs{% elif s.strategy == 'calendar_spread' %}strat-cs{% else %}strat-other{% endif %}">{{ s.strategy|replace('_', ' ') }}</span></td>
+            <td class="{% if s.iv_level == '极端高' %}strat-iv-high{% elif s.iv_level == '偏高' %}strat-iv-high{% elif s.iv_level == '正常' %}strat-iv-normal{% elif s.iv_level == '偏低' %}strat-iv-low{% elif s.iv_level == '极端低' %}strat-iv-extreme{% endif %}">{{ "%.1f"|format((s.iv_avg or 0)*100) }}%</td>
+            <td class="strat-greeks">Δ:{{ "%.2f"|format(s.net_delta or 0) }}<br>Θ:{{ "%.2f"|format(s.net_theta or 0) }}</td>
+            <td><span class="strat-pnl-pos">+{{ "%.0f"|format(s.max_profit or 0) }}</span> / <span class="strat-pnl-neg">{{ "%.0f"|format(s.max_loss or 0) }}</span></td>
+            <td><span class="strat-strength" style="color:{% if s.unified_score >= 70 %}var(--brand){% elif s.unified_score >= 50 %}#f0b429{% else %}var(--text3){% endif %}">{{ "%.1f"|format(s.unified_score or 0) }}</span></td>
+            <td><span class="strat-detail-link" onclick="showStratDetail(this)" data-detail='{{ s.strategy_details|safe }}'>📋</span></td>
+          </tr>
+          {% endfor %}
+          {% else %}
+          <tr><td colspan="7" class="strat-empty">暂无期权策略信号</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- RIGHT: Options Signal Cards -->
+  <div class="strategy-panel">
+    <h2>📊 策略卡片 <span class="badge" id="card-badge">{{ options|length }} 个</span></h2>
+    <div class="options-cards" id="optionsCards">
+      {% if options %}
+      {% for s in options[:20] %}
+      <div class="option-card {% if s.unified_score >= 70 %}strength-high{% elif s.unified_score >= 50 %}strength-mid{% else %}strength-low{% endif %}">
+        <div class="option-card-header">
+          <div>
+            <span class="option-card-sym">{{ s.symbol }}</span>
+            <span class="option-card-contract">{{ s.contract or '' }}</span>
+          </div>
+          <span class="option-card-strat">{{ s.strategy|replace('_', ' ') }}</span>
+        </div>
+        <div class="option-card-iv">
+          <span>{{ "%.1f"|format((s.iv_avg or 0)*100) }}% IV</span>
+          <span style="color:{% if s.iv_level == '极端高' %}#f04438{% elif s.iv_level == '偏高' %}#f0b429{% elif s.iv_level == '正常' %}var(--iv-normal){% elif s.iv_level == '偏低' %}var(--iv-low){% else %}var(--iv-extreme){% endif %}">{{ s.iv_level or '' }}</span>
+          <span>Pctl {{ "%.0f"|format(s.iv_percentile or 0) }}%</span>
+        </div>
+        <div class="option-card-pnl">
+          <span class="strat-pnl-pos">P+{{ "%.0f"|format(s.max_profit or 0) }}</span>
+          <span class="strat-pnl-neg">L{{ "%.0f"|format(s.max_loss or 0) }}</span>
+          <span class="strat-strength" style="color:{% if s.unified_score >= 70 %}var(--brand){% elif s.unified_score >= 50 %}#f0b429{% else %}var(--text3){% endif %}">{{ "%.1f"|format(s.unified_score or 0) }}</span>
+        </div>
+        <div class="option-card-detail">{{ s.reason or '' }}</div>
+      </div>
+      {% endfor %}
+      {% else %}
+      <div class="strat-empty">暂无期权策略信号</div>
+      {% endif %}
+    </div>
+  </div>
+
+</div><!-- /.options-grid -->
+
+<!-- ─── SmartFilter ─── -->
+<div class="filter-section">
+  <h2>🛡️ SmartFilter 防火墙 <span class="badge" id="fs-status"><span class="skeleton" style="width:60px;height:.7em">&nbsp;</span></span></h2>
+  <div class="filter-stats" id="filterStats">
+    <div class="fs-card total"><div class="fs-label">评估</div><div class="fs-value" id="fs-total"><span class="skeleton" style="width:28px;height:1em">&nbsp;</span></div></div>
+    <div class="fs-card pushed"><div class="fs-label">推送</div><div class="fs-value" id="fs-pushed"><span class="skeleton" style="width:28px;height:1em">&nbsp;</span></div></div>
+    <div class="fs-card suppressed"><div class="fs-label">抑制</div><div class="fs-value" id="fs-suppressed"><span class="skeleton" style="width:28px;height:1em">&nbsp;</span></div></div>
+    <div class="fs-card rate"><div class="fs-label">通过率</div><div class="fs-value" id="fs-rate"><span class="skeleton" style="width:40px;height:1em">&nbsp;</span></div></div>
+  </div>
+  <div class="filter-log" id="filterLog">
+    <h3>最近抑制信号</h3>
+    <table class="fs-table">
+      <thead><tr><th>时间</th><th>品种</th><th>评分</th><th>等级</th><th>原因</th></tr></thead>
+      <tbody id="fs-body">
+        <tr><td colspan="5"><div class="skeleton" style="width:100%;height:1.6em">&nbsp;</div></td></tr>
+        <tr><td colspan="5"><div class="skeleton" style="width:100%;height:1.6em">&nbsp;</div></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ─── HEALTH PANEL ─── -->
+<div class="cards-section" id="health-panel">
+  <h2>💚 系统健康 <span class="badge" id="health-badge"><span class="skeleton" style="width:60px;height:.7em">&nbsp;</span></span></h2>
+  <div class="health-grid" id="healthGrid">
+    <div class="health-card status">
+      <div class="h-label">状态</div>
+      <div class="h-value" id="h-status"><span class="skeleton" style="width:44px;height:.85em">&nbsp;</span></div>
+    </div>
+    <div class="health-card">
+      <div class="h-label">运行时间</div>
+      <div class="h-value" id="h-uptime"><span class="skeleton" style="width:60px;height:.85em">&nbsp;</span></div>
+    </div>
+    <div class="health-card">
+      <div class="h-label">DB 总行数</div>
+      <div class="h-value" id="h-rows"><span class="skeleton" style="width:52px;height:.85em">&nbsp;</span></div>
+    </div>
+    <div class="health-card">
+      <div class="h-label">最新信号</div>
+      <div class="h-value h-dt" id="h-last-signal"><span class="skeleton" style="width:60px;height:.85em">&nbsp;</span></div>
+    </div>
+    <div class="health-card">
+      <div class="h-label">最新K线</div>
+      <div class="h-value h-dt" id="h-last-kline"><span class="skeleton" style="width:60px;height:.85em">&nbsp;</span></div>
+    </div>
+    <div class="health-card">
+      <div class="h-label">最新N型</div>
+      <div class="h-value h-dt" id="h-last-n"><span class="skeleton" style="width:60px;height:.85em">&nbsp;</span></div>
+    </div>
+  </div>
+  <div class="health-tables" id="healthTables">
+    <h3>📋 表状态</h3>
+    <div class="ht-grid" id="htGrid"></div>
+  </div>
+  <div class="health-issues" id="healthIssues" style="display:none">
+    <h3>⚠️ 告警</h3>
+    <ul id="h-issue-list"></ul>
+  </div>
+</div>
+
+<div class="footer">Auto Company · 期权信号仪表盘 · IV 状态监控系统 · v0.1.0</div>
+</div><!-- /.main -->
+
+<!-- ─── Strategy Detail Popup ─── -->
+<div class="strat-popup" id="stratPopup">
+  <div class="strat-popup-header">
+    <span class="strat-popup-title" id="spTitle">策略详情</span>
+    <span class="strat-popup-close" onclick="document.getElementById('stratPopup').classList.remove('show')">&times;</span>
+  </div>
+  <div class="strat-popup-body" id="spBody"></div>
+</div>
+
+<script>
+// ── Auto refresh: 30s poll + 5min full reload ──
+var AUTO_REFRESH = true;
+if (AUTO_REFRESH) {
+  setInterval(function() {
+    if (document.hidden) return;
+    fetch('/api/summary')
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        var now = new Date();
+        var ts = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0') + ' ' + String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+        var timeEl = document.querySelector('.topbar-time');
+        if (timeEl) timeEl.textContent = ts;
+        var badge = document.getElementById('optionCount');
+        if (badge && d.options_count != null) badge.textContent = d.options_count + ' 策略';
+      })
+      .catch(function(e) { /* silent */ });
+  }, 30000);
+  setTimeout(function() { location.reload(); }, 3600000); // 1h fallback
+}
+
+// ── IV Chart ──
+var IV_DATA = JSON.parse('{{ iv_json|safe }}');
+(function initIV() {
+  if (typeof echarts === 'undefined') { setTimeout(initIV, 500); return; }
+  var el = document.getElementById('ivChart');
+  if (!el) return;
+  var chart = echarts.init(el, null, { renderer: 'canvas' });
+  chart.setOption({
+    backgroundColor: 'transparent',
+    grid: { top: 20, right: 20, bottom: 50, left: 45 },
+    xAxis: {
+      type: 'category',
+      data: IV_DATA.map(function(d){ return d.symbol + ' ' + (d.name || '') + '\\n' + (d.contract||'').replace(/^n/, ''); }),
+      axisLabel: { color: '#8b92a5', fontSize: 9, interval: 2, rotate: 45 },
+      axisLine: { lineStyle: { color: 'rgba(26,32,64,.5)' } },
+    },
+    yAxis: {
+      type: 'value',
+      max: 100,
+      axisLabel: { color: '#5a6173', fontSize: 9 },
+      splitLine: { lineStyle: { color: 'rgba(90,97,115,0.08)' } },
+      name: 'IV 百分位 %',
+      nameTextStyle: { color: '#5a6173', fontSize: 9 },
+    },
+    tooltip: {
+      trigger: 'item',
+      formatter: function(p) {
+        var d = IV_DATA[p.dataIndex];
+        if (!d) return '';
+        return '<strong>' + d.symbol + ' ' + (d.name || '') + ' ' + (d.contract||'').replace(/^n/, '') + '</strong><br/>'
+          + '当前 IV: ' + (d.current_iv * 100).toFixed(2) + '%<br/>'
+          + '百分位: ' + d.percentile.toFixed(1) + '%<br/>'
+          + '等级: ' + (d.level || '—') + '<br/>'
+          + 'P50: ' + (d.p50 * 100).toFixed(2) + '%<br/>'
+          + 'Min: ' + (d.min_iv * 100).toFixed(2) + '%<br/>'
+          + 'Max: ' + (d.max_iv * 100).toFixed(2) + '%<br/>'
+          + '样本: ' + (d.samples || 0);
+      }
+    },
+    series: [{
+      type: 'bar',
+      data: IV_DATA.map(function(d) {
+        var color;
+        switch (d.level) {
+          case '极端高': color = '#f04438'; break;
+          case '偏高': color = '#f0b429'; break;
+          case '正常': color = '#a855f7'; break;
+          case '偏低': color = '#0ea5e9'; break;
+          case '极端低': color = '#3b82f6'; break;
+          default: color = '#5a6173';
+        }
+        return { value: d.percentile, itemStyle: { color: color, borderRadius: [3, 3, 0, 0] } };
+      }),
+      barWidth: '70%',
+      barCategoryGap: '25%',
+    }]
+  });
+
+  // Resize handler
+  window.addEventListener('resize', function() { chart.resize(); });
+})();
+
+// ── IV Summary stats ──
+(function calcIVStats() {
+  if (!IV_DATA || !IV_DATA.length) return;
+  var maxIV = 0, minIV = Infinity, sumIV = 0, sumP50 = 0;
+  IV_DATA.forEach(function(d) {
+    if (d.current_iv > maxIV) maxIV = d.current_iv;
+    if (d.current_iv < minIV) minIV = d.current_iv;
+    sumIV += d.current_iv;
+    sumP50 += d.p50 || 0;
+  });
+  var avgIV = sumIV / IV_DATA.length;
+  var avgP50 = sumP50 / IV_DATA.length;
+  document.getElementById('iv-max-val').textContent = (maxIV * 100).toFixed(1) + '%';
+  document.getElementById('iv-min-val').textContent = (minIV * 100).toFixed(1) + '%';
+  document.getElementById('iv-avg-val').textContent = (avgIV * 100).toFixed(1) + '%';
+  document.getElementById('iv-p50-val').textContent = (avgP50 * 100).toFixed(1) + '%';
+
+  // Level counts
+  var high = 0, elevated = 0, normal = 0, low = 0, extreme = 0;
+  IV_DATA.forEach(function(d) {
+    if (d.level === '极端高') high++;
+    else if (d.level === '偏高') elevated++;
+    else if (d.level === '正常') normal++;
+    else if (d.level === '偏低') low++;
+    else if (d.level === '极端低') extreme++;
+  });
+  document.getElementById('iv-high-count').textContent = high;
+  document.getElementById('iv-elevated-count').textContent = elevated;
+  document.getElementById('iv-normal-count').textContent = normal;
+  document.getElementById('iv-low-count').textContent = low;
+  document.getElementById('iv-extreme-count').textContent = extreme;
+})();
+
+// ── SmartFilter ──
+function loadFilterStats() {
+  fetch('/api/filter-stats', { cache: 'no-cache' })
+    .then(function(r) { return r.json(); })
+    .then(function(stats) {
+      var totalEl = document.getElementById('fs-total');
+      var pushedEl = document.getElementById('fs-pushed');
+      var suppressedEl = document.getElementById('fs-suppressed');
+      var rateEl = document.getElementById('fs-rate');
+      var statusEl = document.getElementById('fs-status');
+      if (!totalEl) return;
+      totalEl.textContent = stats.total || 0;
+      pushedEl.textContent = stats.pushed || 0;
+      suppressedEl.textContent = stats.suppressed || 0;
+      var rate = stats.total > 0 ? (stats.pushed / stats.total * 100).toFixed(1) : '—';
+      rateEl.textContent = rate !== '—' ? rate + '%' : '—';
+      if (statusEl) {
+        statusEl.textContent = stats.total + ' 条记录';
+        if (stats.total > 0) statusEl.style.color = 'var(--short)';
+      }
+    })
+    .catch(function(e) { /* silent */ });
+}
+
+function loadFilterLog() {
+  fetch('/api/filter-log?limit=10', { cache: 'no-cache' })
+    .then(function(r) { return r.json(); })
+    .then(function(log) {
+      var tbody = document.getElementById('fs-body');
+      if (!tbody) return;
+      if (!log || !log.length) {
+        tbody.innerHTML = '<tr><td colspan="5" style="color:var(--text3);text-align:center">暂无过滤记录</td></tr>';
+        return;
+      }
+      var html = '';
+      log.forEach(function(entry) {
+        var cls = entry.push_level === 'SUPPRESS' ? 'fs-suppressed'
+                : entry.push_level === 'LOW' ? 'fs-low'
+                : entry.push_level === 'NORMAL' ? 'fs-normal'
+                : 'fs-high';
+        html += '<tr><td style="color:var(--text3);font-size:.6rem">' + (entry.created_at || '') + '</td>'
+             + '<td>' + entry.symbol + '</td>'
+             + '<td>' + (entry.score || 0).toFixed(2) + '</td>'
+             + '<td class="' + cls + '">' + (entry.push_level || '—') + '</td>'
+             + '<td style="color:var(--text3)">' + (entry.reason || '') + '</td></tr>';
+      });
+      tbody.innerHTML = html;
+    })
+    .catch(function(e) { /* silent */ });
+}
+
+loadFilterStats();
+loadFilterLog();
+setInterval(function() {
+  if (document.hidden) return;
+  loadFilterStats();
+  loadFilterLog();
+}, 30000);
+
+// ── Strategy Detail Popup ──
+function showStratDetail(el) {
+  var raw = el.dataset.detail;
+  if (!raw) return;
+  var detail;
+  try { detail = JSON.parse(raw); } catch(e) { return; }
+  var popup = document.getElementById('stratPopup');
+  document.getElementById('spTitle').textContent = detail.symbol + ' ' + (detail.contract || '') + ' — ' + (detail.type || '').replace(/_/g, ' ');
+  var html = '';
+  var fields = [
+    { label: '类型', value: (detail.type || '').replace(/_/g, ' ') },
+    { label: '标的价', value: detail.underlying ? detail.underlying.toFixed(1) : '—' },
+    { label: 'IV 均值', value: detail.iv_avg ? (detail.iv_avg * 100).toFixed(1) + '%' : '—' },
+    { label: '到期天数', value: detail.days_to_expiry || '—' },
+    { label: '净 Delta', value: detail.net_delta ? detail.net_delta.toFixed(4) : '—' },
+    { label: '净 Theta', value: detail.net_theta ? detail.net_theta.toFixed(4) : '—' },
+    { label: '净 Vega', value: detail.net_vega ? detail.net_vega.toFixed(2) : '—' },
+    { label: '净成本', value: detail.net_cost !== undefined ? detail.net_cost.toFixed(0) : '—' },
+    { label: '最大盈利', value: detail.max_profit !== undefined ? '+' + detail.max_profit.toFixed(0) : '—' },
+    { label: '最大亏损', value: detail.max_loss !== undefined ? detail.max_loss.toFixed(0) : '—' },
+    { label: '盈亏平衡低', value: detail.breakeven_low !== undefined ? detail.breakeven_low.toFixed(1) : '—' },
+    { label: '盈亏平衡高', value: detail.breakeven_high !== undefined ? detail.breakeven_high.toFixed(1) : '—' },
+    { label: '盈利区宽度', value: detail.profit_zone_width !== undefined ? detail.profit_zone_width.toFixed(0) : '—' },
+    { label: '胜率', value: detail.win_rate !== undefined ? (detail.win_rate * 100).toFixed(1) + '%' : '—' },
+    { label: '评分', value: detail.score !== undefined ? detail.score.toFixed(1) : '—' },
+    { label: '保证金', value: detail.margin_required !== undefined ? detail.margin_required.toFixed(0) : '—' },
+  ];
+  fields.forEach(function(f) {
+    html += '<div class="strat-popup-row"><span class="sp-label">' + f.label + '</span><span class="sp-value">' + f.value + '</span></div>';
+  });
+  // ── 评分维度分解 ──
+  if (detail.score_components) {
+    var sc = detail.score_components;
+    var labels = {
+      theta: 'Θ 贡献', vega: 'V 贡献', win_rate: '胜率贡献',
+      width: '区间贡献', efficiency: '效率贡献', delta: '中性贡献',
+      iv_bonus: 'IV 奖励',
+    };
+    var compHtml = '';
+    Object.keys(labels).forEach(function(k) {
+      if (sc[k] !== undefined && sc[k] !== null) {
+        compHtml += '<div class="strat-popup-row" style="font-size:.62rem"><span class="sp-label">' + labels[k] + '</span><span class="sp-value" style="font-size:.62rem">' + sc[k].toFixed(1) + '</span></div>';
+      }
+    });
+    if (compHtml) {
+      html += '<div style="margin-top:6px;padding-top:4px;border-top:1px solid rgba(26,32,64,.5)">';
+      html += '<div style="font-size:.6rem;color:var(--text3);margin-bottom:3px;letter-spacing:.05em">评分分解</div>';
+      html += compHtml;
+      html += '</div>';
+    }
+  }
+  if (detail.legs_detail) {
+    html += '<div class="strat-popup-desc"><strong>腿组合:</strong> ' + detail.legs_detail + '</div>';
+  }
+  if (detail.description) {
+    html += '<div class="strat-popup-desc"><strong>描述:</strong> ' + detail.description + '</div>';
+  }
+  if (detail.strikes && detail.strikes.length) {
+    html += '<div class="strat-popup-desc"><strong>行权价:</strong> ' + detail.strikes.map(function(s) { return s.toFixed(0); }).join(', ') + '</div>';
+  }
+  document.getElementById('spBody').innerHTML = html;
+  var rect = el.getBoundingClientRect();
+  var left = rect.right + 10;
+  var top = rect.top - 20;
+  if (left + 420 > window.innerWidth) left = rect.left - 430;
+  if (top < 10) top = 10;
+  popup.style.left = left + 'px';
+  popup.style.top = top + 'px';
+  popup.classList.add('show');
+}
+
+document.addEventListener('click', function(e) {
+  var popup = document.getElementById('stratPopup');
+  if (popup.classList.contains('show') && !popup.contains(e.target) && !e.target.closest('.strat-detail-link')) {
+    popup.classList.remove('show');
+  }
+});
+
+// ── Health Panel ──
+(function loadHealth() {
+  var badge = document.getElementById('health-badge');
+  function refresh() {
+    fetch('/api/health', { cache: 'no-cache' })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (d.error) { badge.textContent = '错误'; return; }
+        badge.textContent = d.status === 'healthy' ? '✅ 正常' : (d.status === 'degraded' ? '⚠️ 降级' : '❌ 异常');
+        badge.style.color = d.status === 'healthy' ? '#22c55e' : (d.status === 'degraded' ? '#f0b429' : '#f04438');
+        document.getElementById('h-status').textContent = d.status === 'healthy' ? '正常' : (d.status === 'degraded' ? '降级' : '异常');
+        document.getElementById('h-status').className = 'h-value h-' + d.status;
+        document.getElementById('h-uptime').textContent = d.uptime_human || (d.uptime + 's');
+        document.getElementById('h-rows').textContent = (d.total_rows || 0).toLocaleString();
+        document.getElementById('h-last-signal').textContent = d.last_signal || '—';
+        document.getElementById('h-last-kline').textContent = d.last_kline || '—';
+        document.getElementById('h-last-n').textContent = d.last_n_structure || '—';
+        var htGrid = document.getElementById('htGrid');
+        if (d.tables && htGrid) {
+          var html = '';
+          Object.keys(d.tables).forEach(function(k) {
+            var cnt = d.tables[k];
+            var cls = cnt > 0 ? 'ht-ok' : 'ht-empty';
+            html += '<div class="ht-card ' + cls + '"><span class="ht-name">' + k + '</span><span class="ht-count">' + cnt.toLocaleString() + '</span></div>';
+          });
+          htGrid.innerHTML = html;
+        }
+        var issuesEl = document.getElementById('healthIssues');
+        var listEl = document.getElementById('h-issue-list');
+        if (d.issues && d.issues.length) {
+          issuesEl.style.display = 'block';
+          listEl.innerHTML = d.issues.map(function(msg) { return '<li>' + msg + '</li>'; }).join('');
+        } else {
+          issuesEl.style.display = 'none';
+        }
+      })
+      .catch(function(e) { badge.textContent = '加载失败'; });
+  }
+  refresh();
+  setInterval(function() {
+    if (!document.hidden) refresh();
+  }, 30000);
+})();
+</script>
+</body>
+</html>

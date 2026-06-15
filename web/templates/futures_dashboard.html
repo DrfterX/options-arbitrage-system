@@ -3,49 +3,90 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>期权期货交易信号平台</title>
+<title>期货信号矩阵 · 多周期 N型 共振</title>
 <link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/static/futures.css">
 <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
 <style>
-/* ─── Navigation tabs ─── */
-.nav-tabs { display:flex; gap:2px; }
-.nav-tab { font-size:.65rem; color:var(--text3); text-decoration:none; display:inline-flex; align-items:center; gap:3px; padding:3px 7px; border-radius:4px; font-family:var(--font-ui); letter-spacing:.03em; cursor:pointer; line-height:1.2; }
-.nav-tab:hover { color:var(--text); background:rgba(90,97,115,.08); }
-.nav-tab.active { color:var(--brand); background:var(--brand-bg); font-weight:500; }
-.nav-tab-icon { font-size:.7rem; opacity:.7; }
+/* ─── Futures-specific overrides ─── */
+.topbar { position: relative; }
+.topbar::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 20px;
+  width: 140px;
+  height: 2px;
+  background: linear-gradient(90deg, var(--brand) 0%, transparent 100%);
+  border-radius: 1px;
+}
+
+.nav-tabs {
+  display: flex;
+  gap: 2px;
+}
+.nav-tab {
+  font-size: .65rem;
+  color: var(--text3);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-radius: var(--radius-sm);
+  transition: all .15s var(--ease-out);
+  font-family: var(--font-ui);
+  letter-spacing: .03em;
+  cursor: pointer;
+  line-height: 1.2;
+}
+.nav-tab:hover {
+  color: var(--text);
+  background: rgba(90, 97, 115, .08);
+}
+.nav-tab.active {
+  color: var(--brand);
+  background: var(--brand-bg);
+  font-weight: 500;
+}
+.nav-tab-icon {
+  font-size: .7rem;
+  opacity: .7;
+}
+
+/* Full-width matrix — no right panel */
+.main-grid { display: block; }
+.matrix-section { margin-bottom: 12px; }
+
+@media (max-width: 1024px) {
+  .health-grid { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 640px) {
+  .health-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
 </style>
 </head>
 <body>
 <div class="app">
+
+<!-- ─── TOPBAR ─── -->
 <div class="topbar">
-  <h1><span class="dot"></span><span class="accent">▣</span> 信号矩阵 <span class="data-badge">期货 × 期权</span></h1>
+  <h1><span class="dot"></span><span class="accent">▓</span> 期货信号矩阵 <span class="data-badge">N 型 · 多周期共振</span></h1>
   <div class="topbar-right">
     <div class="nav-tabs">
-      <a href="https://signals.drifter.indevs.in" class="nav-tab" data-nav="overview"><span class="nav-tab-icon">◈</span> 总览</a>
-      <a href="https://futures.drifter.indevs.in" class="nav-tab" data-nav="futures"><span class="nav-tab-icon">📈</span> 期货</a>
-      <a href="https://options.drifter.indevs.in" class="nav-tab" data-nav="options"><span class="nav-tab-icon">📉</span> 期权</a>
+      <a href="https://signals.drifter.indevs.in" class="nav-tab"><span class="nav-tab-icon">◈</span> 总览</a>
+      <span class="nav-tab active"><span class="nav-tab-icon">📈</span> 期货</span>
+      <a href="https://options.drifter.indevs.in" class="nav-tab"><span class="nav-tab-icon">📉</span> 期权</a>
     </div>
-    <span class="data-badge">{{ total_signals }} 品种</span>
+    <span class="data-badge" id="symbolCount">{{ total_signals }} 品种</span>
     <span class="topbar-time">{{ now }}</span>
   </div>
 </div>
 
-<script>
-// ── Navigation tab auto-active ──
-(function(){
-  var host = window.location.hostname;
-  var sel;
-  if (host.includes('futures')) sel = 'futures';
-  else if (host.includes('options')) sel = 'options';
-  else sel = 'overview';
-  document.querySelectorAll('.nav-tab').forEach(function(el) {
-    if (el.dataset.nav === sel) el.classList.add('active');
-  });
-})();
-</script>
-
 <div class="main">
 
+<!-- ─── STATS BAR ─── -->
 <div class="stats-bar">
   <div class="stat-item brand"><div class="label">最高评分</div><div class="value">{{ "%.1f"|format(max_score) }}</div><div class="stat-glow"></div></div>
   <div class="stat-item long"><div class="label">做多</div><div class="value">{{ long_count }}</div><div class="stat-glow"></div></div>
@@ -53,7 +94,7 @@
   <div class="stat-item"><div class="label">总品种</div><div class="value" style="color:var(--brand)">{{ total_signals }}</div><div class="stat-glow"></div></div>
 </div>
 
-<!-- ── SmartFilter 过滤状态面板 ── -->
+<!-- ─── SmartFilter ─── -->
 <div class="filter-section">
   <h2>🛡️ SmartFilter 防火墙 <span class="badge" id="fs-status"><span class="skeleton" style="width:60px;height:.7em">&nbsp;</span></span></h2>
   <div class="filter-stats" id="filterStats">
@@ -75,6 +116,7 @@
   </div>
 </div>
 
+<!-- ─── SECTOR STATS ─── -->
 <div class="sector-stats">
 {% for s in sector_stats %}
   <div class="sector-card">
@@ -92,73 +134,53 @@
 {% endfor %}
 </div>
 
-<div class="main-grid">
-  <div class="matrix-section">
-    <h2>🔥 多周期信号矩阵 <span class="badge">点击色块查看K线</span></h2>
-    <table class="matrix-table">
-      <thead><tr><th>品种</th><th>15m</th><th>1h</th><th>1d</th><th>1w</th><th>共振</th></tr></thead>
-      <tbody>
-      {% set ns = namespace(last_sector='') %}
-      {% for item in matrix %}
-        {% if item.sector != ns.last_sector %}
-        {% set ns.last_sector = item.sector %}
-        <tr class="sector-row"><td colspan="6" class="sector-label">▸ {{ item.sector }}</td></tr>
-        {% endif %}
-        {% if item.resonance >= 3 %}
-        <tr class="resonance-high">
-        {% elif item.resonance >= 2 %}
-        <tr class="resonance-mid">
-        {% else %}
-        <tr>
-        {% endif %}
-          <td class="sym-name">{{ item.name }} <span class="sub">{{ item.contract }}</span></td>
-          {% for cell in item.cells %}
-            {% if cell.dir %}
-            {% set is_long = cell.dir == 'LONG' %}
-            {% set color = '#ef4444' if is_long else '#22c55e' %}
-            {% if cell.a %}
-            {% set alpha = [0.9, item.score * 1.2]|min %}
-            {% if alpha < 0.25 %}{% set alpha = 0.25 %}{% endif %}
-            <td><div class="signal-cell kline-trigger" style="opacity:{{ alpha }}" onclick="showKlinePopup(this)" data-sym="{{ item.sym }}" data-tf="{{ cell.tf }}" data-dir="{{ cell.dir }}" data-a="{{ "%.2f"|format(cell.a) }}" data-b="{{ "%.2f"|format(cell.b) }}" data-c="{{ "%.2f"|format(cell.c) }}" title="N型结构: {{ cell.state or '' }}"><span class="inner-text">{{ '多' if is_long else '空' }}</span></div></td>
-            {% else %}
-            <td><div class="signal-cell kline-trigger" style="opacity:0.45" onclick="showKlinePopup(this)" data-sym="{{ item.sym }}" data-tf="{{ cell.tf }}" data-dir="{{ cell.dir }}" data-a="" data-b="" data-c="" title="信号方向（待N型确认）"><span class="inner-text">{{ '多' if is_long else '空' }}</span></div></td>
-            {% endif %}
-            {% else %}
-            <td><div class="signal-cell empty"><span class="inner-text">-</span></div></td>
-            {% endif %}
-          {% endfor %}
-          {% set res_color = '#22c55e' if item.resonance >= 3 else ('#f59e0b' if item.resonance >= 2 else '#64748b') %}
-          <td class="res-cell">
-            <div class="res-track"><div class="res-bar" style="width:{{ (item.resonance/4*100)|int }}%;background:{{ res_color }}"></div></div>
-            <span class="res-val" style="color:{{ res_color }}">{{ item.resonance }}/4</span>
-          </td>
-        </tr>
-      {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  <div class="right-panel">
-    <div class="iv-section">
-      <h2>📈 IV 百分位</h2>
-      <div id="ivChart" style="height:350px"></div>
-    </div>
-    <div class="options-section">
-      <h2>🟡 期权策略</h2>
-      {% if options %}
-      {% for s in options[:15] %}
-      <div class="option-card {{ s.iv_level or '' }}">
-        <span class="sym">{{ s.symbol }} {{ s.contract or '' }}</span> <span class="strat">{{ s.strategy or '' }}</span>
-        <div class="detail-row">IV: {{ "%.1f"|format((s.iv_avg or 0)*100) }}% | 百分位: {{ "%.0f"|format(s.iv_percentile or 0) }}% | {{ s.iv_level or '' }}</div>
-        <div class="greeks-row">Δ:{{ "%.4f"|format(s.net_delta or 0) }} Θ:{{ "%.4f"|format(s.net_theta or 0) }}</div>
-      </div>
-      {% endfor %}
-      {% else %}
-      <p style="color:var(--text3)">暂无期权策略信号</p>
+<!-- ─── FULL-WIDTH SIGNAL MATRIX ─── -->
+<div class="matrix-section">
+  <h2>🔥 多周期信号矩阵 <span class="badge">点击色块查看K线 · N 型结构透视</span></h2>
+  <table class="matrix-table">
+    <thead><tr><th>品种</th><th>15m</th><th>1h</th><th>1d</th><th>1w</th><th>共振</th></tr></thead>
+    <tbody>
+    {% set ns = namespace(last_sector='') %}
+    {% for item in matrix %}
+      {% if item.sector != ns.last_sector %}
+      {% set ns.last_sector = item.sector %}
+      <tr class="sector-row"><td colspan="6" class="sector-label">▸ {{ item.sector }}</td></tr>
       {% endif %}
-    </div>
-  </div>
+      {% if item.resonance >= 3 %}
+      <tr class="resonance-high">
+      {% elif item.resonance >= 2 %}
+      <tr class="resonance-mid">
+      {% else %}
+      <tr>
+      {% endif %}
+        <td class="sym-name">{{ item.name }} <span class="sub">{{ item.contract }}</span></td>
+        {% for cell in item.cells %}
+          {% if cell.dir %}
+          {% set is_long = cell.dir == 'LONG' %}
+          {% set color = '#ef4444' if is_long else '#22c55e' %}
+          {% if cell.a %}
+          {% set alpha = [0.9, item.score * 1.2]|min %}
+          {% if alpha < 0.25 %}{% set alpha = 0.25 %}{% endif %}
+          <td><div class="signal-cell kline-trigger" style="opacity:{{ alpha }}" onclick="showKlinePopup(this)" data-sym="{{ item.sym }}" data-tf="{{ cell.tf }}" data-dir="{{ cell.dir }}" data-a="{{ "%.2f"|format(cell.a) }}" data-b="{{ "%.2f"|format(cell.b) }}" data-c="{{ "%.2f"|format(cell.c) }}" title="N型结构: {{ cell.state or '' }}"><span class="inner-text">{{ '多' if is_long else '空' }}</span></div></td>
+          {% else %}
+          <td><div class="signal-cell kline-trigger" style="opacity:0.45" onclick="showKlinePopup(this)" data-sym="{{ item.sym }}" data-tf="{{ cell.tf }}" data-dir="{{ cell.dir }}" data-a="" data-b="" data-c="" title="信号方向（待N型确认）"><span class="inner-text">{{ '多' if is_long else '空' }}</span></div></td>
+          {% endif %}
+          {% else %}
+          <td><div class="signal-cell empty"><span class="inner-text">-</span></div></td>
+          {% endif %}
+        {% endfor %}
+        {% set res_color = '#22c55e' if item.resonance >= 3 else ('#f59e0b' if item.resonance >= 2 else '#64748b') %}
+        <td class="res-cell">
+          <div class="res-track"><div class="res-bar" style="width:{{ (item.resonance/4*100)|int }}%;background:{{ res_color }}"></div></div>
+          <span class="res-val" style="color:{{ res_color }}">{{ item.resonance }}/4</span>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
 </div>
 
+<!-- ─── SIGNAL CARDS ─── -->
 <div class="cards-section">
   <h2>🔔 最新信号</h2>
   <div class="grid">
@@ -178,10 +200,9 @@
   </div>
 </div>
 
-<!-- ── 持仓看板 ── -->
+<!-- ─── POSITIONS PANEL ─── -->
 <div class="cards-section" id="positions-panel">
   <h2>📦 持仓看板 <span class="badge" id="pos-badge"><span class="skeleton" style="width:60px;height:.7em">&nbsp;</span></span></h2>
-
   <div class="pos-stats" id="posStats">
     <div class="ps-card winrate"><div class="ps-label">胜率</div><div class="ps-value" id="ps-winrate"><span class="skeleton" style="width:36px;height:1em">&nbsp;</span></div></div>
     <div class="ps-card pnl"><div class="ps-label">总盈亏</div><div class="ps-value mono" id="ps-pnl"><span class="skeleton" style="width:48px;height:1em">&nbsp;</span></div></div>
@@ -190,15 +211,13 @@
     <div class="ps-card wins"><div class="ps-label">盈利</div><div class="ps-value" id="ps-wins"><span class="skeleton" style="width:24px;height:1em">&nbsp;</span></div></div>
     <div class="ps-card losses"><div class="ps-label">亏损</div><div class="ps-value" id="ps-losses"><span class="skeleton" style="width:24px;height:1em">&nbsp;</span></div></div>
   </div>
-
   <h3 class="pos-subtitle">📌 当前持仓</h3>
-  <div class="pos-disclaimer">💡 期货 PnL 已含合约乘数 · 期权 PnL 为净权利金（不含合约乘数）</div>
+  <div class="pos-disclaimer">💡 期货 PnL 已含合约乘数</div>
   <div class="pos-open-grid" id="posOpenGrid">
     <div class="pos-card"><div class="pc-header"><div><span class="skeleton" style="width:60px;height:.8em;display:inline-block">&nbsp;</span><span class="skeleton" style="width:40px;height:.6em;display:inline-block;margin-left:6px">&nbsp;</span></div><span class="skeleton" style="width:24px;height:.7em;display:inline-block">&nbsp;</span></div><div class="pc-body"><div class="pc-row"><span class="skeleton" style="width:100%;height:.65em">&nbsp;</span></div><div class="pc-row"><span class="skeleton" style="width:100%;height:.65em">&nbsp;</span></div></div><div class="pc-pnl"><span class="skeleton" style="width:80px;height:.7em;display:inline-block">&nbsp;</span></div></div>
     <div class="pos-card"><div class="pc-header"><div><span class="skeleton" style="width:60px;height:.8em;display:inline-block">&nbsp;</span><span class="skeleton" style="width:40px;height:.6em;display:inline-block;margin-left:6px">&nbsp;</span></div><span class="skeleton" style="width:24px;height:.7em;display:inline-block">&nbsp;</span></div><div class="pc-body"><div class="pc-row"><span class="skeleton" style="width:100%;height:.65em">&nbsp;</span></div><div class="pc-row"><span class="skeleton" style="width:100%;height:.65em">&nbsp;</span></div></div><div class="pc-pnl"><span class="skeleton" style="width:80px;height:.7em;display:inline-block">&nbsp;</span></div></div>
     <div class="pos-card"><div class="pc-header"><div><span class="skeleton" style="width:60px;height:.8em;display:inline-block">&nbsp;</span><span class="skeleton" style="width:40px;height:.6em;display:inline-block;margin-left:6px">&nbsp;</span></div><span class="skeleton" style="width:24px;height:.7em;display:inline-block">&nbsp;</span></div><div class="pc-body"><div class="pc-row"><span class="skeleton" style="width:100%;height:.65em">&nbsp;</span></div><div class="pc-row"><span class="skeleton" style="width:100%;height:.65em">&nbsp;</span></div></div><div class="pc-pnl"><span class="skeleton" style="width:80px;height:.7em;display:inline-block">&nbsp;</span></div></div>
   </div>
-
   <h3 class="pos-subtitle" style="margin-top:14px">📜 平仓记录</h3>
   <div class="pos-history-wrap">
     <table class="pos-table">
@@ -212,7 +231,7 @@
   </div>
 </div>
 
-<!-- ── 回测面板 ── -->
+<!-- ─── BACKTEST PANEL ─── -->
 <div class="cards-section" id="backtest-panel">
   <h2>📊 信号回测验证 <span class="badge" id="bt-status"><span class="skeleton" style="width:60px;height:.7em">&nbsp;</span></span></h2>
   <div id="bt-summary" class="bt-summary">
@@ -230,9 +249,7 @@
   <div id="bt-symbols" class="bt-section"></div>
 </div>
 
-</div><!-- /.main -->
-
-<!-- ── 健康状态面板 ── -->
+<!-- ─── HEALTH PANEL ─── -->
 <div class="cards-section" id="health-panel">
   <h2>💚 系统健康 <span class="badge" id="health-badge"><span class="skeleton" style="width:60px;height:.7em">&nbsp;</span></span></h2>
   <div class="health-grid" id="healthGrid">
@@ -271,9 +288,10 @@
   </div>
 </div>
 
-<div class="footer">Auto Company · 期权期货交易信号平台 · v0.1.0</div>
-</div><!-- /.app -->
+<div class="footer">Auto Company · 期货信号矩阵 · N 型结构多周期共振系统 · v0.1.0</div>
+</div><!-- /.main -->
 
+<!-- ─── K-LINE POPUP ─── -->
 <div class="kline-popup" id="klinePopup">
   <span class="kp-close" id="kpClose">&times;</span>
   <div class="kp-header"><span class="kp-title" id="kpTitle"></span><span class="kp-tf" id="kpTF"></span></div>
@@ -285,7 +303,7 @@
 </div>
 
 <script>
-// ── 自动刷新：30秒轮询，仅在可见时刷新（避免非活动标签页浪费）──
+// ── AUTO REFRESH: 30s poll + 5min matrix refresh (no full-page reload) ──
 var AUTO_REFRESH = true;
 if (AUTO_REFRESH) {
   setInterval(function() {
@@ -321,11 +339,13 @@ if (AUTO_REFRESH) {
         var lastSector = '';
 
         d.matrix.forEach(function(row) {
+          // Sector separator row
           if (row.sector !== lastSector) {
             lastSector = row.sector;
             html += '<tr class="sector-row"><td colspan="6" class="sector-label">▸ ' + esc(row.sector) + '</td></tr>';
           }
 
+          // Row class by resonance
           var rowClass = '';
           if (row.resonance >= 3) rowClass = ' class="resonance-high"';
           else if (row.resonance >= 2) rowClass = ' class="resonance-mid"';
@@ -333,9 +353,11 @@ if (AUTO_REFRESH) {
           html += '<tr' + rowClass + '>';
           html += '<td class="sym-name">' + esc(row.name) + ' <span class="sub">' + esc(row.contract) + '</span></td>';
 
+          // Cells per timeframe
           row.cells.forEach(function(cell) {
             if (cell.dir) {
               var isLong = cell.dir === 'LONG';
+              var color = isLong ? '#ef4444' : '#22c55e';
               var alpha = Math.min(0.9, row.score * 1.2);
               if (alpha < 0.25) alpha = 0.25;
               var aStr = cell.a != null ? cell.a.toFixed(2) : '';
@@ -351,6 +373,7 @@ if (AUTO_REFRESH) {
             }
           });
 
+          // Resonance bar column
           var resColor = row.resonance >= 3 ? '#22c55e' : (row.resonance >= 2 ? '#f59e0b' : '#64748b');
           var resWidth = Math.round(row.resonance / 4 * 100);
           html += '<td class="res-cell"><div class="res-track"><div class="res-bar" style="width:' + resWidth + '%;background:' + resColor + '"></div></div><span class="res-val" style="color:' + resColor + '">' + row.resonance + '/4</span></td>';
@@ -359,18 +382,19 @@ if (AUTO_REFRESH) {
 
         tbody.innerHTML = html;
 
+        // Update status bar
         var now = new Date();
         var ts = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0') + ' ' + String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
         var timeEl = document.querySelector('.topbar-time');
         if (timeEl) timeEl.textContent = ts + ' ⟳';
-        var badge = document.querySelector('.data-badge');
-        if (badge && d.matrix.length != null) badge.textContent = d.matrix.length + ' 品种';
+        var countEl = document.getElementById('symbolCount');
+        if (countEl) countEl.textContent = d.matrix.length + ' 品种';
       })
       .catch(function(e) { /* silent */ });
   }, 300000); // 5 minutes
 }
 
-// ── SmartFilter 过滤状态刷新 ──
+// ── SmartFilter ──
 function loadFilterStats() {
   fetch('/api/filter-stats', { cache: 'no-cache' })
     .then(function(r) { return r.json(); })
@@ -425,33 +449,16 @@ function loadFilterLog() {
     .catch(function(e) { /* silent */ });
 }
 
-// 初始加载过滤状态
 loadFilterStats();
 loadFilterLog();
 
-// 加入 30 秒轮询（与 summary 刷新同步）
 setInterval(function() {
   if (document.hidden) return;
   loadFilterStats();
   loadFilterLog();
 }, 30000);
 
-// IV Chart (lazy)
-var IV_DATA = JSON.parse('{{ iv_json|safe }}');
-(function initIV() {
-    if (typeof echarts === 'undefined') { setTimeout(initIV, 500); return; }
-    var el = document.getElementById('ivChart');
-    if (!el) return;
-    var chart = echarts.init(el);
-    chart.setOption({
-        backgroundColor:'transparent',
-        grid:{top:20,right:20,bottom:50,left:45},
-        xAxis:{type:'category',data:IV_DATA.map(function(d){return d.symbol + ' ' + (d.name || '')}),axisLabel:{color:'#8b92a5',fontSize:9,interval:2,rotate:45}},
-        yAxis:{type:'value',max:100,axisLabel:{color:'#5a6173',fontSize:10},splitLine:{lineStyle:{color:'rgba(90,97,115,0.08)'}}},
-        series:[{type:'bar',data:IV_DATA.map(function(d){return {value:d.percentile,itemStyle:{color:d.level==='极端高'?'#f04438':d.level==='偏高'?'#f0b429':d.level==='偏低'?'#0ea5e9':d.level==='极端低'?'#3b82f6':d.level==='数据不足'?'#5a6173':'#5a6173'}}})}]
-    });
-})();
-
+// ── K-line Popup ──
 var popup = document.getElementById('klinePopup');
 var canvas = document.getElementById('kpCanvas');
 var ctx = canvas.getContext('2d');
@@ -471,7 +478,6 @@ function drawKline(bars, nA, nB, nC, nDir) {
     [nA, nB, nC].forEach(function(p) { if (p != null && !isNaN(p)) { npExtend = Math.max(npExtend, Math.abs(p - (pmin+pmax)/2)); } });
     var pad = (pmax - pmin) * 0.08 + npExtend * 0.04 || 1; pmin -= pad; pmax += pad;
     var prange = pmax - pmin;
-    // P1-C3: 动态精度 — prange<1 用3位, <10 用2位, 否则1位
     function pricePrecision(r) { if (r < 1) return 3; if (r < 10) return 2; return 1; }
     var prec = pricePrecision(prange);
     var priceToY = function(p) { return 10 + (1 - (p - pmin) / prange) * (H - 30); };
@@ -485,7 +491,6 @@ function drawKline(bars, nA, nB, nC, nDir) {
         ctx.fillStyle = '#5a6173'; ctx.font = '9px sans-serif'; ctx.textAlign = 'right';
         ctx.fillText((pmax - (i / 4) * prange).toFixed(prec), chartLeft - 4, y + 3);
     }
-    // P1-C2: 计算稳定的 baseline gap（从第一个非零间隔采样，防止被断档污染）
     var baseGap = 0;
     for (var gi = 1; gi < bars.length; gi++) {
         if (bars[gi].t && bars[gi-1].t) {
@@ -544,7 +549,6 @@ function drawKline(bars, nA, nB, nC, nDir) {
         ctx.fillStyle = pt.cls === 'A' ? '#eab308' : pt.cls === 'B' ? '#6366f1' : '#ec4899';
         ctx.fillText(label, lx + 4, ly + 12);
     });
-    // 成交量区域分隔线
     ctx.strokeStyle = 'rgba(90,97,115,0.08)';
     ctx.lineWidth = 0.5;
     ctx.beginPath(); ctx.moveTo(chartLeft, H - 16); ctx.lineTo(chartRight, H - 16); ctx.stroke();
@@ -572,7 +576,6 @@ async function showKlinePopup(el) {
     popup.style.left = left + 'px'; popup.style.top = top + 'px';
     popup.style.bottom = 'auto'; popup.style.transform = 'none';
     try {
-        // 加载状态：清空 Canvas，显示加载提示
         document.getElementById('kpTitle').textContent = sym;
         document.getElementById('kpTF').textContent = tf;
         var dirEl = document.getElementById('kpDir');
@@ -605,7 +608,7 @@ document.addEventListener('click', function(e) {
 });
 document.getElementById('kpClose').addEventListener('click', function(e) { e.stopPropagation(); hidePopup(); _currentCell = null; });
 
-// ── 回测面板 ──
+// ── Backtest ──
 (function loadBacktest() {
   var statusEl = document.getElementById('bt-status');
   fetch('/api/backtest', { cache: 'no-cache' })
@@ -613,8 +616,6 @@ document.getElementById('kpClose').addEventListener('click', function(e) { e.sto
     .then(function(d) {
       if (d.error) { statusEl.textContent = '错误: ' + d.error; return; }
       statusEl.textContent = d.valid_trades + '/' + d.total_signals + ' 笔有效 | ' + d.elapsed_seconds + 's';
-
-      // summary
       var s = d.summary;
       var sumHtml = '<div class="bt-summary-row">';
       var days = [1,2,5,10];
@@ -630,8 +631,6 @@ document.getElementById('kpClose').addEventListener('click', function(e) { e.sto
       });
       sumHtml += '</div>';
       document.getElementById('bt-summary').innerHTML = sumHtml;
-
-      // by level
       var lvlHtml = '<h3>按验证等级</h3><table class="bt-table"><tr><th>等级</th>';
       days.forEach(function(dd) { lvlHtml += '<th>' + dd + 'd</th>'; });
       lvlHtml += '<th>样本</th></tr>';
@@ -648,8 +647,6 @@ document.getElementById('kpClose').addEventListener('click', function(e) { e.sto
       });
       lvlHtml += '</table>';
       document.getElementById('bt-levels').innerHTML = lvlHtml;
-
-      // by score band
       var bandHtml = '<h3>按评分区间</h3><table class="bt-table"><tr><th>评分</th>';
       days.forEach(function(dd) { bandHtml += '<th>' + dd + 'd</th>'; });
       bandHtml += '<th>样本</th></tr>';
@@ -666,8 +663,6 @@ document.getElementById('kpClose').addEventListener('click', function(e) { e.sto
       });
       bandHtml += '</table>';
       document.getElementById('bt-bands').innerHTML = bandHtml;
-
-      // by sector (top)
       var secHtml = '<h3>板块 1日准确率</h3><table class="bt-table"><tr><th>板块</th>';
       days.forEach(function(dd) { secHtml += '<th>' + dd + 'd</th>'; });
       secHtml += '<th>品种数</th></tr>';
@@ -688,303 +683,168 @@ document.getElementById('kpClose').addEventListener('click', function(e) { e.sto
     .catch(function(e) { statusEl.textContent = '加载失败'; console.error(e); });
 })();
 
-// ── 持仓看板 ──
+// ── Positions ──
 (function loadPositions() {
   var badge = document.getElementById('pos-badge');
-
-  // 加载持仓统计
-  fetch('/api/positions/stats', { cache: 'no-cache' })
-    .then(function(r) { return r.json(); })
-    .then(function(s) {
-      var wr = document.getElementById('ps-winrate');
-      var pnl = document.getElementById('ps-pnl');
-      var open = document.getElementById('ps-open');
-      var closed = document.getElementById('ps-closed');
-      var wins = document.getElementById('ps-wins');
-      var losses = document.getElementById('ps-losses');
-      if (!wr) return;
-      wr.textContent = s.win_rate ? (s.win_rate * 100).toFixed(1) + '%' : '0%';
-      pnl.textContent = s.total_pnl >= 0 ? '+' + s.total_pnl.toFixed(2) : s.total_pnl.toFixed(2);
-      pnl.style.color = s.total_pnl > 0 ? '#22c55e' : (s.total_pnl < 0 ? '#f04438' : 'var(--text3)');
-      open.textContent = s.open_positions || 0;
-      closed.textContent = s.closed_positions || 0;
-      wins.textContent = s.wins || 0;
-      losses.textContent = s.losses || 0;
-      if (badge) {
-        badge.textContent = (s.open_positions || 0) + ' 持仓 / ' + (s.closed_positions || 0) + ' 已平';
-        badge.style.color = 'var(--brand)';
-      }
-    })
-    .catch(function(e) { /* silent */ });
-
-  // 加载当前持仓
-  fetch('/api/positions', { cache: 'no-cache' })
-    .then(function(r) { return r.json(); })
-    .then(function(positions) {
-      var grid = document.getElementById('posOpenGrid');
-      if (!grid) return;
-      if (!positions || !positions.length) {
-        grid.innerHTML = '<div class="pos-empty"><span class="pos-empty-icon">📭</span><span>暂无持仓</span></div>';
-        return;
-      }
-      var html = '';
-      positions.forEach(function(p) {
-        var dir = p.direction === 'LONG' ? '多' : '空';
-        var dirClass = p.direction === 'LONG' ? 'long' : 'short';
-        var entryTime = p.entry_time ? formatPosTime(p.entry_time) : '—';
-        var currPrice = p.current_price && p.current_price > 0 ? p.current_price : '—';
-        // 使用后端计算好的 unrealized_pnl（含合约乘数），兜底前端自算
-        var pnlVal = (p.unrealized_pnl !== undefined) ? p.unrealized_pnl
-          : ((p.current_price && p.current_price > 0)
-            ? (p.direction === 'LONG' ? p.current_price - p.entry_price : p.entry_price - p.current_price) * (p.remaining_quantity || p.quantity || 1)
-            : 0);
-        var pnlCls = pnlVal > 0 ? 'profit' : (pnlVal < 0 ? 'loss' : 'flat');
-        var pnlStr = pnlVal > 0 ? '+' + pnlVal.toFixed(2) : (pnlVal < 0 ? pnlVal.toFixed(2) : '0.00');
-        // PnL bar: clamp percentage display
-        var costBasis = p.entry_price * (p.quantity || 1);
-        var pnlPct = costBasis > 0 ? (pnlVal / costBasis) * 100 : 0;
-        var barPct = Math.min(Math.abs(pnlPct) * 3, 100);
-        var barColor = pnlVal > 0 ? '#22c55e' : (pnlVal < 0 ? '#f04438' : 'rgba(90,97,115,.3)');
-        var rq = p.remaining_quantity !== undefined ? p.remaining_quantity : null;
-
-        html += '<div class="pos-card">'
-          + '<div class="pc-header">'
-          + '<div><span class="pc-sym">' + (p.symbol || '—') + '</span><span class="pc-contract">' + (p.contract || '') + '</span></div>'
-          + '<span class="pc-dir ' + dirClass + '">' + dir + '</span>'
-          + '</div>'
-          + '<div class="pc-body">'
-          + '<div class="pc-row"><span class="pc-key">入场</span><span class="pc-val">' + p.entry_price.toFixed(1) + '</span></div>'
-          + '<div class="pc-row"><span class="pc-key">现价</span><span class="pc-val">' + (currPrice !== '—' ? currPrice.toFixed(1) : '—') + '</span></div>'
-          + '<div class="pc-row"><span class="pc-key">数量</span><span class="pc-val">' + (rq !== null ? rq + '/' + (p.quantity || 1) : (p.quantity || 1)) + ' 手</span></div>'
-          + '<div class="pc-row"><span class="pc-key">入场</span><span class="pc-val">' + entryTime + '</span></div>'
-          + '</div>'
-          + '<div class="pc-pnl">'
-          + '<span class="pc-pnl-label">浮动盈亏</span>'
-          + '<span class="pc-pnl-val ' + pnlCls + '">' + pnlStr + '</span>'
-          + '</div>'
-          + '<div class="pc-pnl-bar-bg"><div class="pc-pnl-bar" style="width:' + barPct + '%;background:' + barColor + '"></div></div>'
-          + '</div>';
-      });
-      grid.innerHTML = html;
-    })
-    .catch(function(e) { /* silent */ });
-
-  // 加载平仓记录
-  fetch('/api/positions/history?limit=20', { cache: 'no-cache' })
-    .then(function(r) { return r.json(); })
-    .then(function(history) {
-      var tbody = document.getElementById('posHistoryBody');
-      if (!tbody) return;
-      if (!history || !history.length) {
-        tbody.innerHTML = '<tr><td colspan="6" style="color:var(--text3);text-align:center;padding:16px">暂无平仓记录</td></tr>';
-        return;
-      }
-      var html = '';
-      function reasonLabel(r) {
-        return r === 'take_profit' ? '🎯 止盈' : r === 'stop_loss' ? '🛑 止损' : r === 'signal_expired' ? '⏳ 信号消失' : '🔧 手动';
-      }
-      history.forEach(function(p) {
-        var dir = p.direction === 'LONG' ? '多' : '空';
-        var dirClass = p.direction === 'LONG' ? 'long' : 'short';
-        var pnl = (p.realized_pnl || 0);
-        var pnlCls = pnl > 0 ? 'pt-profit' : (pnl < 0 ? 'pt-loss' : 'pt-flat');
-        var pnlStr = pnl > 0 ? '+' + pnl.toFixed(2) : pnl.toFixed(2);
-        var closeTime = p.closed_at || '—';
-        var entryStr = p.entry_price ? p.entry_price.toFixed(1) : '—';
-        html += '<tr>'
-          + '<td style="text-align:left">' + (p.symbol || '—') + ' <span style="color:var(--text3);font-size:.6rem">' + (p.contract || '') + '</span></td>'
-          + '<td><span class="pt-dir ' + dirClass + '">' + dir + '</span></td>'
-          + '<td style="color:var(--text3);font-size:.62rem">' + entryStr + '</td>'
-          + '<td class="' + pnlCls + '">' + pnlStr + '</td>'
-          + '<td class="pt-reason">' + reasonLabel(p.close_reason || 'manual') + '</td>'
-          + '<td class="pt-time">' + closeTime + '</td>'
-          + '</tr>';
-      });
-      tbody.innerHTML = html;
-    })
-    .catch(function(e) { /* silent */ });
-})();
-
-// 工具函数: Unix 时间戳 → 可读时间
-function formatPosTime(ts) {
-  var d = new Date(ts * 1000);
-  var Y = d.getFullYear();
-  var M = String(d.getMonth() + 1).padStart(2, '0');
-  var D = String(d.getDate()).padStart(2, '0');
-  var h = String(d.getHours()).padStart(2, '0');
-  var m = String(d.getMinutes()).padStart(2, '0');
-  return Y + '-' + M + '-' + D + ' ' + h + ':' + m;
-}
-
-// 持仓看板 30 秒轮询
-setInterval(function() {
-  if (document.hidden) return;
-  var badge = document.getElementById('pos-badge');
-  if (!badge) return;
-  // 重新加载持仓数据
-  (function refreshPositions() {
+  function formatPosTime(ts) {
+    var d = new Date(ts * 1000);
+    var Y = d.getFullYear();
+    var M = String(d.getMonth() + 1).padStart(2, '0');
+    var D = String(d.getDate()).padStart(2, '0');
+    var h = String(d.getHours()).padStart(2, '0');
+    var m = String(d.getMinutes()).padStart(2, '0');
+    return Y + '-' + M + '-' + D + ' ' + h + ':' + m;
+  }
+  function reasonLabel(r) {
+    return r === 'take_profit' ? '🎯 止盈' : r === 'stop_loss' ? '🛑 止损' : r === 'signal_expired' ? '⏳ 信号消失' : '🔧 手动';
+  }
+  function renderPositions(positions) {
+    var grid = document.getElementById('posOpenGrid');
+    if (!grid) return;
+    if (!positions || !positions.length) {
+      grid.innerHTML = '<div class="pos-empty"><span class="pos-empty-icon">📭</span><span>暂无持仓</span></div>';
+      return;
+    }
+    var html = '';
+    positions.forEach(function(p) {
+      var dir = p.direction === 'LONG' ? '多' : '空';
+      var dirClass = p.direction === 'LONG' ? 'long' : 'short';
+      var entryTime = p.entry_time ? formatPosTime(p.entry_time) : '—';
+      var currPrice = p.current_price && p.current_price > 0 ? p.current_price : '—';
+      var pnlVal = (p.unrealized_pnl !== undefined) ? p.unrealized_pnl
+        : ((p.current_price && p.current_price > 0)
+          ? (p.direction === 'LONG' ? p.current_price - p.entry_price : p.entry_price - p.current_price) * (p.remaining_quantity || p.quantity || 1)
+          : 0);
+      var pnlCls = pnlVal > 0 ? 'profit' : (pnlVal < 0 ? 'loss' : 'flat');
+      var pnlStr = pnlVal > 0 ? '+' + pnlVal.toFixed(2) : (pnlVal < 0 ? pnlVal.toFixed(2) : '0.00');
+      var costBasis = p.entry_price * (p.quantity || 1);
+      var pnlPct = costBasis > 0 ? (pnlVal / costBasis) * 100 : 0;
+      var barPct = Math.min(Math.abs(pnlPct) * 3, 100);
+      var barColor = pnlVal > 0 ? '#22c55e' : (pnlVal < 0 ? '#f04438' : 'rgba(90,97,115,.3)');
+      var rq = p.remaining_quantity !== undefined ? p.remaining_quantity : null;
+      html += '<div class="pos-card">'
+        + '<div class="pc-header">'
+        + '<div><span class="pc-sym">' + (p.symbol || '—') + '</span><span class="pc-contract">' + (p.contract || '') + '</span></div>'
+        + '<span class="pc-dir ' + dirClass + '">' + dir + '</span>'
+        + '</div>'
+        + '<div class="pc-body">'
+        + '<div class="pc-row"><span class="pc-key">入场</span><span class="pc-val">' + p.entry_price.toFixed(1) + '</span></div>'
+        + '<div class="pc-row"><span class="pc-key">现价</span><span class="pc-val">' + (currPrice !== '—' ? currPrice.toFixed(1) : '—') + '</span></div>'
+        + '<div class="pc-row"><span class="pc-key">数量</span><span class="pc-val">' + (rq !== null ? rq + '/' + (p.quantity || 1) : (p.quantity || 1)) + ' 手</span></div>'
+        + '<div class="pc-row"><span class="pc-key">入场</span><span class="pc-val">' + entryTime + '</span></div>'
+        + '</div>'
+        + '<div class="pc-pnl">'
+        + '<span class="pc-pnl-label">浮动盈亏</span>'
+        + '<span class="pc-pnl-val ' + pnlCls + '">' + pnlStr + '</span>'
+        + '</div>'
+        + '<div class="pc-pnl-bar-bg"><div class="pc-pnl-bar" style="width:' + barPct + '%;background:' + barColor + '"></div></div>'
+        + '</div>';
+    });
+    grid.innerHTML = html;
+  }
+  function renderHistory(history) {
+    var tbody = document.getElementById('posHistoryBody');
+    if (!tbody) return;
+    if (!history || !history.length) {
+      tbody.innerHTML = '<tr><td colspan="6" style="color:var(--text3);text-align:center;padding:16px">暂无平仓记录</td></tr>';
+      return;
+    }
+    var html = '';
+    history.forEach(function(p) {
+      var dir = p.direction === 'LONG' ? '多' : '空';
+      var dirClass = p.direction === 'LONG' ? 'long' : 'short';
+      var pnl = (p.realized_pnl || 0);
+      var pnlCls = pnl > 0 ? 'pt-profit' : (pnl < 0 ? 'pt-loss' : 'pt-flat');
+      var pnlStr = pnl > 0 ? '+' + pnl.toFixed(2) : pnl.toFixed(2);
+      var closeTime = p.closed_at || '—';
+      var entryStr = p.entry_price ? p.entry_price.toFixed(1) : '—';
+      html += '<tr>'
+        + '<td style="text-align:left">' + (p.symbol || '—') + ' <span style="color:var(--text3);font-size:.6rem">' + (p.contract || '') + '</span></td>'
+        + '<td><span class="pt-dir ' + dirClass + '">' + dir + '</span></td>'
+        + '<td style="color:var(--text3);font-size:.62rem">' + entryStr + '</td>'
+        + '<td class="' + pnlCls + '">' + pnlStr + '</td>'
+        + '<td class="pt-reason">' + reasonLabel(p.close_reason || 'manual') + '</td>'
+        + '<td class="pt-time">' + closeTime + '</td>'
+        + '</tr>';
+    });
+    tbody.innerHTML = html;
+  }
+  function refresh() {
     fetch('/api/positions/stats', { cache: 'no-cache' })
       .then(function(r) { return r.json(); })
       .then(function(s) {
-        var wr = document.getElementById('ps-winrate');
-        var pnl = document.getElementById('ps-pnl');
-        var open = document.getElementById('ps-open');
-        var closed = document.getElementById('ps-closed');
-        var wins = document.getElementById('ps-wins');
-        var losses = document.getElementById('ps-losses');
-        if (!wr) return;
-        wr.textContent = s.win_rate ? (s.win_rate * 100).toFixed(1) + '%' : '0%';
-        pnl.textContent = s.total_pnl >= 0 ? '+' + s.total_pnl.toFixed(2) : s.total_pnl.toFixed(2);
-        pnl.style.color = s.total_pnl > 0 ? '#22c55e' : (s.total_pnl < 0 ? '#f04438' : 'var(--text3)');
-        open.textContent = s.open_positions || 0;
-        closed.textContent = s.closed_positions || 0;
-        wins.textContent = s.wins || 0;
-        losses.textContent = s.losses || 0;
+        document.getElementById('ps-winrate').textContent = s.win_rate ? (s.win_rate * 100).toFixed(1) + '%' : '0%';
+        var pnlEl = document.getElementById('ps-pnl');
+        pnlEl.textContent = s.total_pnl >= 0 ? '+' + s.total_pnl.toFixed(2) : s.total_pnl.toFixed(2);
+        pnlEl.style.color = s.total_pnl > 0 ? '#22c55e' : (s.total_pnl < 0 ? '#f04438' : 'var(--text3)');
+        document.getElementById('ps-open').textContent = s.open_positions || 0;
+        document.getElementById('ps-closed').textContent = s.closed_positions || 0;
+        document.getElementById('ps-wins').textContent = s.wins || 0;
+        document.getElementById('ps-losses').textContent = s.losses || 0;
         if (badge) {
           badge.textContent = (s.open_positions || 0) + ' 持仓 / ' + (s.closed_positions || 0) + ' 已平';
+          badge.style.color = 'var(--brand)';
         }
       })
       .catch(function(e) { /* silent */ });
-
-    // 刷新当前持仓（PnL 浮动）
     fetch('/api/positions', { cache: 'no-cache' })
       .then(function(r) { return r.json(); })
-      .then(function(positions) {
-        var grid = document.getElementById('posOpenGrid');
-        if (!grid) return;
-        if (!positions || !positions.length) {
-          grid.innerHTML = '<div class="pos-empty"><span class="pos-empty-icon">📭</span><span>暂无持仓</span></div>';
-          return;
-        }
-        var html = '';
-        positions.forEach(function(p) {
-          var dir = p.direction === 'LONG' ? '多' : '空';
-          var dirClass = p.direction === 'LONG' ? 'long' : 'short';
-          var entryTime = p.entry_time ? formatPosTime(p.entry_time) : '—';
-          var currPrice = p.current_price && p.current_price > 0 ? p.current_price : '—';
-          var pnlVal = (p.unrealized_pnl !== undefined) ? p.unrealized_pnl
-            : ((p.current_price && p.current_price > 0)
-              ? (p.direction === 'LONG' ? p.current_price - p.entry_price : p.entry_price - p.current_price) * (p.remaining_quantity || p.quantity || 1)
-              : 0);
-          var pnlCls = pnlVal > 0 ? 'profit' : (pnlVal < 0 ? 'loss' : 'flat');
-          var pnlStr = pnlVal > 0 ? '+' + pnlVal.toFixed(2) : (pnlVal < 0 ? pnlVal.toFixed(2) : '0.00');
-          var costBasis = p.entry_price * (p.quantity || 1);
-          var pnlPct = costBasis > 0 ? (pnlVal / costBasis) * 100 : 0;
-          var barPct = Math.min(Math.abs(pnlPct) * 3, 100);
-          var barColor = pnlVal > 0 ? '#22c55e' : (pnlVal < 0 ? '#f04438' : 'rgba(90,97,115,.3)');
-          var rq = p.remaining_quantity !== undefined ? p.remaining_quantity : null;
-
-          html += '<div class="pos-card">'
-            + '<div class="pc-header">'
-            + '<div><span class="pc-sym">' + (p.symbol || '—') + '</span><span class="pc-contract">' + (p.contract || '') + '</span></div>'
-            + '<span class="pc-dir ' + dirClass + '">' + dir + '</span>'
-            + '</div>'
-            + '<div class="pc-body">'
-            + '<div class="pc-row"><span class="pc-key">入场</span><span class="pc-val">' + p.entry_price.toFixed(1) + '</span></div>'
-            + '<div class="pc-row"><span class="pc-key">现价</span><span class="pc-val">' + (currPrice !== '—' ? currPrice.toFixed(1) : '—') + '</span></div>'
-            + '<div class="pc-row"><span class="pc-key">数量</span><span class="pc-val">' + (rq !== null ? rq + '/' + (p.quantity || 1) : (p.quantity || 1)) + ' 手</span></div>'
-            + '<div class="pc-row"><span class="pc-key">入场</span><span class="pc-val">' + entryTime + '</span></div>'
-            + '</div>'
-            + '<div class="pc-pnl">'
-            + '<span class="pc-pnl-label">浮动盈亏</span>'
-            + '<span class="pc-pnl-val ' + pnlCls + '">' + pnlStr + '</span>'
-            + '</div>'
-            + '<div class="pc-pnl-bar-bg"><div class="pc-pnl-bar" style="width:' + barPct + '%;background:' + barColor + '"></div></div>'
-            + '</div>';
-        });
-        grid.innerHTML = html;
-      })
+      .then(renderPositions)
       .catch(function(e) { /* silent */ });
-  })();
-}, 30000);
-
-// ── 健康面板 ──
-(function loadHealth() {
-  var badge = document.getElementById('health-badge');
-  fetch('/api/health', { cache: 'no-cache' })
-    .then(function(r) { return r.json(); })
-    .then(function(d) {
-      if (d.error) { badge.textContent = '错误'; return; }
-      badge.textContent = d.status === 'healthy' ? '✅ 正常' : (d.status === 'degraded' ? '⚠️ 降级' : '❌ 异常');
-      badge.style.color = d.status === 'healthy' ? '#22c55e' : (d.status === 'degraded' ? '#f0b429' : '#f04438');
-
-      document.getElementById('h-status').textContent = d.status === 'healthy' ? '正常' : (d.status === 'degraded' ? '降级' : '异常');
-      document.getElementById('h-status').className = 'h-value h-' + d.status;
-      document.getElementById('h-uptime').textContent = d.uptime_human || (d.uptime + 's');
-      document.getElementById('h-rows').textContent = (d.total_rows || 0).toLocaleString();
-      document.getElementById('h-last-signal').textContent = d.last_signal || '—';
-      document.getElementById('h-last-kline').textContent = d.last_kline || '—';
-      document.getElementById('h-last-n').textContent = d.last_n_structure || '—';
-
-      // tables grid
-      var htGrid = document.getElementById('htGrid');
-      if (d.tables) {
-        var html = '';
-        var keys = Object.keys(d.tables);
-        keys.forEach(function(k) {
-          var cnt = d.tables[k];
-          var cls = cnt > 0 ? 'ht-ok' : 'ht-empty';
-          html += '<div class="ht-card ' + cls + '"><span class="ht-name">' + k + '</span><span class="ht-count">' + cnt.toLocaleString() + '</span></div>';
-        });
-        htGrid.innerHTML = html;
-      }
-
-      // issues
-      var issuesEl = document.getElementById('healthIssues');
-      var listEl = document.getElementById('h-issue-list');
-      if (d.issues && d.issues.length) {
-        issuesEl.style.display = 'block';
-        listEl.innerHTML = d.issues.map(function(msg) { return '<li>' + msg + '</li>'; }).join('');
-      } else {
-        issuesEl.style.display = 'none';
-      }
-    })
-    .catch(function(e) { badge.textContent = '加载失败'; console.error(e); });
+    fetch('/api/positions/history?limit=20', { cache: 'no-cache' })
+      .then(function(r) { return r.json(); })
+      .then(renderHistory)
+      .catch(function(e) { /* silent */ });
+  }
+  refresh();
+  setInterval(function() {
+    if (!document.hidden) refresh();
+  }, 30000);
 })();
 
-// 健康面板也加入 30 秒轮询
-setInterval(function() {
-  if (document.hidden) return;
+// ── Health ──
+(function loadHealth() {
   var badge = document.getElementById('health-badge');
-  if (!badge) return;
-  fetch('/api/health', { cache: 'no-cache' })
-    .then(function(r) { return r.json(); })
-    .then(function(d) {
-      if (d.error) return;
-      badge.textContent = d.status === 'healthy' ? '✅ 正常' : (d.status === 'degraded' ? '⚠️ 降级' : '❌ 异常');
-      badge.style.color = d.status === 'healthy' ? '#22c55e' : (d.status === 'degraded' ? '#f0b429' : '#f04438');
-      document.getElementById('h-status').textContent = d.status === 'healthy' ? '正常' : (d.status === 'degraded' ? '降级' : '异常');
-      document.getElementById('h-status').className = 'h-value h-' + d.status;
-      document.getElementById('h-uptime').textContent = d.uptime_human || (d.uptime + 's');
-      document.getElementById('h-rows').textContent = (d.total_rows || 0).toLocaleString();
-      document.getElementById('h-last-signal').textContent = d.last_signal || '—';
-      document.getElementById('h-last-kline').textContent = d.last_kline || '—';
-      document.getElementById('h-last-n').textContent = d.last_n_structure || '—';
-
-      var htGrid = document.getElementById('htGrid');
-      if (d.tables && htGrid) {
-        var html = '';
-        var keys = Object.keys(d.tables);
-        keys.forEach(function(k) {
-          var cnt = d.tables[k];
-          var cls = cnt > 0 ? 'ht-ok' : 'ht-empty';
-          html += '<div class="ht-card ' + cls + '"><span class="ht-name">' + k + '</span><span class="ht-count">' + cnt.toLocaleString() + '</span></div>';
-        });
-        htGrid.innerHTML = html;
-      }
-
-      var issuesEl = document.getElementById('healthIssues');
-      var listEl = document.getElementById('h-issue-list');
-      if (d.issues && d.issues.length && issuesEl && listEl) {
-        issuesEl.style.display = 'block';
-        listEl.innerHTML = d.issues.map(function(msg) { return '<li>' + msg + '</li>'; }).join('');
-      } else if (issuesEl) {
-        issuesEl.style.display = 'none';
-      }
-    })
-    .catch(function(e) { /* silent */ });
-}, 30000);
-
+  function refresh() {
+    fetch('/api/health', { cache: 'no-cache' })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (d.error) { badge.textContent = '错误'; return; }
+        badge.textContent = d.status === 'healthy' ? '✅ 正常' : (d.status === 'degraded' ? '⚠️ 降级' : '❌ 异常');
+        badge.style.color = d.status === 'healthy' ? '#22c55e' : (d.status === 'degraded' ? '#f0b429' : '#f04438');
+        document.getElementById('h-status').textContent = d.status === 'healthy' ? '正常' : (d.status === 'degraded' ? '降级' : '异常');
+        document.getElementById('h-status').className = 'h-value h-' + d.status;
+        document.getElementById('h-uptime').textContent = d.uptime_human || (d.uptime + 's');
+        document.getElementById('h-rows').textContent = (d.total_rows || 0).toLocaleString();
+        document.getElementById('h-last-signal').textContent = d.last_signal || '—';
+        document.getElementById('h-last-kline').textContent = d.last_kline || '—';
+        document.getElementById('h-last-n').textContent = d.last_n_structure || '—';
+        var htGrid = document.getElementById('htGrid');
+        if (d.tables && htGrid) {
+          var html = '';
+          Object.keys(d.tables).forEach(function(k) {
+            var cnt = d.tables[k];
+            var cls = cnt > 0 ? 'ht-ok' : 'ht-empty';
+            html += '<div class="ht-card ' + cls + '"><span class="ht-name">' + k + '</span><span class="ht-count">' + cnt.toLocaleString() + '</span></div>';
+          });
+          htGrid.innerHTML = html;
+        }
+        var issuesEl = document.getElementById('healthIssues');
+        var listEl = document.getElementById('h-issue-list');
+        if (d.issues && d.issues.length) {
+          issuesEl.style.display = 'block';
+          listEl.innerHTML = d.issues.map(function(msg) { return '<li>' + msg + '</li>'; }).join('');
+        } else {
+          issuesEl.style.display = 'none';
+        }
+      })
+      .catch(function(e) { badge.textContent = '加载失败'; });
+  }
+  refresh();
+  setInterval(function() {
+    if (!document.hidden) refresh();
+  }, 30000);
+})();
 </script>
 </body>
 </html>

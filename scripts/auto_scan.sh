@@ -6,7 +6,7 @@
 # ══════════════════════════════════════════════════════════════
 set -euo pipefail
 
-PROJECT_DIR="/Users/ayong/options_arbitrage_system"
+PROJECT_DIR="/Users/ayong/projects/auto-company_test/projects/options_arbitrage_system"
 LOG_DIR="$HOME/.hermes/logs"
 MODE="${1:-all}"
 

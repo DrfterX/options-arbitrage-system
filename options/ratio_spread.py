@@ -13,7 +13,7 @@
 
 import math
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional, Tuple
 
 from config.settings import MIN_IV, MAX_DELTA_ABS, MIN_OI, MAX_MARGIN, MAX_COST_RATIO
@@ -103,6 +103,7 @@ class RatioSpread:
     profit_zone_width: float
     win_rate: float
     score: float
+    score_components: dict = field(default_factory=dict)
 
 
 # ---- 合约乘数查询 ----
@@ -311,6 +312,12 @@ def calc_call_ratio_spread(
         profit_zone_width=profit_zone_width,
         win_rate=win_rate,
         score=score,
+        score_components={
+            "theta": round(min(theta_score * 200, 40), 1),
+            "vega": round(min(vega_score * 200, 30), 1),
+            "win_rate": round(win_rate * 20, 1),
+            "width": round(width_score * 10, 1),
+        },
     )
 
 
@@ -426,6 +433,12 @@ def calc_put_ratio_spread(
         profit_zone_width=profit_zone_width,
         win_rate=win_rate,
         score=score,
+        score_components={
+            "theta": round(min(theta_score * 200, 40), 1),
+            "vega": round(min(vega_score * 200, 30), 1),
+            "win_rate": round(win_rate * 20, 1),
+            "width": round(width_score * 10, 1),
+        },
     )
 
 
