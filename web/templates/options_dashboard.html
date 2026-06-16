@@ -718,7 +718,7 @@ var IV_DATA = JSON.parse('{{ iv_json|safe }}');
   var chart = echarts.init(el, null, { renderer: 'canvas' });
   chart.setOption({
     backgroundColor: 'transparent',
-    grid: { top: 20, right: 20, bottom: 110, left: 45 },
+    grid: { top: 20, right: 20, bottom: 140, left: 45 },
     xAxis: {
       type: 'category',
       data: IV_DATA.map(function(d){
@@ -726,16 +726,15 @@ var IV_DATA = JSON.parse('{{ iv_json|safe }}');
         return cname;
       }),
       axisLabel: {
-        color: '#8b92a5', fontSize: 9, interval: 0, rotate: 40,
+        color: '#8b92a5', fontSize: 9, interval: 0, rotate: 35,
         lineHeight: 14,
-        // Show symbol + contract in smaller muted text below the Chinese name
+        // Show Chinese name + contract code below (contract already cleaned of n-prefix server-side)
         formatter: function(val, idx) {
           var d = IV_DATA[idx];
           if (!d) return val;
-          var sym = (d.symbol || '').toUpperCase();
           var contract = (d.contract || '').replace(/^[nN]/, '');
-          var cname = (d.name && d.name !== d.symbol) ? d.name : sym;
-          return '{cname|' + cname + '}\n{detail|' + sym + ' ' + contract + '}';
+          var cname = (d.name && d.name !== d.symbol) ? d.name : (d.symbol || '').toUpperCase();
+          return '{cname|' + cname + '}\n{detail|' + contract + '}';
         },
         rich: {
           cname: { color: '#8b92a5', fontSize: 9, lineHeight: 14, align: 'center' },
