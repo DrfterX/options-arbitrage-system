@@ -639,7 +639,7 @@ function drawKline(bars, nA, nB, nC, nDir) {
         {label: 'C', price: nC, cls: 'C'},
     ];
     // Find the bar index that best matches each N-point's price
-    // LONG: A=high, B=low, C=high  |  SHORT: A=low, B=high, C=low
+    // LONG: A=low, B=high, C=low  |  SHORT: A=high, B=low, C=high
     function findBarForNPoint(bars, price, isHigh) {
         if (price == null || isNaN(price)) return -1;
         var bestIdx = -1, bestDist = Infinity;
@@ -651,9 +651,9 @@ function drawKline(bars, nA, nB, nC, nDir) {
         return bestIdx;
     }
     var nDir = (typeof nDir !== 'undefined' && nDir) || 'LONG';
-    var aIsHigh = (nDir === 'LONG');
-    var bIsHigh = (nDir !== 'LONG');
-    var cIsHigh = (nDir === 'LONG');
+    var aIsHigh = (nDir !== 'LONG');  // LONG: A=low, SHORT: A=high
+    var bIsHigh = (nDir === 'LONG');  // LONG: B=high, SHORT: B=low
+    var cIsHigh = (nDir !== 'LONG');  // LONG: C=low, SHORT: C=high
     var nIdxs = [
         {idx: findBarForNPoint(bars, nA, aIsHigh), price: nA, cls: 'A'},
         {idx: findBarForNPoint(bars, nB, bIsHigh), price: nB, cls: 'B'},

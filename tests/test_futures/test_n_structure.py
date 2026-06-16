@@ -118,7 +118,7 @@ class TestNormalLongN:
         ]
         result = detect_and_save("RB", "rb2510", "1w", _test_db)
         assert result["direction"] == "LONG"
-        assert result["state"] == NState.LEG2.value
+        assert result["state"] == NState.LEG3.value
         assert result["is_active"] is True
         assert result["point_a_price"] == 90
         assert result["point_b_price"] == 110
@@ -130,7 +130,7 @@ class TestNormalLongN:
         self, mock_get_swings: MagicMock, mock_save: MagicMock,
     ) -> None:
         """TROUGH(90,T1) -> PEAK(110,T2) -> TROUGH(100,T3)
-        direction=LONG, C=100 < B=110 → LEG2"""
+        direction=LONG, 有效3点交替结构 → LEG3"""
         mock_get_swings.return_value = [
             make_swing("TROUGH", 90, T1),
             make_swing("PEAK", 110, T2),
@@ -138,7 +138,7 @@ class TestNormalLongN:
         ]
         result = detect_and_save("RB", "rb2510", "1w", _test_db)
         assert result["direction"] == "LONG"
-        assert result["state"] == NState.LEG2.value  # C=100 < B=110
+        assert result["state"] == NState.LEG3.value  # 有效3点交替结构→LEG3
 
 
 # ═══════════════════════════════════════════════════════
@@ -149,11 +149,11 @@ class TestNormalShortN:
 
     @patch("futures.n_structure._save_n_structure")
     @patch("futures.n_structure._get_swing_points")
-    def test_normal_short_leg2(
+    def test_normal_short_leg3_mid(
         self, mock_get_swings: MagicMock, mock_save: MagicMock,
     ) -> None:
         """PEAK(110,T1) -> TROUGH(90,T2) -> PEAK(105,T3)
-        direction=SHORT, C=105 > B=90 → LEG2"""
+        direction=SHORT, C=105<A=110形成有效V型 → LEG3"""
         mock_get_swings.return_value = [
             make_swing("PEAK", 110, T1),
             make_swing("TROUGH", 90, T2),
@@ -161,7 +161,7 @@ class TestNormalShortN:
         ]
         result = detect_and_save("RB", "rb2510", "1w", _test_db)
         assert result["direction"] == "SHORT"
-        assert result["state"] == NState.LEG2.value
+        assert result["state"] == NState.LEG3.value
         assert result["is_active"] is True
 
     @patch("futures.n_structure._save_n_structure")
@@ -170,7 +170,7 @@ class TestNormalShortN:
         self, mock_get_swings: MagicMock, mock_save: MagicMock,
     ) -> None:
         """PEAK(110,T1) -> TROUGH(90,T2) -> PEAK(85,T3)
-        direction=SHORT, C=85 < B=90 → LEG3"""
+        direction=SHORT, 有效3点交替结构 → LEG3"""
         mock_get_swings.return_value = [
             make_swing("PEAK", 110, T1),
             make_swing("TROUGH", 90, T2),
@@ -378,7 +378,7 @@ class TestMergedExactlyThree:
         assert result["point_a_price"] == 90
         assert result["point_b_price"] == 110
         assert result["point_c_price"] == 100
-        assert result["state"] == NState.LEG2.value
+        assert result["state"] == NState.LEG3.value
 
     @patch("futures.n_structure._save_n_structure")
     @patch("futures.n_structure._get_swing_points")

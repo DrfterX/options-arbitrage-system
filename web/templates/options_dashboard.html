@@ -551,7 +551,7 @@
     <div id="stratContent">
       <table class="strat-table">
         <thead>
-          <tr><th>品种</th><th>类型</th><th>IV</th><th>Δ/Θ</th><th>盈亏比</th><th><span class="score-header">评分<span class="sort-indicator" style="color:var(--brand);font-size:.55rem;margin-left:1px">▼</span><span class="score-info-icon">i</span><span class="score-tooltip"><div class="score-tooltip-title">📊 unified_score 评分算法</div><div class="score-tooltip-item"><span class="st-label">Θ 时间衰减</span><span class="st-weight">25分</span><span class="st-desc">-Theta/标的价×150</span></div><div class="score-tooltip-item"><span class="st-label">V 波动率</span><span class="st-weight">20分</span><span class="st-desc">-Vega/标的价×150</span></div><div class="score-tooltip-item"><span class="st-label">胜率</span><span class="st-weight">20分</span><span class="st-desc">win_rate×20</span></div><div class="score-tooltip-item"><span class="st-label">盈利区间</span><span class="st-weight">10分</span><span class="st-desc">区间宽度/标的价×10</span></div><div class="score-tooltip-item"><span class="st-label">资本效率</span><span class="st-weight">15分</span><span class="st-desc">最大盈利/保证金×5</span></div><div class="score-tooltip-item"><span class="st-label">Delta 中性</span><span class="st-weight">10分</span><span class="st-desc">10×(1-|Δ|/0.10)</span></div><div class="score-tooltip-item"><span class="st-label">IV 奖励</span><span class="st-weight">0~10分</span><span class="st-desc">百分位≥90→10分</span></div><hr class="st-divider"><div class="score-tooltip-item"><span class="st-label">总分</span><span class="st-weight" style="color:var(--brand);font-weight:700">100</span><span class="st-desc">各维度之和封顶</span></div><div class="score-tooltip-note">评分在详情弹窗中可查看各维度明细分解</div></span></span></th><th>详情</th></tr>
+          <tr><th>品种</th><th>类型</th><th>IV</th><th>Δ/Θ</th><th>盈亏比</th><th><span class="score-header">评分<span class="sort-indicator" style="color:var(--brand);font-size:.55rem;margin-left:1px">▼</span><span class="score-info-icon">i</span><span class="score-tooltip"><div class="score-tooltip-title">📊 unified_score 评分算法</div><div class="score-tooltip-item"><span class="st-label">Θ 时间衰减</span><span class="st-weight">≤25分</span><span class="st-desc">min(-Theta/标的×100×150, 25)</span></div><div class="score-tooltip-item"><span class="st-label">V 波动率(做空)</span><span class="st-weight">≤20分</span><span class="st-desc">min(-Vega/标的×100×150, 20)</span></div><div class="score-tooltip-item"><span class="st-label">胜率</span><span class="st-weight">≤20分</span><span class="st-desc">min(win_rate×20, 20)</span></div><div class="score-tooltip-item"><span class="st-label">盈利区间</span><span class="st-weight">≤10分</span><span class="st-desc">min(区间宽/标的×100×10, 10)</span></div><div class="score-tooltip-item"><span class="st-label">资本效率</span><span class="st-weight">≤15分</span><span class="st-desc">min(最大盈利/保证金×100×5, 15)</span></div><div class="score-tooltip-item"><span class="st-label">Delta 中性</span><span class="st-weight">≤10分</span><span class="st-desc">max(0, 10×(1−|Δ|/0.10))</span></div><div class="score-tooltip-item"><span class="st-label">IV 奖励</span><span class="st-weight">0~10分</span><span class="st-desc">≥90→10 / ≥80→7 / ≥70→5 / ≥30→3 / &lt;30→0</span></div><hr class="st-divider"><div class="score-tooltip-item"><span class="st-label">总分</span><span class="st-weight" style="color:var(--brand);font-weight:700">100</span><span class="st-desc">各维度之和封顶 100</span></div><div class="score-tooltip-note">≥70 🟢 高评分 · ≥50 🟡 中等 · &lt;50 ⚪ 偏低<br>详情弹窗可查看各维度明细分解</div></span></span></th><th>详情</th></tr>
         </thead>
         <tbody id="stratBody">
           {% if options %}
@@ -718,7 +718,7 @@ var IV_DATA = JSON.parse('{{ iv_json|safe }}');
   var chart = echarts.init(el, null, { renderer: 'canvas' });
   chart.setOption({
     backgroundColor: 'transparent',
-    grid: { top: 20, right: 20, bottom: 80, left: 45 },
+    grid: { top: 20, right: 20, bottom: 110, left: 45 },
     xAxis: {
       type: 'category',
       data: IV_DATA.map(function(d){ return (d.symbol||'').toUpperCase(); }),
@@ -731,10 +731,7 @@ var IV_DATA = JSON.parse('{{ iv_json|safe }}');
           if (!d) return val;
           var sym = (d.symbol || '').toUpperCase();
           var cname = (d.name && d.name !== d.symbol) ? d.name : sym;
-          return '{cname|' + sym + ' ' + cname + '}';
-        },
-        rich: {
-          cname: { color: '#8b92a5', fontSize: 8, lineHeight: 12, align: 'center' },
+          return sym + '\n' + cname;
         },
       },
       axisLine: { lineStyle: { color: 'rgba(26,32,64,.5)' } },
@@ -1099,7 +1096,7 @@ function renderOptionsSignals(signals) {
     tbody.innerHTML = '<tr><td colspan="7" class="strat-empty">暂无期权策略信号</td></tr>';
     return;
   }
-  // Sort by score descending, take top 20 — use direct index (not indexOf) for data-idx reliability
+  // Sort by score descending, take top 20 — use signals.indexOf to get original array index for data-idx
   var sorted = signals.slice().sort(function(a,b){ return (b.unified_score||0) - (a.unified_score||0); }).slice(0, 20);
   var theadHtml = '';
   sorted.forEach(function(s, idx) {
@@ -1124,11 +1121,10 @@ function renderOptionsSignals(signals) {
       + '<td class="strat-greeks">Δ:' + (s.net_delta != null ? s.net_delta.toFixed(2) : '0.00') + '<br>Θ:' + (s.net_theta != null ? s.net_theta.toFixed(2) : '0.00') + '</td>'
       + '<td><span class="strat-pnl-pos">+' + (s.max_profit != null ? s.max_profit.toFixed(0) : '0') + '</span> / <span class="strat-pnl-neg">' + (s.max_loss != null ? s.max_loss.toFixed(0) : '0') + '</span></td>'
       + '<td><span class="strat-strength" style="color:' + scoreClr + '">' + score.toFixed(1) + '</span></td>'
-      + '<td class="strat-detail-link" onclick="showStratDetailFromData(this)" data-idx="' + idx + '"><span>📋</span></td>'
+      + '<td class="strat-detail-link" onclick="showStratDetailFromData(this)" data-idx="' + signals.indexOf(s) + '"><span>📋</span></td>'
       + '</tr>';
   });
   tbody.innerHTML = theadHtml;
-  window._signalsData = sorted;
   var badge = document.getElementById('strat-badge');
   if (badge) badge.textContent = signals.length + ' 个策略';
   var countBadge = document.getElementById('optionCount');
@@ -1258,7 +1254,7 @@ function showStratDetailFromData(el) {
   popup.style.top = top + 'px';
   popup.classList.add('show');
 }
-// ── 5min strategy table refresh: show skeleton while loading ──
+// ── 5min refresh: keep table visible (preserve click handlers), show skeleton only on cards ──
 var _prevSignalsData = null;
 setInterval(function() {
   if (document.hidden) return;
@@ -1267,15 +1263,16 @@ setInterval(function() {
   var tbody = document.getElementById('stratBody');
   var cards = document.getElementById('optionsCards');
   if (!tbody || !cards) return;
-  // Save current data before replacing with skeleton
+  // Save current data before replacing cards with skeleton
   _prevSignalsData = window._signalsData || null;
   stratPanel.classList.add('is-loading');
   cardPanel.classList.add('is-loading');
-  tbody.innerHTML = createStratSkeleton(8);
+  // Keep table rows visible (with click handlers intact), only skeleton-ize cards
   cards.innerHTML = createCardSkeleton(6);
   fetch('/api/signals/options?limit=20', { cache: 'no-cache' })
     .then(function(r) { return r.json(); })
     .then(function(d) {
+      window._signalsData = d;
       renderOptionsSignals(d);
       stratPanel.classList.remove('is-loading');
       cardPanel.classList.remove('is-loading');

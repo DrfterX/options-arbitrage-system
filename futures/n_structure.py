@@ -4,8 +4,8 @@ N型结构检测引擎 + 15分钟突破检测。
 状态机: IDLE → LEG1 → LEG2 → LEG3 → COMPLETED
 
 N型定义：
-  正N型(LONG): A < B < C 上升结构
-  倒N型(SHORT): A > B > C 下降结构
+  正N型(LONG): A=TROUGH, B=PEAK, C=TROUGH（上升V型）
+  倒N型(SHORT): A=PEAK, B=TROUGH, C=PEAK（下降V型）
 
 A=起点, B=折返点, C=当前端点。
 每个LEG由两个极值点构成：
@@ -237,17 +237,11 @@ def detect_and_save(
     pa, pb, pc = best[0], best[1], best[2]
     direction = _determine_direction(pa["price"], pb["price"])
 
-    # 状态判定
-    if direction == "LONG":
-        if pc["price"] >= pb["price"]:
-            state = NState.LEG3.value
-        else:
-            state = NState.LEG2.value
-    else:  # SHORT
-        if pc["price"] <= pb["price"]:
-            state = NState.LEG3.value
-        else:
-            state = NState.LEG2.value
+    # 状态判定 — 已有有效3点交替结构（通过前方类型+价格筛选）→ LEG3
+    # LEG3 = C点确认（同向极值，第三段运行中）
+    # 注意：LONG=C=TROUGH, SHORT=C=PEAK；当前LEG3条件无需比较C与B
+    # （V型结构的C天然小于/大于B，比较无意义）
+    state = NState.LEG3.value
 
     # COMPLETED 判定
     a_idx = next(
@@ -409,19 +403,8 @@ def dynamic_restructure(
     # 4d. 方向重算
     new_direction = _determine_direction(new_a_price, new_b["price"])
 
-    # 4e. 状态重判
-    if new_direction == "LONG":
-        state = (
-            NState.LEG3.value
-            if new_c["price"] >= new_b["price"]
-            else NState.LEG2.value
-        )
-    else:
-        state = (
-            NState.LEG3.value
-            if new_c["price"] <= new_b["price"]
-            else NState.LEG2.value
-        )
+    # 4e. 状态重判 — 迁移后的3点交替结构已有效，直接LEG3
+    state = NState.LEG3.value
 
     # 5. 构建迁移后结构
     migrated = {
