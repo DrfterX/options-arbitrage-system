@@ -81,12 +81,36 @@
   0% { opacity: 0; transform: translateY(2px); }
   100% { opacity: 1; transform: translateY(0); }
 }
+/* Skeleton shimmer animation — must match skeleton class usage */
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
 
 @media (max-width: 1024px) {
   .health-grid { grid-template-columns: repeat(3, 1fr); }
 }
 @media (max-width: 640px) {
   .health-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ── K-line popup skeleton + error ── */
+.kp-chart-wrap { position: relative; }
+.kp-error {
+  text-align: center;
+  font-size: .68rem;
+  color: var(--long);
+  padding: 4px 0 0;
+  font-weight: 500;
+}
+.skeleton-chart {
+  background: linear-gradient(90deg,
+    rgba(79, 91, 128, 0.06) 25%,
+    rgba(79, 91, 128, 0.16) 50%,
+    rgba(79, 91, 128, 0.06) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+  border-radius: 3px;
 }
 
 </style>
@@ -322,30 +346,44 @@
   <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
     <span class="kp-dir" id="kpDir"></span><span class="kp-state" id="kpState"></span>
   </div>
-  <div class="kp-chart-wrap"><canvas id="kpCanvas" height="160"></canvas></div>
-  <div class="kp-info"><span id="kpPrice"></span><span id="kpTime"></span></div>
+  <div class="kp-chart-wrap">
+    <div class="skeleton-chart" id="kpSkeleton" style="position:absolute;top:0;left:0;width:100%;height:100%;z-index:1;display:none"></div>
+    <canvas id="kpCanvas" height="160"></canvas>
+  </div>
+  <div class="kp-info"><span id="kpPrice"></span><span id="kpTime" style="flex:1;text-align:right"></span></div>
+  <div id="kpError" class="kp-error" style="display:none">⚠️ 加载失败</div>
 </div>
 
 <script>
 // ── SKELETON LOADING: matrix table placeholder ──
-function createMatrixSkeleton(n) {
+function createMatrixSkeleton(n, hasSectors) {
   // Build skeleton rows that mirror the real 6-column matrix structure
   // symbol | 15m | 1h | 1d | 1w | resonance
   var html = '';
-  var symbolNames = ['Loading…', '加载中…', '⟳ 更新中', '⟳ 刷新', '…'];
+  var symbolNames = ['品种', '加载中…', '⟳ 刷新', '更新中', '…'];
+  var sectorNames = ['▸ 贵金属', '▸ 有色', '▸ 黑色', '▸ 能源', '▸ 化工', '▸ 农产品'];
+  var secIdx = 0;
   for (var i = 0; i < n; i++) {
+    // Insert sector separator every 4-5 rows (mimics real data grouping)
+    if (hasSectors !== false && i > 0 && i % 5 === 0 && secIdx < sectorNames.length) {
+      html += '<tr class="sector-row" style="animation:skeleton-fade-in 0.35s ease-out both;animation-delay:' + (i * 0.08).toFixed(2) + 's"><td colspan="6" class="sector-label skeleton" style="height:18px;display:flex;align-items:center;background:transparent">' + sectorNames[secIdx] + '</td></tr>';
+      secIdx++;
+    }
     var delay = (i * 0.08).toFixed(2);
     var nameLabel = symbolNames[i % symbolNames.length];
     html += '<tr style="animation:skeleton-fade-in 0.35s ease-out both;animation-delay:' + delay + 's">';
-    // Symbol column
-    html += '<td class="sym-name"><span class="skeleton" style="width:' + (60 + (i % 3) * 10) + 'px;height:0.9em;animation-delay:' + delay + 's">' + nameLabel + '</span></td>';
-    // 4 timeframe signal cells — square skeleton blocks
+    // Symbol column — varying widths for realism
+    var symWidth = [55, 75, 65, 85, 60, 70][i % 6];
+    html += '<td class="sym-name"><span class="skeleton" style="width:' + symWidth + 'px;height:0.9em;animation-delay:' + delay + 's">' + nameLabel + '</span></td>';
+    // 4 timeframe signal cells — square skeleton blocks with varied opacity
     for (var j = 0; j < 4; j++) {
-      var cellDelay = (delay - 0 + j * 0.04).toFixed(2);
-      html += '<td><div class="skeleton" style="width:28px;height:28px;border-radius:4px;margin:0 auto;animation-delay:' + cellDelay + 's">&nbsp;</div></td>';
+      var cellDelay = (parseFloat(delay) + j * 0.04).toFixed(2);
+      var cellAlpha = 0.4 + (i % 3) * 0.15; // varied opacity simulates signal strength
+      html += '<td><div class="skeleton" style="width:28px;height:28px;border-radius:4px;margin:0 auto;animation-delay:' + cellDelay + 's;opacity:' + cellAlpha.toFixed(2) + '">&nbsp;</div></td>';
     }
-    // Resonance column
-    html += '<td class="res-cell"><span class="skeleton" style="width:' + (30 + (i % 3) * 10) + 'px;height:0.7em;animation-delay:' + delay + 's">&nbsp;</span></td>';
+    // Resonance column — varied width simulates different resonance values
+    var resWidth = [25, 40, 55, 70, 30, 50][i % 6];
+    html += '<td class="res-cell"><span class="skeleton" style="width:' + resWidth + 'px;height:0.7em;animation-delay:' + delay + 's">&nbsp;</span></td>';
     html += '</tr>';
   }
   return html;
@@ -376,9 +414,13 @@ if (AUTO_REFRESH) {
     var tbody = document.querySelector('.matrix-table tbody');
     if (!tbody || !mxSection) return;
 
+    // Dynamic skeleton count: use current signal rows (minus sector headers)
+    var currentRows = document.querySelectorAll('.matrix-table tbody tr:not(.sector-row):not(.skeleton-sensor)').length;
+    var skeletonCount = Math.max(currentRows || 15, 8);
+
     // Show skeleton while fetching
     mxSection.classList.add('is-loading');
-    tbody.innerHTML = createMatrixSkeleton(8);
+    tbody.innerHTML = createMatrixSkeleton(skeletonCount, true);
 
     fetch('/api/matrix', { cache: 'no-cache' })
       .then(function(r) { return r.json(); })
@@ -449,7 +491,11 @@ if (AUTO_REFRESH) {
       })
       .catch(function(e) {
         mxSection.classList.remove('is-loading');
-        /* silent */
+        // Show error skeleton instead of blank
+        var tbody2 = document.querySelector('.matrix-table tbody');
+        if (tbody2 && tbody2.children.length <= 2) {
+          tbody2.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--long)"><span style="font-size:1rem">⚠️</span><br><span style="font-size:.68rem;color:var(--text3)">数据加载失败，5分钟后自动重试</span></td></tr>';
+        }
       });
   }, 300000); // 5 minutes
 }
@@ -691,14 +737,19 @@ async function showKlinePopup(el) {
     if (top < 10) top = 10; if (left < 10) left = 10;
     popup.style.left = left + 'px'; popup.style.top = top + 'px';
     popup.style.bottom = 'auto'; popup.style.transform = 'none';
+    // Show skeleton loading state inside popup
+    var skel = document.getElementById('kpSkeleton');
+    var errEl = document.getElementById('kpError');
+    if (skel) skel.style.display = 'block';
+    if (errEl) errEl.style.display = 'none';
+    document.getElementById('kpTime').textContent = '加载中…';
+    document.getElementById('kpPrice').textContent = '';
     try {
         document.getElementById('kpTitle').textContent = sym;
         document.getElementById('kpTF').textContent = tf;
         var dirEl = document.getElementById('kpDir');
         dirEl.textContent = dir === 'LONG' ? '做多' : '做空';
         dirEl.className = 'kp-dir ' + (dir === 'LONG' ? 'long' : 'short');
-        document.getElementById('kpPrice').textContent = '';
-        document.getElementById('kpTime').textContent = '加载中…';
         popup.classList.add('show');
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         var resp = await fetch('/api/klines?symbol=' + sym + '&timeframe=' + tf);
@@ -706,14 +757,21 @@ async function showKlinePopup(el) {
         var data = await resp.json();
         if (!data.bars || !data.bars.length) {
             document.getElementById('kpTime').textContent = '暂无K线数据';
+            if (skel) skel.style.display = 'none';
             return;
         }
+        if (skel) skel.style.display = 'none';
         document.getElementById('kpPrice').textContent = a && b && c_val ? 'A:'+parseFloat(a).toFixed(2)+' B:'+parseFloat(b).toFixed(2)+' C:'+parseFloat(c_val).toFixed(2) : '';
         document.getElementById('kpTime').textContent = data.bars.length + '根K线 | 最新:' + data.bars[data.bars.length-1].c;
         requestAnimationFrame(function() { drawKline(data.bars, parseFloat(a), parseFloat(b), parseFloat(c_val), dir); });
     } catch(err) {
         console.error('Kline popup error:', err);
-        document.getElementById('kpTime').textContent = '⚠️ 加载失败';
+        if (skel) skel.style.display = 'none';
+        if (errEl) {
+          errEl.style.display = 'block';
+          errEl.textContent = '⚠️ ' + (err.message || '加载失败');
+        }
+        document.getElementById('kpTime').textContent = '⚠️ 请重试';
     }
 }
 
