@@ -718,25 +718,23 @@ var IV_DATA = JSON.parse('{{ iv_json|safe }}');
   var chart = echarts.init(el, null, { renderer: 'canvas' });
   chart.setOption({
     backgroundColor: 'transparent',
-    grid: { top: 20, right: 20, bottom: 160, left: 45 },
+    grid: { top: 20, right: 20, bottom: 80, left: 45 },
     xAxis: {
       type: 'category',
       data: IV_DATA.map(function(d){ return (d.symbol||'').toUpperCase(); }),
       axisLabel: {
-        color: '#8b92a5', fontSize: 9, interval: 0, rotate: 30,
-        lineHeight: 14,
-        // 格式: "AG 白银" (上) / "ag2607" (下)
+        color: '#8b92a5', fontSize: 9, interval: 0, rotate: 45,
+        lineHeight: 14, margin: 4,
+        // 格式: "AG 白银" — 合约名在 tooltip 中显示，x 轴不重复展示
         formatter: function(val, idx) {
           var d = IV_DATA[idx];
           if (!d) return val;
           var sym = (d.symbol || '').toUpperCase();
           var cname = (d.name && d.name !== d.symbol) ? d.name : sym;
-          var contract = (d.contract || '');
-          return '{cname|' + sym + ' ' + cname + '}\n{detail|' + contract + '}';
+          return '{cname|' + sym + ' ' + cname + '}';
         },
         rich: {
           cname: { color: '#8b92a5', fontSize: 8, lineHeight: 12, align: 'center' },
-          detail: { color: '#6b7280', fontSize: 7, lineHeight: 10, align: 'center' },
         },
       },
       axisLine: { lineStyle: { color: 'rgba(26,32,64,.5)' } },
