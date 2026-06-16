@@ -445,8 +445,9 @@ var IV_DATA = JSON.parse('{{ iv_json|safe }}');
     var chart = echarts.init(el);
     chart.setOption({
         backgroundColor:'transparent',
-        grid:{top:20,right:20,bottom:50,left:45},
-        xAxis:{type:'category',data:IV_DATA.map(function(d){return d.symbol + ' ' + (d.name || '')}),axisLabel:{color:'#8b92a5',fontSize:9,interval:2,rotate:45}},
+        grid:{top:20,right:20,bottom:100,left:45},
+        xAxis:{type:'category',data:IV_DATA.map(function(d){return d.symbol + ' ' + (d.name || '')}),axisLabel:{color:'#8b92a5',fontSize:9,interval:2,rotate:45,
+          formatter:function(val,idx){var d=IV_DATA[idx];if(!d)return val;var cname=(d.name&&d.name!==d.symbol)?d.name:(d.symbol||'').toUpperCase();return cname;}}},
         yAxis:{type:'value',max:100,axisLabel:{color:'#5a6173',fontSize:10},splitLine:{lineStyle:{color:'rgba(90,97,115,0.08)'}}},
         series:[{type:'bar',data:IV_DATA.map(function(d){return {value:d.percentile,itemStyle:{color:d.level==='极端高'?'#f04438':d.level==='偏高'?'#f0b429':d.level==='偏低'?'#0ea5e9':d.level==='极端低'?'#3b82f6':d.level==='数据不足'?'#5a6173':'#5a6173'}}})}]
     });
