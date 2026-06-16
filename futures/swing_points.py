@@ -207,18 +207,22 @@ def incremental_update(
         return 0
 
     existing_set: set = set()
+    existing_prices: Dict[str, float] = {}
     for ep in existing:
-        existing_set.add((ep["timestamp"], ep["point_type"]))
+        key = (ep["timestamp"], ep["point_type"])
+        existing_set.add(key)
+        existing_prices[key] = ep["price"]
 
     to_save: List[Dict[str, Any]] = []
     for np in new_points:
         key = (np["timestamp"], np["point_type"])
-        if key not in existing_set:
+        if key not in existing_set or np["price"] != existing_prices.get(key):
             np["symbol"] = symbol
             np["contract"] = contract
             np["timeframe"] = timeframe
             to_save.append(np)
             existing_set.add(key)
+            existing_prices[key] = np["price"]
 
     if to_save:
         _save_swing_points(db, to_save)
