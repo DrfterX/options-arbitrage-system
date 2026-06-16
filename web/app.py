@@ -848,5 +848,61 @@ def api_backtest():
     return jsonify(printable)
 
 
+# ─── Stripe 付费订阅 API ─────────────────────────────────────
+
+
+@app.route("/api/create-checkout-session", methods=["POST"])
+def api_create_checkout_session():
+    """创建 Stripe Checkout Session 并返回支付链接。"""
+    import os
+    from web.stripe_handler import create_checkout_session, ensure_premium_table
+
+    data = request.get_json() or {}
+    email = data.get("email", "")
+
+    ensure_premium_table(db)
+
+    base_url = os.environ.get(
+        "SIGNALS_BASE_URL",
+        "https://signals.drifter.indevs.in",
+    )
+
+    result = create_checkout_session(db, email=email, base_url=base_url)
+    if "error" in result:
+        return jsonify(result), 500
+    return jsonify(result)
+
+
+@app.route("/api/stripe-webhook", methods=["POST"])
+def api_stripe_webhook():
+    """处理 Stripe Webhook（支付成功通知）。"""
+    from web.stripe_handler import handle_webhook
+
+    payload = request.get_data()
+    sig_header = request.headers.get("stripe-signature", "")
+
+    result = handle_webhook(db, payload, sig_header)
+    if "error" in result:
+        return jsonify(result), 400
+    return jsonify(result)
+
+
+@app.route("/api/premium/status")
+def api_premium_status():
+    """查询付费订阅状态。
+
+    Query params:
+        session_id (str): Stripe Checkout Session ID。
+        email (str): 用户邮箱（备选）。
+    """
+    from web.stripe_handler import check_premium_status
+
+    session_id = request.args.get("session_id", "")
+    email = request.args.get("email", "")
+
+    result = check_premium_status(db, session_id=session_id, email=email)
+    return jsonify(result)
+
+
 if __name__ == "__main__":
     app.run(host="127.0.0.1", port=5100, debug=False)

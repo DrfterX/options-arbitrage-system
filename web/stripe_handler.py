@@ -1,0 +1,300 @@
+"""
+Stripe 付费订阅集成模块 — Signals Premium $19/月。
+
+提供:
+  - create_checkout_session() — 创建 Stripe Checkout Session
+  - handle_webhook() — 验证并处理 Stripe webhook 事件
+  - check_premium_status() — 查询订阅状态
+  - ensure_premium_table() — 建表 premium_subscriptions
+
+环境变量:
+  - STRIPE_SECRET_KEY: Stripe Secret Key (sk_test_xxx / sk_live_xxx)
+  - STRIPE_WEBHOOK_SECRET: Stripe Webhook Signing Secret (whsec_xxx)
+  - PREMIUM_PRICE_ID: Stripe Price ID for $19/mo subscription
+
+数据库表:
+  premium_subscriptions(
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id    TEXT NOT NULL UNIQUE,     -- Stripe Checkout Session ID
+    customer_id   TEXT DEFAULT '',          -- Stripe Customer ID (cus_xxx)
+    email         TEXT DEFAULT '',          -- 用户邮箱
+    status        TEXT NOT NULL DEFAULT 'active',  -- active / expired / cancelled
+    token         TEXT DEFAULT '',          -- Bearer Token (Step 2 使用)
+    created_at    TEXT DEFAULT (datetime('now','localtime')),
+    expires_at    TEXT DEFAULT ''           -- 过期时间
+  )
+"""
+
+import logging
+import os
+from typing import Optional
+
+import stripe
+from stripe._webhook import Webhook
+
+logger = logging.getLogger(__name__)
+
+# ─── Stripe 配置（全局 API Key） ───────────────────────────────
+
+_configured: bool = False
+
+
+def _ensure_configured() -> None:
+    """确保 stripe.api_key 已配置（首次调用时从环境变量读取）。"""
+    global _configured
+    if not _configured:
+        key = os.environ.get("STRIPE_SECRET_KEY", "")
+        if not key:
+            logger.warning("STRIPE_SECRET_KEY 未设置，Stripe 调用将失败")
+        else:
+            stripe.api_key = key
+        _configured = True
+
+
+# ─── 配置 ──────────────────────────────────────────────────────
+
+def get_price_id() -> str:
+    """获取 Premium 订阅 Price ID。"""
+    return os.environ.get("PREMIUM_PRICE_ID", "price_premium_monthly")
+
+
+def get_webhook_secret() -> str:
+    """获取 Stripe Webhook Secret。"""
+    return os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+
+
+# ─── 数据库 ────────────────────────────────────────────────────
+
+
+PREMIUM_TABLE_DDL = """
+    CREATE TABLE IF NOT EXISTS premium_subscriptions (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id    TEXT NOT NULL UNIQUE,
+        customer_id   TEXT DEFAULT '',
+        email         TEXT DEFAULT '',
+        status        TEXT NOT NULL DEFAULT 'active',
+        token         TEXT DEFAULT '',
+        created_at    TEXT DEFAULT (datetime('now','localtime')),
+        expires_at    TEXT DEFAULT ''
+    )
+"""
+
+
+def ensure_premium_table(db) -> None:
+    """创建 premium_subscriptions 表（如不存在）。"""
+    conn = db.get_conn()
+    conn.execute(PREMIUM_TABLE_DDL)
+    conn.commit()
+
+
+# ─── Checkout Session ──────────────────────────────────────────
+
+STARTER_PRICE = 1900  # $19.00 in cents
+
+
+def create_checkout_session(
+    db,
+    email: str = "",
+    base_url: str = "https://signals.drifter.indevs.in",
+) -> dict:
+    """创建 Stripe Checkout Session（$19/月订阅）。
+
+    Args:
+        db: Database 实例。
+        email: 用户邮箱（可选）。
+        base_url: 成功/取消回调 URL 的 base。
+
+    Returns:
+        dict: {"url": "checkout.stripe.com/..."} 或 {"error": "..."}
+    """
+    _ensure_configured()
+
+    try:
+        session = stripe.checkout.Session.create(
+            mode="subscription",
+            customer_email=email or None,
+            line_items=[{
+                "price": get_price_id(),
+                "quantity": 1,
+            }],
+            success_url=f"{base_url}/premium/success?session_id={{CHECKOUT_SESSION_ID}}",
+            cancel_url=f"{base_url}/?canceled=1",
+            metadata={
+                "source": "signals_premium",
+            },
+            subscription_data={
+                "metadata": {"source": "signals_premium"},
+            },
+        )
+
+        logger.info("Stripe Checkout Session 创建: %s (email=%s)", session.id, email)
+        return {"url": session.url}
+
+    except stripe.StripeError as e:
+        logger.error("Stripe Checkout Session 创建失败: %s", e)
+        return {"error": str(e)}
+
+
+# ─── Webhook ───────────────────────────────────────────────────
+
+def handle_webhook(db, payload: bytes, sig_header: str) -> dict:
+    """验证并处理 Stripe Webhook 事件。
+
+    Args:
+        db: Database 实例。
+        payload: 原始请求体（bytes，未解析）。
+        sig_header: ``stripe-signature`` 请求头的值。
+
+    Returns:
+        dict: {"received": True} 表示成功处理。
+        若验证失败返回 {"error": "..."}，HTTP 调用方应返回 400。
+    """
+    secret = get_webhook_secret()
+    if not secret:
+        logger.warning("STRIPE_WEBHOOK_SECRET 未设置，跳过 webhook 验证")
+        return {"error": "webhook secret not configured"}
+
+    _ensure_configured()
+
+    try:
+        event = Webhook.construct_event(payload, sig_header, secret)
+    except (stripe.StripeError, ValueError) as e:
+        logger.error("Webhook 签名验证失败: %s", e)
+        return {"error": f"signature verification failed: {e}"}
+
+    event_type = event.get("type", "")
+    logger.info("Webhook 收到事件: %s", event_type)
+
+    if event_type == "checkout.session.completed":
+        _handle_checkout_completed(db, event["data"]["object"])
+    elif event_type == "customer.subscription.updated":
+        _handle_subscription_updated(db, event["data"]["object"])
+    elif event_type == "customer.subscription.deleted":
+        _handle_subscription_deleted(db, event["data"]["object"])
+    else:
+        logger.info("忽略未处理的事件类型: %s", event_type)
+
+    return {"received": True}
+
+
+def _handle_checkout_completed(db, session: dict) -> None:
+    """处理 checkout.session.completed 事件——记录支付成功。"""
+    session_id = session.get("id", "")
+    customer_id = session.get("customer", "") or ""
+    email = session.get("customer_details", {}).get("email", "") or ""
+    status = session.get("status", "complete")
+
+    ensure_premium_table(db)
+    conn = db.get_conn()
+
+    try:
+        conn.execute(
+            """INSERT OR IGNORE INTO premium_subscriptions
+               (session_id, customer_id, email, status)
+               VALUES (?, ?, ?, ?)""",
+            (session_id, customer_id, email, "active" if status == "complete" else status),
+        )
+        conn.commit()
+        logger.info("订阅记录已写入: session=%s email=%s", session_id, email)
+    except Exception as e:
+        logger.error("写入订阅记录失败: %s", e)
+
+
+def _handle_subscription_updated(db, subscription: dict) -> None:
+    """处理 customer.subscription.updated——更新订阅状态。"""
+    status = subscription.get("status", "")
+    if status == "past_due":
+        _update_subscription_status(db, subscription.get("id", ""), "past_due")
+    elif status == "active":
+        _update_subscription_status(db, subscription.get("id", ""), "active")
+    logger.info("订阅已更新: id=%s status=%s", subscription.get("id", ""), status)
+
+
+def _handle_subscription_deleted(db, subscription: dict) -> None:
+    """处理 customer.subscription.deleted——标记订阅过期。"""
+    _update_subscription_status(db, subscription.get("id", ""), "expired")
+    logger.info("订阅已删除: id=%s", subscription.get("id", ""))
+
+
+def _update_subscription_status(db, subscription_id: str, status: str) -> None:
+    """更新订阅状态（通过 customer_id 关联）。"""
+    conn = db.get_conn()
+    conn.execute(
+        "UPDATE premium_subscriptions SET status=? WHERE customer_id=?",
+        (status, subscription_id),
+    )
+    conn.commit()
+
+
+# ─── 状态查询 ──────────────────────────────────────────────────
+
+
+def check_premium_status(db, session_id: str = "", email: str = "") -> dict:
+    """查询订阅状态。
+
+    Args:
+        db: Database 实例。
+        session_id: Stripe Checkout Session ID（优先）。
+        email: 用户邮箱（备选）。
+
+    Returns:
+        dict: {
+            "premium": bool,
+            "session_id": str,
+            "email": str,
+            "status": str,
+            "created_at": str or None,
+        }
+    """
+    ensure_premium_table(db)
+    conn = db.get_conn()
+
+    try:
+        if session_id:
+            row = conn.execute(
+                "SELECT * FROM premium_subscriptions WHERE session_id=?",
+                (session_id,),
+            ).fetchone()
+        elif email:
+            row = conn.execute(
+                "SELECT * FROM premium_subscriptions WHERE email=? ORDER BY id DESC LIMIT 1",
+                (email,),
+            ).fetchone()
+        else:
+            return {"premium": False, "error": "session_id 或 email 至少提供一个"}
+
+        if row and row["status"] == "active":
+            return {
+                "premium": True,
+                "session_id": row["session_id"],
+                "email": row["email"],
+                "status": row["status"],
+                "created_at": row["created_at"],
+            }
+
+        return {
+            "premium": False,
+            "session_id": session_id if row else "",
+            "email": row["email"] if row else "",
+            "status": row["status"] if row else "none",
+            "created_at": row["created_at"] if row else None,
+        }
+    except Exception as e:
+        logger.error("查询订阅状态失败: %s", e)
+        return {"premium": False, "error": str(e)}
+
+
+# ─── 直接验证（供 Step 2 鉴权装饰器调用） ──────────────────────
+
+
+def verify_token(db, token: str) -> bool:
+    """验证 Bearer Token 是否有效（预留，Step 2 实现）。"""
+    if not token:
+        return False
+    ensure_premium_table(db)
+    conn = db.get_conn()
+    row = conn.execute(
+        "SELECT id FROM premium_subscriptions WHERE token=? AND status='active'",
+        (token,),
+    ).fetchone()
+    return row is not None

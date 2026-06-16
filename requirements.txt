@@ -17,5 +17,8 @@ flask>=3.0.0
 # 测试
 pytest>=8.0.0
 
+# 支付（Signals Premium 付费订阅）
+stripe>=11.0.0
+
 # 时区（Windows 需额外安装）
 tzdata; platform_system == "Windows"
