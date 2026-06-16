@@ -215,6 +215,92 @@
   font-size: .72rem;
 }
 
+/* ── Score tooltip ── */
+.score-header {
+  cursor: help;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  position: relative;
+}
+.score-header .score-info-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 13px; height: 13px;
+  border-radius: 50%;
+  background: rgba(90,97,115,.25);
+  color: var(--text2);
+  font-size: .5rem;
+  font-weight: 700;
+  line-height: 1;
+  font-style: italic;
+  font-family: serif;
+  transition: background .15s;
+}
+.score-header:hover .score-info-icon {
+  background: var(--brand-bg);
+  color: var(--brand);
+}
+.score-tooltip {
+  display: none;
+  position: absolute;
+  z-index: 999;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 260px;
+  max-width: 300px;
+  background: rgba(12,15,26,.96);
+  border: 1px solid rgba(90,97,115,.3);
+  border-radius: 8px;
+  padding: 10px 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.5);
+  backdrop-filter: blur(12px);
+  font-size: .6rem;
+  line-height: 1.5;
+  color: var(--text2);
+  white-space: normal;
+  text-transform: none;
+  letter-spacing: .01em;
+}
+.score-header:hover .score-tooltip {
+  display: block;
+  animation: tooltipIn .15s var(--ease-out);
+}
+@keyframes tooltipIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(4px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+.score-tooltip-title {
+  font-size: .7rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(90,97,115,.15);
+}
+.score-tooltip-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 1px 0;
+}
+.score-tooltip-item .st-label { color: var(--text3); }
+.score-tooltip-item .st-weight { color: var(--brand); font-family: var(--font-mono); }
+.score-tooltip-item .st-desc { color: var(--text2); font-family: var(--font-mono); }
+.score-tooltip-note {
+  margin-top: 5px;
+  padding-top: 4px;
+  border-top: 1px solid rgba(90,97,115,.15);
+  color: var(--text3);
+  font-size: .55rem;
+}
+.score-tooltip .st-divider {
+  border: none;
+  border-top: 1px solid rgba(90,97,115,.12);
+  margin: 3px 0;
+}
+
 /* Option Cards — right column */
 .options-cards {
   display: flex;
@@ -384,6 +470,27 @@
   0% { opacity: 0; transform: translateY(2px); }
   100% { opacity: 1; transform: translateY(0); }
 }
+
+/* ── Filter section skeleton loading ── */
+.filter-section .filter-stats { transition: opacity .25s var(--ease-out); }
+.filter-section .filter-log { transition: opacity .25s var(--ease-out); }
+.filter-section.is-loading .filter-stats,
+.filter-section.is-loading .filter-log { opacity: .4; pointer-events: none; }
+
+/* ── Health panel skeleton loading ── */
+.cards-section .health-grid { transition: opacity .25s var(--ease-out); }
+.cards-section .health-tables { transition: opacity .25s var(--ease-out); }
+.cards-section .health-issues { transition: opacity .25s var(--ease-out); }
+.cards-section.is-loading .health-grid,
+.cards-section.is-loading .health-tables { opacity: .4; pointer-events: none; }
+
+/* loading-dot in filter/cards sections */
+.filter-section.is-loading .loading-dot { display: inline-block; }
+.cards-section.is-loading .loading-dot { display: inline-block; }
+
+/* Stats bar loading state */
+.stats-bar.is-loading .stat-item .value:not(.skeleton) { opacity: .5; transition: opacity .25s var(--ease-out); }
+.stats-bar .stat-item .value { transition: opacity .25s var(--ease-out); }
 </style>
 </head>
 <body>
@@ -444,7 +551,7 @@
     <div id="stratContent">
       <table class="strat-table">
         <thead>
-          <tr><th>品种</th><th>类型</th><th>IV</th><th>Δ/Θ</th><th>盈亏比</th><th>评分</th><th>详情</th></tr>
+          <tr><th>品种</th><th>类型</th><th>IV</th><th>Δ/Θ</th><th>盈亏比</th><th><span class="score-header">评分<span class="sort-indicator" style="color:var(--brand);font-size:.55rem;margin-left:1px">▼</span><span class="score-info-icon">i</span><span class="score-tooltip"><div class="score-tooltip-title">📊 unified_score 评分算法</div><div class="score-tooltip-item"><span class="st-label">Θ 时间衰减</span><span class="st-weight">25分</span><span class="st-desc">-Theta/标的价×150</span></div><div class="score-tooltip-item"><span class="st-label">V 波动率</span><span class="st-weight">20分</span><span class="st-desc">-Vega/标的价×150</span></div><div class="score-tooltip-item"><span class="st-label">胜率</span><span class="st-weight">20分</span><span class="st-desc">win_rate×20</span></div><div class="score-tooltip-item"><span class="st-label">盈利区间</span><span class="st-weight">10分</span><span class="st-desc">区间宽度/标的价×10</span></div><div class="score-tooltip-item"><span class="st-label">资本效率</span><span class="st-weight">15分</span><span class="st-desc">最大盈利/保证金×5</span></div><div class="score-tooltip-item"><span class="st-label">Delta 中性</span><span class="st-weight">10分</span><span class="st-desc">10×(1-|Δ|/0.10)</span></div><div class="score-tooltip-item"><span class="st-label">IV 奖励</span><span class="st-weight">0~10分</span><span class="st-desc">百分位≥90→10分</span></div><hr class="st-divider"><div class="score-tooltip-item"><span class="st-label">总分</span><span class="st-weight" style="color:var(--brand);font-weight:700">100</span><span class="st-desc">各维度之和封顶</span></div><div class="score-tooltip-note">评分在详情弹窗中可查看各维度明细分解</div></span></span></th><th>详情</th></tr>
         </thead>
         <tbody id="stratBody">
           {% if options %}
@@ -456,7 +563,7 @@
             <td class="strat-greeks">Δ:{{ "%.2f"|format(s.net_delta or 0) }}<br>Θ:{{ "%.2f"|format(s.net_theta or 0) }}</td>
             <td><span class="strat-pnl-pos">+{{ "%.0f"|format(s.max_profit or 0) }}</span> / <span class="strat-pnl-neg">{{ "%.0f"|format(s.max_loss or 0) }}</span></td>
             <td><span class="strat-strength" style="color:{% if s.unified_score >= 70 %}var(--brand){% elif s.unified_score >= 50 %}#f0b429{% else %}var(--text3){% endif %}">{{ "%.1f"|format(s.unified_score or 0) }}</span></td>
-            <td><span class="strat-detail-link" onclick="showStratDetail(this)" data-detail='{{ s.strategy_details|safe }}'>📋</span></td>
+            <td><span class="strat-detail-link" onclick="showStratDetailFromData(this)" data-idx="{{ loop.index0 }}">📋</span></td>
           </tr>
           {% endfor %}
           {% else %}
@@ -503,8 +610,8 @@
 </div><!-- /.options-grid -->
 
 <!-- ─── SmartFilter ─── -->
-<div class="filter-section">
-  <h2>🛡️ SmartFilter 防火墙 <span class="badge" id="fs-status"><span class="skeleton" style="width:60px;height:.7em">&nbsp;</span></span></h2>
+<div class="filter-section" id="filterSection">
+  <h2>🛡️ SmartFilter 防火墙 <span class="badge" id="fs-status"><span class="skeleton" style="width:60px;height:.7em">&nbsp;</span></span><span class="loading-dot"></span></h2>
   <div class="filter-stats" id="filterStats">
     <div class="fs-card total"><div class="fs-label">评估</div><div class="fs-value" id="fs-total"><span class="skeleton" style="width:28px;height:1em">&nbsp;</span></div></div>
     <div class="fs-card pushed"><div class="fs-label">推送</div><div class="fs-value" id="fs-pushed"><span class="skeleton" style="width:28px;height:1em">&nbsp;</span></div></div>
@@ -525,7 +632,7 @@
 
 <!-- ─── HEALTH PANEL ─── -->
 <div class="cards-section" id="health-panel">
-  <h2>💚 系统健康 <span class="badge" id="health-badge"><span class="skeleton" style="width:60px;height:.7em">&nbsp;</span></span></h2>
+  <h2>💚 系统健康 <span class="badge" id="health-badge"><span class="skeleton" style="width:60px;height:.7em">&nbsp;</span></span><span class="loading-dot"></span></h2>
   <div class="health-grid" id="healthGrid">
     <div class="health-card status">
       <div class="h-label">状态</div>
@@ -576,6 +683,8 @@
 
 <script>
 // ── Auto refresh: 30s poll + 5min full reload ──
+// ── Initialize signals data for detail popup ──
+window._signalsData = {{ options|tojson|safe }};
 var AUTO_REFRESH = true;
 if (AUTO_REFRESH) {
   setInterval(function() {
@@ -604,11 +713,18 @@ var IV_DATA = JSON.parse('{{ iv_json|safe }}');
   var chart = echarts.init(el, null, { renderer: 'canvas' });
   chart.setOption({
     backgroundColor: 'transparent',
-    grid: { top: 20, right: 20, bottom: 50, left: 45 },
+    grid: { top: 20, right: 20, bottom: 68, left: 45 },
     xAxis: {
       type: 'category',
-      data: IV_DATA.map(function(d){ return d.symbol + ' ' + (d.name || '') + '\\n' + (d.contract||'').replace(/^n/, ''); }),
-      axisLabel: { color: '#8b92a5', fontSize: 9, interval: 2, rotate: 45 },
+      data: IV_DATA.map(function(d){
+        var sym = (d.symbol || '').toUpperCase();
+        var cname = (d.name && d.name !== d.symbol) ? d.name : '';
+        return sym + ' ' + cname + '\n' + (d.contract||'');
+      }),
+      axisLabel: {
+        color: '#8b92a5', fontSize: 8, interval: 1, rotate: 0,
+        lineHeight: 13,
+      },
       axisLine: { lineStyle: { color: 'rgba(26,32,64,.5)' } },
     },
     yAxis: {
@@ -624,7 +740,9 @@ var IV_DATA = JSON.parse('{{ iv_json|safe }}');
       formatter: function(p) {
         var d = IV_DATA[p.dataIndex];
         if (!d) return '';
-        return '<strong>' + d.symbol + ' ' + (d.name || '') + ' ' + (d.contract||'').replace(/^n/, '') + '</strong><br/>'
+        var sym = (d.symbol || '').toUpperCase();
+        var cname = (d.name && d.name !== d.symbol) ? d.name : d.symbol;
+        return '<strong>' + sym + ' ' + cname + ' ' + (d.contract||'') + '</strong><br/>'
           + '当前 IV: ' + (d.current_iv * 100).toFixed(2) + '%<br/>'
           + '百分位: ' + d.percentile.toFixed(1) + '%<br/>'
           + '等级: ' + (d.level || '—') + '<br/>'
@@ -692,6 +810,8 @@ var IV_DATA = JSON.parse('{{ iv_json|safe }}');
 
 // ── SmartFilter ──
 function loadFilterStats() {
+  var section = document.getElementById('filterSection');
+  if (section) section.classList.add('is-loading');
   fetch('/api/filter-stats', { cache: 'no-cache' })
     .then(function(r) { return r.json(); })
     .then(function(stats) {
@@ -711,15 +831,19 @@ function loadFilterStats() {
         if (stats.total > 0) statusEl.style.color = 'var(--short)';
       }
     })
-    .catch(function(e) { /* silent */ });
+    .catch(function(e) { /* silent */ })
+    .finally(function() { if (section) section.classList.remove('is-loading'); });
 }
 
 function loadFilterLog() {
+  var section = document.getElementById('filterSection');
+  var tbody = document.getElementById('fs-body');
+  if (!tbody) return;
+  tbody.innerHTML = createFilterLogSkeleton(6);
+  if (section) section.classList.add('is-loading');
   fetch('/api/filter-log?limit=10', { cache: 'no-cache' })
     .then(function(r) { return r.json(); })
     .then(function(log) {
-      var tbody = document.getElementById('fs-body');
-      if (!tbody) return;
       if (!log || !log.length) {
         tbody.innerHTML = '<tr><td colspan="5" style="color:var(--text3);text-align:center">暂无过滤记录</td></tr>';
         return;
@@ -738,7 +862,8 @@ function loadFilterLog() {
       });
       tbody.innerHTML = html;
     })
-    .catch(function(e) { /* silent */ });
+    .catch(function(e) { /* silent */ })
+    .finally(function() { if (section) section.classList.remove('is-loading'); });
 }
 
 loadFilterStats();
@@ -750,11 +875,15 @@ setInterval(function() {
 }, 30000);
 
 // ── Strategy Detail Popup ──
+function sanitizeJSONString(raw) {
+  // 兼容旧数据中 Python json.dumps 输出的 Infinity/NaN（非法 JSON）
+  return raw.replace(/: Infinity\b/g, ': null').replace(/: -Infinity\b/g, ': null').replace(/: NaN\b/g, ': null');
+}
 function showStratDetail(el) {
   var raw = el.dataset.detail;
   if (!raw) return;
   var detail;
-  try { detail = JSON.parse(raw); } catch(e) { return; }
+  try { detail = JSON.parse(sanitizeJSONString(raw)); } catch(e) { return; }
   var popup = document.getElementById('stratPopup');
   document.getElementById('spTitle').textContent = detail.symbol + ' ' + (detail.contract || '') + ' — ' + (detail.type || '').replace(/_/g, ' ');
   var html = '';
@@ -767,14 +896,14 @@ function showStratDetail(el) {
     { label: '净 Theta', value: detail.net_theta ? detail.net_theta.toFixed(4) : '—' },
     { label: '净 Vega', value: detail.net_vega ? detail.net_vega.toFixed(2) : '—' },
     { label: '净成本', value: detail.net_cost !== undefined ? detail.net_cost.toFixed(0) : '—' },
-    { label: '最大盈利', value: detail.max_profit !== undefined ? '+' + detail.max_profit.toFixed(0) : '—' },
-    { label: '最大亏损', value: detail.max_loss !== undefined ? detail.max_loss.toFixed(0) : '—' },
-    { label: '盈亏平衡低', value: detail.breakeven_low !== undefined ? detail.breakeven_low.toFixed(1) : '—' },
-    { label: '盈亏平衡高', value: detail.breakeven_high !== undefined ? detail.breakeven_high.toFixed(1) : '—' },
-    { label: '盈利区宽度', value: detail.profit_zone_width !== undefined ? detail.profit_zone_width.toFixed(0) : '—' },
-    { label: '胜率', value: detail.win_rate !== undefined ? (detail.win_rate * 100).toFixed(1) + '%' : '—' },
-    { label: '评分', value: detail.score !== undefined ? detail.score.toFixed(1) : '—' },
-    { label: '保证金', value: detail.margin_required !== undefined ? detail.margin_required.toFixed(0) : '—' },
+    { label: '最大盈利', value: detail.max_profit != null ? '+' + detail.max_profit.toFixed(0) : '—' },
+    { label: '最大亏损', value: detail.max_loss != null ? detail.max_loss.toFixed(0) : '—' },
+    { label: '盈亏平衡低', value: detail.breakeven_low != null ? detail.breakeven_low.toFixed(1) : '—' },
+    { label: '盈亏平衡高', value: detail.breakeven_high != null ? detail.breakeven_high.toFixed(1) : '—' },
+    { label: '盈利区宽度', value: detail.profit_zone_width != null ? detail.profit_zone_width.toFixed(0) : '—' },
+    { label: '胜率', value: detail.win_rate != null ? (detail.win_rate * 100).toFixed(1) + '%' : '—' },
+    { label: '评分', value: detail.score != null ? detail.score.toFixed(1) : '—' },
+    { label: '保证金', value: detail.margin_required != null ? detail.margin_required.toFixed(0) : '—' },
   ];
   fields.forEach(function(f) {
     html += '<div class="strat-popup-row"><span class="sp-label">' + f.label + '</span><span class="sp-value">' + f.value + '</span></div>';
@@ -830,7 +959,13 @@ document.addEventListener('click', function(e) {
 // ── Health Panel ──
 (function loadHealth() {
   var badge = document.getElementById('health-badge');
+  var panel = document.getElementById('health-panel');
   function refresh() {
+    var hGrid = document.getElementById('healthGrid');
+    var htGrid = document.getElementById('htGrid');
+    if (hGrid) hGrid.innerHTML = createHealthGridSkeleton();
+    if (htGrid) htGrid.innerHTML = createHealthTableSkeleton();
+    if (panel) panel.classList.add('is-loading');
     fetch('/api/health', { cache: 'no-cache' })
       .then(function(r) { return r.json(); })
       .then(function(d) {
@@ -844,7 +979,6 @@ document.addEventListener('click', function(e) {
         document.getElementById('h-last-signal').textContent = d.last_signal || '—';
         document.getElementById('h-last-kline').textContent = d.last_kline || '—';
         document.getElementById('h-last-n').textContent = d.last_n_structure || '—';
-        var htGrid = document.getElementById('htGrid');
         if (d.tables && htGrid) {
           var html = '';
           Object.keys(d.tables).forEach(function(k) {
@@ -863,7 +997,8 @@ document.addEventListener('click', function(e) {
           issuesEl.style.display = 'none';
         }
       })
-      .catch(function(e) { badge.textContent = '加载失败'; });
+      .catch(function(e) { badge.textContent = '加载失败'; })
+      .finally(function() { if (panel) panel.classList.remove('is-loading'); });
   }
   refresh();
   setInterval(function() {
@@ -910,6 +1045,41 @@ function createCardSkeleton(n) {
   }
   return html;
 }
+
+// ── SKELETON: SmartFilter log rows ──
+function createFilterLogSkeleton(n) {
+  var html = '';
+  for (var i = 0; i < n; i++) {
+    html += '<tr>'
+      + '<td><div class="skeleton" style="width:60px;height:.68em">&nbsp;</div></td>'
+      + '<td><div class="skeleton" style="width:32px;height:.68em">&nbsp;</div></td>'
+      + '<td><div class="skeleton" style="width:20px;height:.68em">&nbsp;</div></td>'
+      + '<td><div class="skeleton" style="width:40px;height:.68em">&nbsp;</div></td>'
+      + '<td><div class="skeleton" style="width:120px;height:.68em">&nbsp;</div></td>'
+      + '</tr>';
+  }
+  return html;
+}
+
+// ── SKELETON: Health grid ──
+function createHealthGridSkeleton() {
+  return ''
+    + '<div class="health-card status"><div class="h-label">状态</div><div class="h-value"><span class="skeleton" style="width:44px;height:.85em">&nbsp;</span></div></div>'
+    + '<div class="health-card"><div class="h-label">运行时间</div><div class="h-value"><span class="skeleton" style="width:60px;height:.85em">&nbsp;</span></div></div>'
+    + '<div class="health-card"><div class="h-label">DB 总行数</div><div class="h-value"><span class="skeleton" style="width:52px;height:.85em">&nbsp;</span></div></div>'
+    + '<div class="health-card"><div class="h-label">最新信号</div><div class="h-value"><span class="skeleton" style="width:60px;height:.85em">&nbsp;</span></div></div>'
+    + '<div class="health-card"><div class="h-label">最新K线</div><div class="h-value"><span class="skeleton" style="width:60px;height:.85em">&nbsp;</span></div></div>'
+    + '<div class="health-card"><div class="h-label">最新N型</div><div class="h-value"><span class="skeleton" style="width:60px;height:.85em">&nbsp;</span></div></div>';
+}
+
+// ── SKELETON: Health table status ──
+function createHealthTableSkeleton() {
+  var html = '';
+  for (var i = 0; i < 4; i++) {
+    html += '<div class="ht-card"><span class="skeleton" style="width:80px;height:.68em">&nbsp;</span><span class="skeleton" style="width:36px;height:.68em">&nbsp;</span></div>';
+  }
+  return html;
+}
 function renderOptionsSignals(signals) {
   var tbody = document.getElementById('stratBody');
   if (!tbody) return;
@@ -918,7 +1088,7 @@ function renderOptionsSignals(signals) {
     return;
   }
   var theadHtml = '';
-  signals.slice(0, 20).forEach(function(s) {
+  signals.slice().sort(function(a,b){ return (b.unified_score||0) - (a.unified_score||0); }).slice(0, 20).forEach(function(s) {
     var sym = s.symbol || '';
     var contract = s.contract || '';
     var strategy = (s.strategy || '').replace(/_/g, ' ');
@@ -965,7 +1135,7 @@ function renderOptionCards(signals) {
     return;
   }
   var html = '';
-  signals.slice(0, 20).forEach(function(s) {
+  signals.slice().sort(function(a,b){ return (b.unified_score||0) - (a.unified_score||0); }).slice(0, 20).forEach(function(s) {
     var score = s.unified_score || 0;
     var strengthCls = score >= 70 ? 'strength-high' : (score >= 50 ? 'strength-mid' : 'strength-low');
     var ivClr = 'var(--iv-normal)';
@@ -1000,47 +1170,75 @@ function showStratDetailFromData(el) {
   var signals = window._signalsData;
   if (!signals || idx == null || !signals[idx]) return;
   var s = signals[idx];
-  var detail = s.strategy_details;
-  if (!detail) return;
-  if (typeof detail === 'string') { try { detail = JSON.parse(detail); } catch(e) { return; } }
   var popup = document.getElementById('stratPopup');
-  document.getElementById('spTitle').textContent = s.symbol + ' ' + (s.contract || '') + ' — ' + (s.strategy || '').replace(/_/g, ' ');
-  var html = '';
-  var fields = [
-    { label: '类型', value: (s.strategy || '').replace(/_/g, ' ') },
-    { label: '标的价', value: s.underlying ? s.underlying.toFixed(1) : '—' },
-    { label: 'IV 均值', value: s.iv_avg ? (s.iv_avg * 100).toFixed(1) + '%' : '—' },
-    { label: '到期天数', value: s.days_to_expiry || '—' },
-    { label: '净 Delta', value: s.net_delta != null ? s.net_delta.toFixed(4) : '—' },
-    { label: '净 Theta', value: s.net_theta != null ? s.net_theta.toFixed(4) : '—' },
-    { label: '净 Vega', value: s.net_vega != null ? s.net_vega.toFixed(2) : '—' },
-    { label: '净成本', value: s.net_cost != null ? s.net_cost.toFixed(0) : '—' },
-    { label: '最大盈利', value: s.max_profit != null ? '+' + s.max_profit.toFixed(0) : '—' },
-    { label: '最大亏损', value: s.max_loss != null ? s.max_loss.toFixed(0) : '—' },
-  ];
-  fields.forEach(function(f) {
-    html += '<div class="strat-popup-row"><span class="sp-label">' + f.label + '</span><span class="sp-value">' + f.value + '</span></div>';
-  });
-  if (detail.score_components) {
-    var sc = detail.score_components;
-    var labels = { theta: 'Θ 贡献', vega: 'V 贡献', win_rate: '胜率贡献', width: '区间贡献', efficiency: '效率贡献', delta: '中性贡献', iv_bonus: 'IV 奖励' };
-    var compHtml = '';
-    Object.keys(labels).forEach(function(k) {
-      if (sc[k] !== undefined && sc[k] !== null) {
-        compHtml += '<div class="strat-popup-row" style="font-size:.62rem"><span class="sp-label">' + labels[k] + '</span><span class="sp-value" style="font-size:.62rem">' + sc[k].toFixed(1) + '</span></div>';
-      }
-    });
-    if (compHtml) {
-      html += '<div style="margin-top:6px;padding-top:4px;border-top:1px solid rgba(26,32,64,.5)">';
-      html += '<div style="font-size:.6rem;color:var(--text3);margin-bottom:3px;letter-spacing:.05em">评分分解</div>';
-      html += compHtml;
-      html += '</div>';
-    }
+  var titleEl = document.getElementById('spTitle');
+  var bodyEl = document.getElementById('spBody');
+  titleEl.textContent = s.symbol + ' ' + (s.contract || '') + ' — ' + (s.strategy || '').replace(/_/g, ' ');
+
+  // ── Try to use strategy_details (rich detail object) ──
+  var detail = s.strategy_details;
+  if (detail && typeof detail === 'string') {
+    try { detail = JSON.parse(sanitizeJSONString(detail)); } catch(e) { detail = null; }
   }
-  if (detail.legs_detail) html += '<div class="strat-popup-desc"><strong>腿组合:</strong> ' + detail.legs_detail + '</div>';
-  if (detail.description) html += '<div class="strat-popup-desc"><strong>描述:</strong> ' + detail.description + '</div>';
-  if (detail.strikes && detail.strikes.length) html += '<div class="strat-popup-desc"><strong>行权价:</strong> ' + detail.strikes.map(function(s) { return s.toFixed(0); }).join(', ') + '</div>';
-  document.getElementById('spBody').innerHTML = html;
+
+  var html = '';
+  if (detail && typeof detail === 'object') {
+    // ── Full detail mode (strategy_details available) ──
+    var fields = [
+      { label: '类型', value: (detail.type || s.strategy || '').replace(/_/g, ' ') },
+      { label: '标的价', value: detail.underlying ? detail.underlying.toFixed(1) : '—' },
+      { label: 'IV 均值', value: s.iv_avg ? (s.iv_avg * 100).toFixed(1) + '%' : '—' },
+      { label: '到期天数', value: detail.days_to_expiry || '—' },
+      { label: '净 Delta', value: s.net_delta != null ? s.net_delta.toFixed(4) : '—' },
+      { label: '净 Theta', value: s.net_theta != null ? s.net_theta.toFixed(4) : '—' },
+      { label: '净 Vega', value: s.net_vega != null ? s.net_vega.toFixed(2) : '—' },
+      { label: '净成本', value: detail.net_cost != null ? detail.net_cost.toFixed(0) : '—' },
+      { label: '最大盈利', value: s.max_profit != null ? '+' + s.max_profit.toFixed(0) : '—' },
+      { label: '最大亏损', value: s.max_loss != null ? s.max_loss.toFixed(0) : '—' },
+      { label: '盈亏平衡低', value: detail.breakeven_low != null ? detail.breakeven_low.toFixed(1) : '—' },
+      { label: '盈亏平衡高', value: detail.breakeven_high != null ? detail.breakeven_high.toFixed(1) : '—' },
+      { label: '盈利区宽度', value: detail.profit_zone_width != null ? detail.profit_zone_width.toFixed(0) : '—' },
+      { label: '胜率', value: detail.win_rate != null ? (detail.win_rate * 100).toFixed(1) + '%' : '—' },
+      { label: '评分', value: detail.score != null ? detail.score.toFixed(1) : (s.unified_score != null ? s.unified_score.toFixed(1) : '—') },
+      { label: '保证金', value: detail.margin_required != null ? detail.margin_required.toFixed(0) : '—' },
+    ];
+    fields.forEach(function(f) {
+      html += '<div class=\"strat-popup-row\"><span class=\"sp-label\">' + f.label + '</span><span class=\"sp-value\">' + f.value + '</span></div>';
+    });
+    // ── 评分维度分解 ──
+    if (detail.score_components) {
+      var sc = detail.score_components;
+      var labels = { theta: 'Θ 贡献', vega: 'V 贡献', win_rate: '胜率贡献', width: '区间贡献', efficiency: '效率贡献', delta: '中性贡献', iv_bonus: 'IV 奖励' };
+      var compHtml = '';
+      Object.keys(labels).forEach(function(k) {
+        if (sc[k] !== undefined && sc[k] !== null) {
+          compHtml += '<div class=\"strat-popup-row\" style=\"font-size:.62rem\"><span class=\"sp-label\">' + labels[k] + '</span><span class=\"sp-value\" style=\"font-size:.62rem\">' + sc[k].toFixed(1) + '</span></div>';
+        }
+      });
+      if (compHtml) {
+        html += '<div style=\"margin-top:6px;padding-top:4px;border-top:1px solid rgba(26,32,64,.5)\">';
+        html += '<div style=\"font-size:.6rem;color:var(--text3);margin-bottom:3px;letter-spacing:.05em\">评分分解</div>';
+        html += compHtml;
+        html += '</div>';
+      }
+    }
+    if (detail.legs_detail) html += '<div class=\"strat-popup-desc\"><strong>腿组合:</strong> ' + detail.legs_detail + '</div>';
+    if (detail.description) html += '<div class=\"strat-popup-desc\"><strong>描述:</strong> ' + detail.description + '</div>';
+    if (detail.strikes && detail.strikes.length) html += '<div class=\"strat-popup-desc\"><strong>行权价:</strong> ' + detail.strikes.map(function(s) { return s.toFixed(0); }).join(', ') + '</div>';
+  } else {
+    // ── Fallback mode (no strategy_details — show basic info from signal fields) ──
+    html += '<div class=\"strat-popup-row\"><span class=\"sp-label\">类型</span><span class=\"sp-value\">' + (s.strategy || '').replace(/_/g, ' ') + '</span></div>';
+    html += '<div class=\"strat-popup-row\"><span class=\"sp-label\">评分</span><span class=\"sp-value\" style=\"color:var(--brand);font-weight:600\">' + (s.unified_score != null ? s.unified_score.toFixed(1) : '—') + '</span></div>';
+    html += '<div class=\"strat-popup-row\"><span class=\"sp-label\">IV 均值</span><span class=\"sp-value\">' + (s.iv_avg ? (s.iv_avg * 100).toFixed(1) + '%' : '—') + '</span></div>';
+    html += '<div class=\"strat-popup-row\"><span class=\"sp-label\">IV 百分位</span><span class=\"sp-value\">' + (s.iv_percentile != null ? s.iv_percentile.toFixed(0) + '%' : '—') + '</span></div>';
+    html += '<div class=\"strat-popup-row\"><span class=\"sp-label\">净 Delta</span><span class=\"sp-value\">' + (s.net_delta != null ? s.net_delta.toFixed(4) : '—') + '</span></div>';
+    html += '<div class=\"strat-popup-row\"><span class=\"sp-label\">净 Theta</span><span class=\"sp-value\">' + (s.net_theta != null ? s.net_theta.toFixed(4) : '—') + '</span></div>';
+    html += '<div class=\"strat-popup-row\"><span class=\"sp-label\">最大盈利</span><span class=\"sp-value strat-pnl-pos\">' + (s.max_profit != null ? '+' + s.max_profit.toFixed(0) : '—') + '</span></div>';
+    html += '<div class=\"strat-popup-row\"><span class=\"sp-label\">最大亏损</span><span class=\"sp-value strat-pnl-neg\">' + (s.max_loss != null ? s.max_loss.toFixed(0) : '—') + '</span></div>';
+    if (s.reason) html += '<div class=\"strat-popup-desc\"><strong>理由:</strong> ' + s.reason + '</div>';
+    html += '<div style=\"margin-top:6px;padding-top:4px;border-top:1px solid rgba(26,32,64,.3);text-align:center;font-size:.55rem;color:var(--text3)\">基础视图 · 信号详情数据暂缺</div>';
+  }
+  bodyEl.innerHTML = html;
   var rect = el.getBoundingClientRect();
   var left = rect.right + 10;
   var top = rect.top - 20;

@@ -265,7 +265,7 @@ def _calc_short_strangle(
         "net_vega": round(net_vega, 4),
         "net_cost": -round(credit, 2),
         "max_profit": round(max_profit, 2),
-        "max_loss": float("inf"),
+        "max_loss": None,  # 无限亏损（前端显示为"—"）
         "breakeven_low": round(breakeven_low, 2),
         "breakeven_high": round(breakeven_high, 2),
         "profit_zone_width": round(profit_zone_width, 2),

@@ -192,12 +192,12 @@ def _get_klines(
 
 
 def _batch_insert_klines(db: Database, rows: List[Dict[str, Any]]) -> None:
-    """批量写入K线，INSERT OR IGNORE 避免重复。"""
+    """批量写入K线，INSERT OR REPLACE 允许更新已有K线（如周线跨日聚合更新）。"""
     if not rows:
         return
     with db.get_conn() as conn:
         conn.executemany(
-            """INSERT OR IGNORE INTO futures_klines
+            """INSERT OR REPLACE INTO futures_klines
                (symbol, contract, timeframe, timestamp, open, high, low, close, volume)
                VALUES (:symbol, :contract, :timeframe, :timestamp, :open, :high, :low, :close, :volume)""",
             rows,

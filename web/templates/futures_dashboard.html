@@ -58,6 +58,30 @@
 .main-grid { display: block; }
 .matrix-section { margin-bottom: 12px; }
 
+/* Matrix skeleton loading state */
+.matrix-section.is-loading .matrix-table { opacity: .5; transition: opacity .2s var(--ease-out); }
+.matrix-section .matrix-table { transition: opacity .3s var(--ease-out); }
+.mx-loading-dot {
+  display: none;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--brand);
+  margin-left: 6px;
+  animation: mx-loading-pulse .8s ease-in-out infinite alternate;
+}
+.matrix-section.is-loading .mx-loading-dot { display: inline-block; }
+@keyframes mx-loading-pulse {
+  0% { opacity: .2; transform: scale(.7); }
+  100% { opacity: 1; transform: scale(1.1); }
+}
+.matrix-section.is-loading .skeleton {
+  animation: skeleton-shimmer 1.5s ease-in-out infinite, skeleton-fade-in .3s ease-out both;
+}
+@keyframes skeleton-fade-in {
+  0% { opacity: 0; transform: translateY(2px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
 @media (max-width: 1024px) {
   .health-grid { grid-template-columns: repeat(3, 1fr); }
 }
@@ -136,7 +160,7 @@
 
 <!-- ─── FULL-WIDTH SIGNAL MATRIX ─── -->
 <div class="matrix-section">
-  <h2>🔥 多周期信号矩阵 <span class="badge">点击色块查看K线 · N 型结构透视</span></h2>
+  <h2>🔥 多周期信号矩阵 <span class="badge">点击色块查看K线 · N 型结构透视</span><span class="mx-loading-dot"></span></h2>
   <table class="matrix-table">
     <thead><tr><th>品种</th><th>15m</th><th>1h</th><th>1d</th><th>1w</th><th>共振</th></tr></thead>
     <tbody>
@@ -303,6 +327,30 @@
 </div>
 
 <script>
+// ── SKELETON LOADING: matrix table placeholder ──
+function createMatrixSkeleton(n) {
+  // Build skeleton rows that mirror the real 6-column matrix structure
+  // symbol | 15m | 1h | 1d | 1w | resonance
+  var html = '';
+  var symbolNames = ['Loading…', '加载中…', '⟳ 更新中', '⟳ 刷新', '…'];
+  for (var i = 0; i < n; i++) {
+    var delay = (i * 0.08).toFixed(2);
+    var nameLabel = symbolNames[i % symbolNames.length];
+    html += '<tr style="animation:skeleton-fade-in 0.35s ease-out both;animation-delay:' + delay + 's">';
+    // Symbol column
+    html += '<td class="sym-name"><span class="skeleton" style="width:' + (60 + (i % 3) * 10) + 'px;height:0.9em;animation-delay:' + delay + 's">' + nameLabel + '</span></td>';
+    // 4 timeframe signal cells — square skeleton blocks
+    for (var j = 0; j < 4; j++) {
+      var cellDelay = (delay - 0 + j * 0.04).toFixed(2);
+      html += '<td><div class="skeleton" style="width:28px;height:28px;border-radius:4px;margin:0 auto;animation-delay:' + cellDelay + 's">&nbsp;</div></td>';
+    }
+    // Resonance column
+    html += '<td class="res-cell"><span class="skeleton" style="width:' + (30 + (i % 3) * 10) + 'px;height:0.7em;animation-delay:' + delay + 's">&nbsp;</span></td>';
+    html += '</tr>';
+  }
+  return html;
+}
+
 // ── AUTO REFRESH: 30s poll + 5min matrix refresh (no full-page reload) ──
 var AUTO_REFRESH = true;
 if (AUTO_REFRESH) {
@@ -321,9 +369,17 @@ if (AUTO_REFRESH) {
       .catch(function(e) { /* silent */ });
   }, 30000);
 
-  // ── 5min matrix refresh: 触发 API 侧 N 型结构重算 + DOM 增量刷新矩阵 ──
+  // ── 5min matrix refresh: show skeleton while loading ──
   setInterval(function() {
     if (document.hidden) return;
+    var mxSection = document.querySelector('.matrix-section');
+    var tbody = document.querySelector('.matrix-table tbody');
+    if (!tbody || !mxSection) return;
+
+    // Show skeleton while fetching
+    mxSection.classList.add('is-loading');
+    tbody.innerHTML = createMatrixSkeleton(8);
+
     fetch('/api/matrix', { cache: 'no-cache' })
       .then(function(r) { return r.json(); })
       .then(function(d) {
@@ -381,6 +437,7 @@ if (AUTO_REFRESH) {
         });
 
         tbody.innerHTML = html;
+        mxSection.classList.remove('is-loading');
 
         // Update status bar
         var now = new Date();
@@ -390,7 +447,10 @@ if (AUTO_REFRESH) {
         var countEl = document.getElementById('symbolCount');
         if (countEl) countEl.textContent = d.matrix.length + ' 品种';
       })
-      .catch(function(e) { /* silent */ });
+      .catch(function(e) {
+        mxSection.classList.remove('is-loading');
+        /* silent */
+      });
   }, 300000); // 5 minutes
 }
 
@@ -499,6 +559,7 @@ function drawKline(bars, nA, nB, nC, nDir) {
         }
     }
     var prevX = 0;
+    var barXs = [];
     bars.forEach(function(bar, i) {
         var x;
         if (i > 0 && bar.t && bars[i-1].t) {
@@ -512,6 +573,7 @@ function drawKline(bars, nA, nB, nC, nDir) {
             x = chartLeft + gap / 2;
         }
         prevX = x;
+        barXs.push(x);
         var color = bar.up ? '#f04438' : '#22c55e';
         ctx.strokeStyle = color; ctx.lineWidth = 1;
         ctx.beginPath(); ctx.moveTo(x, priceToY(bar.h)); ctx.lineTo(x, priceToY(bar.l)); ctx.stroke();
@@ -524,29 +586,83 @@ function drawKline(bars, nA, nB, nC, nDir) {
             ctx.fillRect(x - barW/2, H - volH, barW, volH);
         }
     });
-    // ── N 型结构 A/B/C 水平标记线 ──
+    // ── N 型结构 A/B/C 线段标记（连接至对应 K 线端点） ──
     var nPoints = [
         {label: 'A', price: nA, cls: 'A'},
         {label: 'B', price: nB, cls: 'B'},
         {label: 'C', price: nC, cls: 'C'},
     ];
-    nPoints.forEach(function(pt) {
-        if (pt.price == null || isNaN(pt.price)) return;
+    // Find the bar index that best matches each N-point's price
+    // LONG: A=high, B=low, C=high  |  SHORT: A=low, B=high, C=low
+    function findBarForNPoint(bars, price, isHigh) {
+        if (price == null || isNaN(price)) return -1;
+        var bestIdx = -1, bestDist = Infinity;
+        bars.forEach(function(bar, i) {
+            var bp = isHigh ? bar.h : bar.l;
+            var dist = Math.abs(bp - price);
+            if (dist < bestDist) { bestDist = dist; bestIdx = i; }
+        });
+        return bestIdx;
+    }
+    var nDir = (typeof nDir !== 'undefined' && nDir) || 'LONG';
+    var aIsHigh = (nDir === 'LONG');
+    var bIsHigh = (nDir !== 'LONG');
+    var cIsHigh = (nDir === 'LONG');
+    var nIdxs = [
+        {idx: findBarForNPoint(bars, nA, aIsHigh), price: nA, cls: 'A'},
+        {idx: findBarForNPoint(bars, nB, bIsHigh), price: nB, cls: 'B'},
+        {idx: findBarForNPoint(bars, nC, cIsHigh), price: nC, cls: 'C'},
+    ];
+    // Draw line segments A→B and B→C
+    var prevPt = null;
+    nIdxs.forEach(function(pt) {
+        if (pt.idx < 0 || pt.idx >= barXs.length || pt.price == null || isNaN(pt.price)) return;
+        var x = barXs[pt.idx];
         var y = priceToY(pt.price);
-        if (y < 8 || y > H - 18) return;  // clip to visible area
-        ctx.setLineDash([4, 4]);
-        ctx.lineWidth = 1.2;
-        ctx.strokeStyle = pt.cls === 'A' ? 'rgba(234,179,8,0.6)' : pt.cls === 'B' ? 'rgba(99,102,241,0.6)' : 'rgba(236,72,153,0.6)';
-        ctx.beginPath(); ctx.moveTo(chartLeft, y); ctx.lineTo(chartRight, y); ctx.stroke();
-        ctx.setLineDash([]);
-        // Label box
-        var label = pt.label + ' ' + pt.price.toFixed(prec);
+        if (y < 8 || y > H - 18) return;
+        var color = pt.cls === 'A' ? 'rgba(234,179,8,0.7)' : pt.cls === 'B' ? 'rgba(99,102,241,0.7)' : 'rgba(236,72,153,0.7)';
+        // Draw line from previous point to this point
+        if (prevPt && prevPt.idx >= 0) {
+            ctx.setLineDash([4, 4]);
+            ctx.lineWidth = 1.5;
+            ctx.strokeStyle = color;
+            ctx.beginPath();
+            ctx.moveTo(barXs[prevPt.idx], priceToY(prevPt.price));
+            ctx.lineTo(x, y);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+        prevPt = pt;
+    });
+    // Draw endpoint markers + price labels at each bar position
+    nIdxs.forEach(function(pt) {
+        if (pt.idx < 0 || pt.idx >= barXs.length || pt.price == null || isNaN(pt.price)) return;
+        var x = barXs[pt.idx];
+        var y = priceToY(pt.price);
+        if (y < 8 || y > H - 18) return;
+        var color = pt.cls === 'A' ? '#eab308' : pt.cls === 'B' ? '#6366f1' : '#ec4899';
+        var bgColor = pt.cls === 'A' ? 'rgba(234,179,8,0.2)' : pt.cls === 'B' ? 'rgba(99,102,241,0.2)' : 'rgba(236,72,153,0.2)';
+        // Endpoint dot
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(x, y, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(x, y, 4, 0, Math.PI * 2);
+        ctx.stroke();
+        // Price label positioned above the dot
+        var label = pt.cls + ' ' + pt.price.toFixed(prec);
         ctx.font = 'bold 10px sans-serif';
         var tw = ctx.measureText(label).width;
-        var lx = chartRight - tw - 6, ly = y - 8;
-        ctx.fillStyle = pt.cls === 'A' ? 'rgba(234,179,8,0.15)' : pt.cls === 'B' ? 'rgba(99,102,241,0.15)' : 'rgba(236,72,153,0.15)';
+        var lx = x - tw / 2 - 4, ly = y - 14;
+        // Clamp label to chart bounds
+        if (lx < chartLeft) lx = chartLeft;
+        if (lx + tw + 8 > chartRight) lx = chartRight - tw - 8;
+        ctx.fillStyle = bgColor;
         ctx.fillRect(lx, ly, tw + 8, 16);
-        ctx.fillStyle = pt.cls === 'A' ? '#eab308' : pt.cls === 'B' ? '#6366f1' : '#ec4899';
+        ctx.fillStyle = color;
         ctx.fillText(label, lx + 4, ly + 12);
     });
     ctx.strokeStyle = 'rgba(90,97,115,0.08)';

@@ -50,9 +50,10 @@ def _enrich_iv_status(status_list):
     """为 IV 状态列表添加中文名 + 清洗上期所合约 n 前缀。"""
     import re
     for item in status_list:
-        item["name"] = SYMBOL_NAMES.get(item["symbol"], item["symbol"])
+        sym = (item.get("symbol") or "").upper()
+        item["name"] = SYMBOL_NAMES.get(sym, item.get("symbol", ""))
         # 上期所主力合约 n 前缀清洗: nag2607 → ag2607
-        item["contract"] = re.sub(r'^n', '', item.get("contract", ""))
+        item["contract"] = re.sub(r'^[nN]', '', item.get("contract", ""))
     return status_list
 
 
@@ -118,7 +119,6 @@ def index() -> str:
             SELECT symbol, timeframe, direction, state,
                    point_a_price, point_b_price, point_c_price, updated_at
             FROM futures_n_structures
-            WHERE updated_at > datetime('now', '-30 days')
             ORDER BY symbol, timeframe
         ''').fetchall()
         structures = {}
@@ -250,8 +250,7 @@ def _restructure_active_structures(conn):
 
         active = conn.execute(
             """SELECT DISTINCT symbol, contract FROM futures_n_structures
-               WHERE state NOT IN ('COMPLETED', 'IDLE')
-                 AND updated_at > datetime('now', '-30 days')"""
+               WHERE state NOT IN ('COMPLETED', 'IDLE')"""
         ).fetchall()
 
         if not active:
@@ -266,6 +265,13 @@ def _restructure_active_structures(conn):
                     incremental_update(sym, contract, tf, db)
                 except Exception:
                     pass  # 单周期极值点失败不阻塞整体
+            # 0.5. 刷新周线K线聚合 — 日线→周线（确保周线包含本周最新价格）
+            #      否则周线数据停留在上周五收盘，dynamic_restructure 使用旧数据
+            try:
+                from futures.aggregator import aggregate_klines
+                aggregate_klines(sym, contract, db, "1d", "1w", limit=14)
+            except Exception:
+                pass  # 周线聚合失败不阻塞后续重算
             # 1. 再执行 N 型动态重算
             for tf in timeframes:
                 try:
@@ -319,7 +325,6 @@ def api_matrix():
             SELECT symbol, timeframe, direction, state,
                    point_a_price, point_b_price, point_c_price, updated_at
             FROM futures_n_structures
-            WHERE updated_at > datetime('now', '-30 days')
             ORDER BY symbol, timeframe
         ''').fetchall()
 
@@ -458,11 +463,13 @@ def api_klines():
 
     conn = db.get_conn()
     try:
-        # 0. 动态重算：该品种的 N 型结构（确保标记线基于最新结构）
+        # 0. 先刷新极值点，再动态重算该品种的 N 型结构（确保标记线基于最新 swing points）
         try:
             from futures.n_structure import dynamic_restructure
+            from futures.swing_points import incremental_update
             contract = _get_futures_contract(conn, sym)
             if contract:
+                incremental_update(sym, contract, tf, db)
                 dynamic_restructure(sym, contract, tf, db)
         except Exception:
             pass  # 重算失败不阻塞 K 线返回

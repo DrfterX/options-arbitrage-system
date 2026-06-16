@@ -35,6 +35,7 @@ from futures.n_structure import (
     get_current_price,
     get_last_bar,
 )
+from futures.swing_points import incremental_update
 
 logger = logging.getLogger(__name__)
 
@@ -371,7 +372,15 @@ class NSignalPipeline:
         Returns:
             NBreakoutSignal 或 None（无信号）。
         """
-        # 0. 动态重算：检查 N 型结构是否需要 A 突破迁移
+        # 0. 极值点增量更新：确保 dynamic_restructure 基于最新极值点
+        #     两次 data_refresh() 间可能有新的极值点产生（新高/新低）
+        #     只扫描当前品种的 N_TIMEFRAME，避免全量扫描开销
+        try:
+            incremental_update(symbol, contract, N_TIMEFRAME, self.db)
+        except Exception as e:
+            logger.debug("  %s: 极值点增量更新跳过 (%s)", symbol, e)
+
+        # 0b. 动态重算：检查 N 型结构是否需要 A 突破迁移
         #     确保 breakout 检测基于最新结构，而非可能已失效的旧结构
         try:
             dynamic_restructure(symbol, contract, N_TIMEFRAME, self.db)

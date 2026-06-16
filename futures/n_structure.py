@@ -27,6 +27,7 @@ from typing import Any, Dict, List, Optional
 
 from core.db import Database
 from config.settings import DETECT_WINDOWS, LEVEL3_TIMEFRAME
+from futures.shared import _get_active_n_structure
 
 logger = logging.getLogger(__name__)
 
@@ -83,15 +84,30 @@ def _get_klines(
     contract: str,
     timeframe: str,
     limit: int = 2,
+    since_timestamp: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
-    """读取K线数据，按时间升序。"""
+    """读取K线数据，按时间升序。
+
+    Args:
+        db: Database 实例。
+        symbol: 品种代码。
+        contract: 合约代码。
+        timeframe: 周期。
+        limit: 返回的最大行数，None=不限制。
+        since_timestamp: 可选，只返回 >= 该时间戳的K线。
+    """
     with db.get_conn() as conn:
-        rows = conn.execute(
-            """SELECT * FROM futures_klines
-               WHERE symbol=? AND contract=? AND timeframe=?
-               ORDER BY timestamp DESC LIMIT ?""",
-            (symbol, contract, timeframe, limit),
-        ).fetchall()
+        query = """SELECT * FROM futures_klines
+                   WHERE symbol=? AND contract=? AND timeframe=?"""
+        params: list = [symbol, contract, timeframe]
+        if since_timestamp is not None:
+            query += " AND timestamp >= ?"
+            params.append(since_timestamp)
+        query += " ORDER BY timestamp DESC"
+        if limit is not None:
+            query += " LIMIT ?"
+            params.append(limit)
+        rows = conn.execute(query, params).fetchall()
     return [dict(r) for r in reversed(rows)]
 
 
@@ -138,71 +154,6 @@ def _save_n_structure(db: Database, ns: Dict[str, Any]) -> int:
         conn.commit()
         return cur.lastrowid
 
-
-def _get_active_n_structure(
-    db: Database,
-    symbol: str,
-    contract: str,
-    timeframe: str,
-) -> Optional[Dict[str, Any]]:
-    """获取未完成的活跃N型结构。
-
-    额外校验：
-      1. 时间新鲜度
-      2. 结构有效性（C不可突破A）
-      3. 极端止损检查（当前收盘已突破A点则失效）
-    """
-    import time as time_module
-
-    now = int(time_module.time())
-
-    freshness: Dict[str, int] = {
-        "3m": 2 * 86400,
-        "15m": 2 * 86400,
-        "1h": 7 * 86400,
-        "1d": 30 * 86400,
-        "1w": 60 * 86400,
-    }
-
-    with db.get_conn() as conn:
-        row = conn.execute(
-            """SELECT * FROM futures_n_structures
-               WHERE symbol=? AND timeframe=? AND state!='COMPLETED'
-               ORDER BY updated_at DESC LIMIT 1""",
-            (symbol, timeframe),
-        ).fetchone()
-
-        if not row:
-            return None
-
-        ns = dict(row)
-
-        freshness_cutoff = freshness.get(timeframe, 60 * 86400)
-        latest_ts = ns.get("point_c_time") or ns.get("point_b_time")
-        if latest_ts and (now - latest_ts) > freshness_cutoff:
-            return None
-
-        a_price = ns.get("point_a_price")
-        c_price = ns.get("point_c_price")
-        if ns["direction"] == "SHORT" and a_price and c_price and c_price >= a_price:
-            return None
-        if ns["direction"] == "LONG" and a_price and c_price and c_price <= a_price:
-            return None
-
-        last_kline = conn.execute(
-            """SELECT close FROM futures_klines
-               WHERE symbol=? AND contract=? AND timeframe=?
-               ORDER BY timestamp DESC LIMIT 1""",
-            (symbol, contract, timeframe),
-        ).fetchone()
-
-        if last_kline and a_price:
-            if ns["direction"] == "SHORT" and last_kline["close"] >= a_price:
-                return None
-            if ns["direction"] == "LONG" and last_kline["close"] <= a_price:
-                return None
-
-        return ns
 
 
 # ─── 核心：N型检测 ────────────────────────────────────────────
@@ -367,15 +318,18 @@ def dynamic_restructure(
         # 已被收盘价检查淘汰（方向翻转）→ 全量重算
         return detect_and_save(symbol, contract, timeframe, db)
 
-    # 2. 读取最新 K 线
-    klines = _get_klines(db, symbol, contract, timeframe, limit=3)
-    if not klines:
-        return active
-
+    # 2. 提取结构关键参数（在 _get_klines 之前，供 since_timestamp 使用）
     direction = active["direction"]
     a_price = active["point_a_price"]
     b_price = active["point_b_price"]
     b_time = active["point_b_time"]
+
+    # 3. 读取点 B 之后的所有 K 线（修复：limit=3 会遗漏早期突破数据）
+    #    limit=None = 不限制数量，since_timestamp=b_time = 从 B 点至今
+    klines = _get_klines(db, symbol, contract, timeframe, limit=None, since_timestamp=b_time)
+    if not klines:
+        active['is_active'] = True
+        return active
 
     latest_high = max(k["high"] for k in klines)
     latest_low = min(k["low"] for k in klines)
@@ -387,6 +341,34 @@ def dynamic_restructure(
                (direction == "SHORT" and latest_high > a_price)
 
     if not a_broken:
+        # 3.5 B 点反转检查 — 价格未突破 A 但反穿了 B 点
+        #    场景：
+        #      LONG: A=TROUGH→B=PEAK，价格从 B 大幅跌回，跌破 B_price
+        #      SHORT: A=PEAK→B=TROUGH，价格从 B 大幅反弹，涨破 B_price
+        #    回撤阈值：A→B 幅度的 50%
+        b_range = abs(b_price - a_price)
+        if b_range > 0:
+            b_broken = (
+                (direction == "LONG" and latest_high < b_price and
+                 (b_price - latest_high) / b_range > 0.5)
+            ) or (
+                (direction == "SHORT" and latest_low > b_price and
+                 (latest_low - b_price) / b_range > 0.5)
+            )
+            if b_broken:
+                # B 反穿 → 标记 COMPLETED + 全量重算（方向可能翻转）
+                completed = dict(active)
+                completed["state"] = NState.COMPLETED.value
+                _save_n_structure(db, completed)
+                logger.info(
+                    "[dynamic_restructure] %s/%s %s: B reversed "
+                    "(b_price=%.2f, range=%.2f, 50%% threshold) → "
+                    "COMPLETED + full recalc",
+                    symbol, contract, timeframe, b_price, b_range,
+                )
+                return detect_and_save(symbol, contract, timeframe, db)
+
+        active['is_active'] = True
         return active  # 结构仍有效，无需变动
 
     # 4. A 被突破 → 执行结构迁移

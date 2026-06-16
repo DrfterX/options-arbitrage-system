@@ -34,71 +34,12 @@ from config.settings import (
 )
 from futures.color_tracker import check_color_sequence, check_macd_trajectory, check_3m_stability
 from futures.n_structure import check_realtime_breakout
+from futures.shared import _get_active_n_structure
 
 logger = logging.getLogger(__name__)
 
 
 # ─── DB 内部辅助 ─────────────────────────────────────────────
-
-
-def _get_active_n_structure(
-    db: Database,
-    symbol: str,
-    contract: str,
-    timeframe: str,
-) -> Optional[Dict[str, Any]]:
-    """获取未完成的活跃N型结构。"""
-    import time as time_module
-
-    now = int(time_module.time())
-
-    freshness: Dict[str, int] = {
-        "3m": 5 * 86400,
-        "15m": 5 * 86400,
-        "1h": 14 * 86400,
-        "1d": 45 * 86400,
-        "1w": 90 * 86400,
-    }
-
-    with db.get_conn() as conn:
-        row = conn.execute(
-            """SELECT * FROM futures_n_structures
-               WHERE symbol=? AND timeframe=? AND state!='COMPLETED'
-               ORDER BY updated_at DESC LIMIT 1""",
-            (symbol, timeframe),
-        ).fetchone()
-
-        if not row:
-            return None
-
-        ns = dict(row)
-
-        freshness_cutoff = freshness.get(timeframe, 60 * 86400)
-        latest_ts = ns.get("point_c_time") or ns.get("point_b_time")
-        if latest_ts and (now - latest_ts) > freshness_cutoff:
-            return None
-
-        a_price = ns.get("point_a_price")
-        c_price = ns.get("point_c_price")
-        if ns["direction"] == "SHORT" and a_price and c_price and c_price >= a_price:
-            return None
-        if ns["direction"] == "LONG" and a_price and c_price and c_price <= a_price:
-            return None
-
-        last_kline = conn.execute(
-            """SELECT close FROM futures_klines
-               WHERE symbol=? AND contract=? AND timeframe=?
-               ORDER BY timestamp DESC LIMIT 1""",
-            (symbol, contract, timeframe),
-        ).fetchone()
-
-        if last_kline and a_price:
-            if ns["direction"] == "SHORT" and last_kline["close"] >= a_price:
-                return None
-            if ns["direction"] == "LONG" and last_kline["close"] <= a_price:
-                return None
-
-        return ns
 
 
 def _get_all_main_contracts(db: Database) -> List[Dict[str, Any]]:

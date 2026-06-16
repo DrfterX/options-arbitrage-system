@@ -7,6 +7,7 @@
 
 import json
 import logging
+import math
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
@@ -16,6 +17,17 @@ logger = logging.getLogger(__name__)
 
 # 去重指纹分隔符
 _FINGERPRINT_SEP = "_"
+
+
+def _sanitize_json(obj: Any) -> Any:
+    """递归替换 dict/list 中的 Infinity/NaN 为 None，确保 JSON 序列化合规。"""
+    if isinstance(obj, dict):
+        return {k: _sanitize_json(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sanitize_json(v) for v in obj]
+    if isinstance(obj, float) and (math.isinf(obj) or math.isnan(obj)):
+        return None
+    return obj
 
 
 class SignalHub:
@@ -150,9 +162,17 @@ class SignalHub:
         """
         strategy_details = signal_dict.get("strategy_details", {})
         if isinstance(strategy_details, dict):
+            # 净化 NaN/Infinity → null（Python json.dumps 默认输出 Infinity 非法 JSON）
+            strategy_details = _sanitize_json(strategy_details)
             strategy_details_json = json.dumps(strategy_details, ensure_ascii=False)
         else:
             strategy_details_json = str(strategy_details)
+
+        # 顶层数值字段也净化（max_loss 等可能含 float("inf")）
+        for key in ("max_loss", "max_profit", "strength", "net_delta", "net_theta", "net_vega"):
+            val = signal_dict.get(key)
+            if isinstance(val, float) and (math.isinf(val) or math.isnan(val)):
+                signal_dict[key] = None
 
         now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
