@@ -718,26 +718,24 @@ var IV_DATA = JSON.parse('{{ iv_json|safe }}');
   var chart = echarts.init(el, null, { renderer: 'canvas' });
   chart.setOption({
     backgroundColor: 'transparent',
-    grid: { top: 20, right: 20, bottom: 140, left: 45 },
+    grid: { top: 20, right: 20, bottom: 160, left: 45 },
     xAxis: {
       type: 'category',
-      data: IV_DATA.map(function(d){
-        var cname = (d.name && d.name !== d.symbol) ? d.name : (d.symbol || '').toUpperCase();
-        return cname;
-      }),
+      data: IV_DATA.map(function(d){ return (d.symbol||'').toUpperCase(); }),
       axisLabel: {
-        color: '#8b92a5', fontSize: 9, interval: 0, rotate: 35,
+        color: '#8b92a5', fontSize: 9, interval: 0, rotate: 30,
         lineHeight: 14,
-        // Show Chinese name + contract code below (contract already cleaned of n-prefix server-side)
+        // 格式: "AG 白银" (上) / "ag2607" (下)
         formatter: function(val, idx) {
           var d = IV_DATA[idx];
           if (!d) return val;
-          var contract = (d.contract || '').replace(/^[nN]/, '');
-          var cname = (d.name && d.name !== d.symbol) ? d.name : (d.symbol || '').toUpperCase();
-          return '{cname|' + cname + '}\n{detail|' + contract + '}';
+          var sym = (d.symbol || '').toUpperCase();
+          var cname = (d.name && d.name !== d.symbol) ? d.name : sym;
+          var contract = (d.contract || '');
+          return '{cname|' + sym + ' ' + cname + '}\n{detail|' + contract + '}';
         },
         rich: {
-          cname: { color: '#8b92a5', fontSize: 9, lineHeight: 14, align: 'center' },
+          cname: { color: '#8b92a5', fontSize: 8, lineHeight: 12, align: 'center' },
           detail: { color: '#6b7280', fontSize: 7, lineHeight: 10, align: 'center' },
         },
       },
@@ -757,8 +755,8 @@ var IV_DATA = JSON.parse('{{ iv_json|safe }}');
         var d = IV_DATA[p.dataIndex];
         if (!d) return '';
         var sym = (d.symbol || '').toUpperCase();
-        var cname = (d.name && d.name !== d.symbol) ? d.name : d.symbol;
-        return '<strong>' + sym + ' ' + cname + ' ' + (d.contract||'') + '</strong><br/>'
+        var cname = (d.name && d.name !== d.symbol) ? d.name : sym;
+        return '<strong>' + sym + ' ' + cname + ' · ' + (d.contract||'') + '</strong><br/>'
           + '当前 IV: ' + (d.current_iv * 100).toFixed(2) + '%<br/>'
           + '百分位: ' + d.percentile.toFixed(1) + '%<br/>'
           + '等级: ' + (d.level || '—') + '<br/>'
