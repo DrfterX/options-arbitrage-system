@@ -563,7 +563,7 @@
             <td class="strat-greeks">Δ:{{ "%.2f"|format(s.net_delta or 0) }}<br>Θ:{{ "%.2f"|format(s.net_theta or 0) }}</td>
             <td><span class="strat-pnl-pos">+{{ "%.0f"|format(s.max_profit or 0) }}</span> / <span class="strat-pnl-neg">{{ "%.0f"|format(s.max_loss or 0) }}</span></td>
             <td><span class="strat-strength" style="color:{% if s.unified_score >= 70 %}var(--brand){% elif s.unified_score >= 50 %}#f0b429{% else %}var(--text3){% endif %}">{{ "%.1f"|format(s.unified_score or 0) }}</span></td>
-            <td><span class="strat-detail-link" onclick="showStratDetailFromData(this)" data-idx="{{ loop.index0 }}">📋</span></td>
+            <td class="strat-detail-link" onclick="showStratDetailFromData(this)" data-idx="{{ loop.index0 }}"><span>📋</span></td>
           </tr>
           {% endfor %}
           {% else %}
@@ -571,6 +571,11 @@
           {% endif %}
         </tbody>
       </table>
+      {% if options %}
+	      <script>window._signalsData = {{ options[:20] | tojson | safe }};</script>
+	      {% else %}
+	      <script>window._signalsData = [];</script>
+	      {% endif %}
     </div>
   </div>
 
@@ -713,17 +718,29 @@ var IV_DATA = JSON.parse('{{ iv_json|safe }}');
   var chart = echarts.init(el, null, { renderer: 'canvas' });
   chart.setOption({
     backgroundColor: 'transparent',
-    grid: { top: 20, right: 20, bottom: 68, left: 45 },
+    grid: { top: 20, right: 20, bottom: 110, left: 45 },
     xAxis: {
       type: 'category',
       data: IV_DATA.map(function(d){
-        var sym = (d.symbol || '').toUpperCase();
-        var cname = (d.name && d.name !== d.symbol) ? d.name : '';
-        return sym + ' ' + cname + '\n' + (d.contract||'');
+        var cname = (d.name && d.name !== d.symbol) ? d.name : (d.symbol || '').toUpperCase();
+        return cname;
       }),
       axisLabel: {
-        color: '#8b92a5', fontSize: 8, interval: 1, rotate: 0,
-        lineHeight: 13,
+        color: '#8b92a5', fontSize: 9, interval: 0, rotate: 40,
+        lineHeight: 14,
+        // Show symbol + contract in smaller muted text below the Chinese name
+        formatter: function(val, idx) {
+          var d = IV_DATA[idx];
+          if (!d) return val;
+          var sym = (d.symbol || '').toUpperCase();
+          var contract = (d.contract || '').replace(/^[nN]/, '');
+          var cname = (d.name && d.name !== d.symbol) ? d.name : sym;
+          return '{cname|' + cname + '}\n{detail|' + sym + ' ' + contract + '}';
+        },
+        rich: {
+          cname: { color: '#8b92a5', fontSize: 9, lineHeight: 14, align: 'center' },
+          detail: { color: '#6b7280', fontSize: 7, lineHeight: 10, align: 'center' },
+        },
       },
       axisLine: { lineStyle: { color: 'rgba(26,32,64,.5)' } },
     },
@@ -891,7 +908,7 @@ function showStratDetail(el) {
     { label: '类型', value: (detail.type || '').replace(/_/g, ' ') },
     { label: '标的价', value: detail.underlying ? detail.underlying.toFixed(1) : '—' },
     { label: 'IV 均值', value: detail.iv_avg ? (detail.iv_avg * 100).toFixed(1) + '%' : '—' },
-    { label: '到期天数', value: detail.days_to_expiry || '—' },
+    { label: '到期天数', value: detail.days_to_expiry != null ? detail.days_to_expiry : '—' },
     { label: '净 Delta', value: detail.net_delta ? detail.net_delta.toFixed(4) : '—' },
     { label: '净 Theta', value: detail.net_theta ? detail.net_theta.toFixed(4) : '—' },
     { label: '净 Vega', value: detail.net_vega ? detail.net_vega.toFixed(2) : '—' },
@@ -1087,8 +1104,10 @@ function renderOptionsSignals(signals) {
     tbody.innerHTML = '<tr><td colspan="7" class="strat-empty">暂无期权策略信号</td></tr>';
     return;
   }
+  // Sort by score descending, take top 20 — use direct index (not indexOf) for data-idx reliability
+  var sorted = signals.slice().sort(function(a,b){ return (b.unified_score||0) - (a.unified_score||0); }).slice(0, 20);
   var theadHtml = '';
-  signals.slice().sort(function(a,b){ return (b.unified_score||0) - (a.unified_score||0); }).slice(0, 20).forEach(function(s) {
+  sorted.forEach(function(s, idx) {
     var sym = s.symbol || '';
     var contract = s.contract || '';
     var strategy = (s.strategy || '').replace(/_/g, ' ');
@@ -1103,10 +1122,6 @@ function renderOptionsSignals(signals) {
     else if (s.iv_level === '极端低') ivClass = 'strat-iv-extreme';
     var score = s.unified_score || 0;
     var scoreClr = score >= 70 ? 'var(--brand)' : (score >= 50 ? '#f0b429' : 'var(--text3)');
-    var detailStr = '';
-    if (s.strategy_details) {
-      detailStr = typeof s.strategy_details === 'string' ? s.strategy_details : JSON.stringify(s.strategy_details);
-    }
     theadHtml += '<tr>'
       + '<td><span class="strat-sym">' + sym + '</span> <span class="strat-name">' + contract + '</span></td>'
       + '<td><span class="strat-type ' + stratClass + '">' + strategy + '</span></td>'
@@ -1114,11 +1129,11 @@ function renderOptionsSignals(signals) {
       + '<td class="strat-greeks">Δ:' + (s.net_delta != null ? s.net_delta.toFixed(2) : '0.00') + '<br>Θ:' + (s.net_theta != null ? s.net_theta.toFixed(2) : '0.00') + '</td>'
       + '<td><span class="strat-pnl-pos">+' + (s.max_profit != null ? s.max_profit.toFixed(0) : '0') + '</span> / <span class="strat-pnl-neg">' + (s.max_loss != null ? s.max_loss.toFixed(0) : '0') + '</span></td>'
       + '<td><span class="strat-strength" style="color:' + scoreClr + '">' + score.toFixed(1) + '</span></td>'
-      + '<td><span class="strat-detail-link" onclick="showStratDetailFromData(this)" data-idx="' + signals.indexOf(s) + '">📋</span></td>'
+      + '<td class="strat-detail-link" onclick="showStratDetailFromData(this)" data-idx="' + idx + '"><span>📋</span></td>'
       + '</tr>';
   });
   tbody.innerHTML = theadHtml;
-  window._signalsData = signals;
+  window._signalsData = sorted;
   var badge = document.getElementById('strat-badge');
   if (badge) badge.textContent = signals.length + ' 个策略';
   var countBadge = document.getElementById('optionCount');
@@ -1188,7 +1203,7 @@ function showStratDetailFromData(el) {
       { label: '类型', value: (detail.type || s.strategy || '').replace(/_/g, ' ') },
       { label: '标的价', value: detail.underlying ? detail.underlying.toFixed(1) : '—' },
       { label: 'IV 均值', value: s.iv_avg ? (s.iv_avg * 100).toFixed(1) + '%' : '—' },
-      { label: '到期天数', value: detail.days_to_expiry || '—' },
+      { label: '到期天数', value: detail.days_to_expiry != null ? detail.days_to_expiry : '—' },
       { label: '净 Delta', value: s.net_delta != null ? s.net_delta.toFixed(4) : '—' },
       { label: '净 Theta', value: s.net_theta != null ? s.net_theta.toFixed(4) : '—' },
       { label: '净 Vega', value: s.net_vega != null ? s.net_vega.toFixed(2) : '—' },
@@ -1249,6 +1264,7 @@ function showStratDetailFromData(el) {
   popup.classList.add('show');
 }
 // ── 5min strategy table refresh: show skeleton while loading ──
+var _prevSignalsData = null;
 setInterval(function() {
   if (document.hidden) return;
   var stratPanel = document.getElementById('stratPanel');
@@ -1256,6 +1272,8 @@ setInterval(function() {
   var tbody = document.getElementById('stratBody');
   var cards = document.getElementById('optionsCards');
   if (!tbody || !cards) return;
+  // Save current data before replacing with skeleton
+  _prevSignalsData = window._signalsData || null;
   stratPanel.classList.add('is-loading');
   cardPanel.classList.add('is-loading');
   tbody.innerHTML = createStratSkeleton(8);
@@ -1266,10 +1284,16 @@ setInterval(function() {
       renderOptionsSignals(d);
       stratPanel.classList.remove('is-loading');
       cardPanel.classList.remove('is-loading');
+      _prevSignalsData = null;
     })
     .catch(function(e) {
       stratPanel.classList.remove('is-loading');
       cardPanel.classList.remove('is-loading');
+      // Restore previous data on fetch failure instead of leaving skeleton
+      if (_prevSignalsData && _prevSignalsData.length) {
+        renderOptionsSignals(_prevSignalsData);
+      }
+      _prevSignalsData = null;
     });
 }, 300000); // 5 minutes
 </script>

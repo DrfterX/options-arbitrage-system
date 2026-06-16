@@ -66,7 +66,7 @@ SECTORS = {
     "新能源": ["SI","LC"],
 }
 
-KLINE_COUNT = 24
+KLINE_COUNT = 60
 
 def _get_hub():
     from signals.hub import SignalHub
