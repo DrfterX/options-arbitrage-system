@@ -22,6 +22,7 @@ A=起点, B=折返点, C=当前端点。
 """
 
 import logging
+import time as time_module
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
@@ -322,6 +323,17 @@ def detect_and_save(
 # ─── 动态重算 ────────────────────────────────────────────────
 
 
+def _mark_completed(active: dict, db: Database) -> None:
+    """将活跃结构标记为 COMPLETED 并写入 DB。
+
+    Args:
+        active: 当前活跃 N 型结构字典（会被原地修改）。
+        db: Database 实例。
+    """
+    active["state"] = NState.COMPLETED.value
+    _save_n_structure(db, active)
+
+
 def _update_c_point(active: dict, swing_points: list, db: Database) -> Optional[dict]:
     """更新 C 点 — 最新 swing point 与 C 同类型且更极端时滑动更新。
 
@@ -329,13 +341,18 @@ def _update_c_point(active: dict, swing_points: list, db: Database) -> Optional[
     例如 LONG（上升 N 型）：C=TROUGH，新 TROUGH 更低 → C 点更新到新位置。
     这符合"从 C 点到最新价格 = 第三笔"的语义 — A/B 保持，C 滑动。
 
+    阈值防突破检查：
+    如果 new_C 超越原 A 点（LONG: new_C_price < A_price; SHORT: new_C_price > A_price），
+    说明第三笔回撤过深，结构已失效 → 标记 COMPLETED + 返回 None，
+    让调用方触发全量重算。
+
     Args:
         active: 当前活跃 N 型结构字典（会被原地修改）。
         swing_points: 极值点列表（时间升序）。
         db: Database 实例。
 
     Returns:
-        更新后的结构字典，或 None（无需更新）。
+        更新后的结构字典，或 None（无需更新 / 已标记 COMPLETED）。
     """
     if not swing_points:
         return None
@@ -353,6 +370,32 @@ def _update_c_point(active: dict, swing_points: list, db: Database) -> Optional[
         return None
     if latest["timestamp"] <= active["point_c_time"]:
         return None
+
+    a_price = active["point_a_price"]
+
+    # ── 阈值防突破检查：C 滑动超过 A 点时结构失效 ─────────────
+    if active["direction"] == "LONG":
+        # LONG: A=TROUGH（最低点）, C=TROUGH, C 不能低于 A
+        if latest["price"] <= a_price:
+            logger.info(
+                "[_update_c_point] %s/%s %s: C point %.2f <= A %.2f, "
+                "structure invalidated → COMPLETED",
+                active["symbol"], active["contract"], active["timeframe"],
+                latest["price"], a_price,
+            )
+            _mark_completed(active, db)
+            return None
+    else:
+        # SHORT: A=PEAK（最高点）, C=PEAK, C 不能高于 A
+        if latest["price"] >= a_price:
+            logger.info(
+                "[_update_c_point] %s/%s %s: C point %.2f >= A %.2f, "
+                "structure invalidated → COMPLETED",
+                active["symbol"], active["contract"], active["timeframe"],
+                latest["price"], a_price,
+            )
+            _mark_completed(active, db)
+            return None
 
     old_price = active["point_c_price"]
     active["point_c_price"] = latest["price"]
@@ -538,6 +581,122 @@ def dynamic_restructure(
     )
 
     return migrated
+
+
+# ─── 共享重算入口（API + Data Collector 共用）───────────────────
+
+# 频率控制：每 symbol/tf 全量重算最多每 30 秒一次
+_last_detect_save: dict = {}
+_DETECT_SAVE_INTERVAL = 30
+
+
+def _should_full_recalc(symbol: str, timeframe: str, min_interval: int = _DETECT_SAVE_INTERVAL) -> bool:
+    """检测是否应对指定 symbol/tf 执行全量重算（频率控制）。
+
+    detect_and_save 是全量重算（较贵），在频繁调用下必须限频。
+    用 (symbol, timeframe) 做 key，记录上次全量重算时间。
+
+    Args:
+        symbol: 品种代码。
+        timeframe: 周期。
+        min_interval: 最小间隔（秒），默认 30。
+
+    Returns:
+        True=应执行全量重算，False=跳过（距离上次不足 min_interval）。
+    """
+    key = (symbol, timeframe)
+    now = time_module.time()
+    last = _last_detect_save.get(key, 0)
+    if now - last >= min_interval:
+        _last_detect_save[key] = now
+        return True
+    return False
+
+
+def restructure_active_for_symbol(
+    symbol: str,
+    contract: str,
+    db: Database,
+    timeframes: Optional[list] = None,
+    force_full_recalc: bool = False,
+) -> None:
+    """对指定 symbol 的所有周期执行 N 型结构动态重算。
+
+    管线：incremental_update → detect_and_save（限频）→ dynamic_restructure
+    与 ``web/app.py::_restructure_active_structures()`` 逻辑一致但限单品种，
+    供数据采集器在插入新 K 线后同步调用。
+
+    Args:
+        symbol: 品种代码。
+        contract: 合约代码。
+        db: Database 实例。
+        timeframes: 周期列表，默认 ``["15m", "1h", "1d", "1w"]``。
+        force_full_recalc: 是否强制全量重算（跳过频率控制），默认 False（限频）。
+    """
+    from futures.swing_points import incremental_update
+    from futures.aggregator import aggregate_klines
+
+    if timeframes is None:
+        timeframes = ["15m", "1h", "1d", "1w"]
+
+    for tf in timeframes:
+        try:
+            incremental_update(symbol, contract, tf, db)
+        except Exception:
+            pass  # 单周期极值点失败不阻塞整体
+
+    # 0.5. 刷新周线K线聚合 — 确保周线包含本周最新价格
+    try:
+        aggregate_klines(symbol, contract, db, "1d", "1w", limit=14)
+    except Exception:
+        pass  # 周线聚合失败不阻塞后续重算
+
+    # 1. 全量重算（频率控制或强制）
+    for tf in timeframes:
+        try:
+            if force_full_recalc or _should_full_recalc(symbol, tf):
+                detect_and_save(symbol, contract, tf, db)
+        except Exception:
+            pass  # 全量重算失败不阻塞后续动态迁移
+    # 2. 动态重算（含 C 点滑动 + A 突破迁移）
+    for tf in timeframes:
+        try:
+            dynamic_restructure(symbol, contract, tf, db)
+        except Exception:
+            pass  # 单周期动态重算失败不阻塞整体
+
+
+def restructure_all_active(db: Database) -> None:
+    """对所有有活跃 N 型结构的品种执行动态重算。
+
+    读取 ``futures_n_structures`` 表中所有非 COMPLETED/IDLE 的结构，
+    逐个调用 ``restructure_active_for_symbol()``。
+
+    供 API 层（替代 ``web/app.py::_restructure_active_structures()``）
+    和数据采集层共用。
+
+    Args:
+        db: Database 实例。
+    """
+    try:
+        timeframes = ["15m", "1h", "1d", "1w"]
+
+        # 读活跃结构列表
+        active = db.get_conn().execute(
+            """SELECT DISTINCT symbol, contract FROM futures_n_structures
+               WHERE state NOT IN ('COMPLETED', 'IDLE')"""
+        ).fetchall()
+
+        if not active:
+            return
+
+        for row in active:
+            sym, contract = row["symbol"], row["contract"]
+            restructure_active_for_symbol(
+                sym, contract, db, timeframes=timeframes,
+            )
+    except Exception:
+        pass  # 整体失败不抛出
 
 
 # ─── 突破检测 ────────────────────────────────────────────────

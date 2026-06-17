@@ -451,6 +451,323 @@
   animation: skeleton-shimmer 1.5s ease-in-out infinite;
   border-radius: 2px;
 }
+
+/* ── Premium tab — gold accent ── */
+.nav-tab.premium-tab {
+  color: var(--brand);
+  font-weight: 600;
+  letter-spacing: .05em;
+}
+.nav-tab.premium-tab.active {
+  color: #fff;
+  background: linear-gradient(135deg, rgba(240, 180, 41, .15), rgba(240, 180, 41, .05));
+  border-color: rgba(240, 180, 41, .3);
+  box-shadow: 0 0 12px rgba(240, 180, 41, .08);
+}
+.nav-tab.premium-tab .nav-tab-icon {
+  color: var(--brand);
+}
+
+/* ── Pricing card modal ── */
+.premium-section {
+  max-width: 480px;
+  margin: 40px auto;
+}
+.pricing-card {
+  background: var(--card);
+  border: 1px solid rgba(240, 180, 41, .2);
+  border-radius: var(--radius-lg);
+  padding: 32px 28px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+.pricing-card::before {
+  content: '';
+  position: absolute;
+  top: -80px;
+  right: -60px;
+  width: 240px;
+  height: 240px;
+  background: radial-gradient(circle, rgba(240, 180, 41, .06) 0%, transparent 70%);
+  pointer-events: none;
+}
+.pricing-card .pc-badge {
+  display: inline-block;
+  padding: 3px 12px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, rgba(240, 180, 41, .15), rgba(240, 180, 41, .05));
+  border: 1px solid rgba(240, 180, 41, .2);
+  color: var(--brand);
+  font-size: .6rem;
+  font-weight: 600;
+  letter-spacing: .06em;
+  margin-bottom: 16px;
+}
+.pricing-card .pc-title {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+.pricing-card .pc-subtitle {
+  font-size: .7rem;
+  color: var(--text3);
+  margin-bottom: 24px;
+}
+.pricing-card .pc-price {
+  font-size: 2.2rem;
+  font-weight: 800;
+  color: var(--brand);
+  font-family: var(--font-mono);
+  letter-spacing: -.03em;
+  margin-bottom: 6px;
+}
+.pricing-card .pc-price span {
+  font-size: .8rem;
+  font-weight: 400;
+  color: var(--text3);
+}
+.pricing-card .pc-period {
+  font-size: .6rem;
+  color: var(--text3);
+  margin-bottom: 24px;
+}
+.pricing-card .pc-features {
+  text-align: left;
+  margin-bottom: 24px;
+  padding: 0 8px;
+}
+.pricing-card .pc-feature {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  font-size: .7rem;
+  color: var(--text2);
+  border-bottom: 1px solid rgba(255,255,255,.04);
+}
+.pricing-card .pc-feature:last-child {
+  border-bottom: none;
+}
+.pricing-card .pc-feature .pc-f-icon {
+  width: 20px;
+  text-align: center;
+  font-size: .75rem;
+}
+.pricing-card .pc-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 36px;
+  background: linear-gradient(135deg, rgba(240, 180, 41, .12), rgba(240, 180, 41, .06));
+  border: 1px solid rgba(240, 180, 41, .3);
+  border-radius: var(--radius-md);
+  color: var(--brand);
+  font-size: .8rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  cursor: pointer;
+  transition: all .2s var(--ease-out);
+  font-family: var(--font-ui);
+}
+.pricing-card .pc-btn:hover {
+  background: var(--brand);
+  color: #000;
+  box-shadow: 0 4px 24px rgba(240, 180, 41, .2);
+  transform: translateY(-1px);
+}
+.pricing-card .pc-btn:active {
+  transform: scale(.97);
+}
+.pricing-card .pc-btn.loading {
+  opacity: .6;
+  pointer-events: none;
+}
+.pricing-card .pc-note {
+  margin-top: 16px;
+  font-size: .55rem;
+  color: var(--text3);
+  line-height: 1.5;
+}
+
+/* ── Premium content skeleton ── */
+.premium-content {
+  padding: 20px 0;
+}
+.premium-content .pc-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+.premium-content .pc-header .pc-h-icon {
+  font-size: 1.2rem;
+}
+.premium-content .pc-header .pc-h-title {
+  font-size: 1rem;
+  font-weight: 700;
+}
+.premium-content .pc-header .pc-h-badge {
+  font-size: .55rem;
+  padding: 2px 8px;
+  border-radius: 20px;
+  background: rgba(240, 180, 41, .12);
+  color: var(--brand);
+  border: 1px solid rgba(240, 180, 41, .15);
+  margin-left: auto;
+  font-weight: 600;
+  letter-spacing: .05em;
+}
+.premium-content .pc-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.premium-content .pc-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  min-height: 120px;
+}
+.premium-content .pc-card .pcc-label {
+  font-size: .6rem;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.premium-content .pc-card .pcc-placeholder {
+  font-size: .65rem;
+  color: var(--text3);
+  opacity: .5;
+}
+@media (max-width: 768px) {
+  .premium-content .pc-grid { grid-template-columns: 1fr; }
+}
+
+/* ── Premium content card items ── */
+.pcc-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 8px;
+  margin: 3px 0;
+  border-radius: var(--radius-sm);
+  background: rgba(14, 17, 24, .25);
+  border-left: 2px solid var(--accent, var(--brand));
+  font-size: .62rem;
+  transition: background .15s;
+}
+.pcc-item:hover {
+  background: rgba(14, 17, 24, .4);
+}
+.pcc-item .pi-sym {
+  font-weight: 700;
+  color: var(--text);
+  min-width: 32px;
+}
+.pcc-item .pi-name {
+  color: var(--text2);
+  font-size: .55rem;
+  flex: 1;
+  margin-left: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pcc-item .pi-dir {
+  font-size: .55rem;
+  padding: 1px 5px;
+  border-radius: 2px;
+  font-weight: 600;
+}
+.pcc-item .pi-dir.long { color: #f04438; background: rgba(240,68,56,.12); }
+.pcc-item .pi-dir.short { color: #22c55e; background: rgba(34,197,94,.10); }
+.pcc-item .pi-score {
+  font-family: var(--font-mono);
+  font-size: .55rem;
+  color: var(--brand);
+  margin-left: 6px;
+}
+.pcc-item .pi-price {
+  font-family: var(--font-mono);
+  font-size: .52rem;
+  color: var(--text3);
+  margin-left: 6px;
+}
+.pcc-item .pi-dist {
+  font-family: var(--font-mono);
+  font-size: .52rem;
+  padding: 1px 4px;
+  border-radius: 2px;
+  font-weight: 600;
+  margin-left: 6px;
+}
+.pcc-item .pi-dist.hot { color: #f04438; background: rgba(240,68,56,.15); }
+.pcc-item .pi-dist.warm { color: var(--brand); background: var(--brand-bg); }
+.pcc-empty {
+  text-align: center;
+  padding: 12px;
+  color: var(--text3);
+  font-size: .58rem;
+  opacity: .6;
+}
+.pcc-error {
+  text-align: center;
+  padding: 12px;
+  color: var(--long);
+  font-size: .55rem;
+  opacity: .5;
+}
+.pcc-item-options {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  margin: 3px 0;
+  border-radius: var(--radius-sm);
+  background: rgba(139,92,246,.06);
+  border: 1px solid rgba(139,92,246,.12);
+}
+.pcc-item-options .po-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.pcc-item-options .po-sym {
+  font-weight: 700;
+  font-size: .7rem;
+}
+.pcc-item-options .po-strat {
+  font-size: .6rem;
+  color: var(--purple);
+  padding: 1px 6px;
+  border-radius: 2px;
+  background: rgba(139,92,246,.08);
+}
+.pcc-item-options .po-detail {
+  display: flex;
+  gap: 8px;
+  font-size: .55rem;
+  color: var(--text3);
+  font-family: var(--font-mono);
+}
+.pcc-item-options .po-detail .pos { color: #22c55e; }
+.pcc-item-options .po-detail .neg { color: var(--long); }
+.pcc-item-options .po-score {
+  font-size: .6rem;
+  font-weight: 700;
+  color: var(--brand);
+}
+
 </style>
 </head>
 <body>
@@ -461,9 +778,10 @@
   <h1><span class="dot"></span><span class="accent">▣</span> 信号矩阵 <span class="data-badge" style="color:var(--brand)">期货 × 期权</span></h1>
   <div class="topbar-right">
     <div class="nav-tabs">
-      <span class="nav-tab active"><span class="nav-tab-icon">◈</span> 总览</span>
+      <span class="nav-tab active" data-tab="overview"><span class="nav-tab-icon">◈</span> 总览</span>
       <a href="https://futures.drifter.indevs.in" class="nav-tab"><span class="nav-tab-icon">📈</span> 期货</a>
       <a href="https://options.drifter.indevs.in" class="nav-tab"><span class="nav-tab-icon">📉</span> 期权</a>
+      <span class="nav-tab premium-tab" data-tab="premium"><span class="nav-tab-icon">✦</span> Premium</span>
     </div>
     <span class="data-badge" id="totalBadge"><span class="skeleton" style="width:72px;height:.7em">&nbsp;</span></span>
     <span class="topbar-time">{{ now }}</span>
@@ -540,6 +858,44 @@
   </div>
 
 </div><!-- /.portal-hero -->
+
+<!-- ─── Premium Section (hidden by default, shown via Premium tab) ─── -->
+<div class="premium-section" id="premiumSection" style="display:none;">
+  <!-- Pricing Card (shown when not premium) -->
+  <div class="pricing-card" id="pricingCard">
+    <div class="pc-badge">✦ PREMIUM</div>
+    <div class="pc-title">信号矩阵 Premium</div>
+    <div class="pc-subtitle">解锁专业交易信号，领先市场一步</div>
+    <div class="pc-price">$19 <span>/ 月</span></div>
+    <div class="pc-period">按月订阅 · 随时取消</div>
+    <div class="pc-features">
+      <div class="pc-feature"><span class="pc-f-icon">📊</span> 每日精选推荐 — 3 个最优品种信号</div>
+      <div class="pc-feature"><span class="pc-f-icon">⚡</span> 突破预警 — 距关键位 < 0.5% 实时提醒</div>
+      <div class="pc-feature"><span class="pc-f-icon">🎯</span> TOP 期权策略 — 评分最高的 2 个策略</div>
+      <div class="pc-feature"><span class="pc-f-icon">🔔</span> Telegram 推送通知</div>
+    </div>
+    <button class="pc-btn" id="subscribeBtn" onclick="handleSubscribe()">✦ 立即订阅</button>
+    <div class="pc-note">首次订阅自动扣款，可随时取消。支付由 Stripe 安全处理。</div>
+  </div>
+
+  <!-- Premium Content (shown when premium token is valid) -->
+  <div class="premium-content" id="premiumContent" style="display:none;">
+    <div class="pc-header">
+      <span class="pc-h-icon">✦</span>
+      <span class="pc-h-title">Premium 精选信号</span>
+      <span class="pc-h-badge">已订阅</span>
+    </div>
+    <div class="pc-grid">
+      <div class="pc-card" id="pcRecommendations"><div class="pcc-label">📊 今日推荐</div><div class="pcc-placeholder">数据加载中…</div></div>
+      <div class="pc-card" id="pcBreakoutAlerts"><div class="pcc-label">⚡ 突破预警</div><div class="pcc-placeholder">数据加载中…</div></div>
+      <div class="pc-card" id="pcTopOptions"><div class="pcc-label">🎯 TOP 期权策略</div><div class="pcc-placeholder">数据加载中…</div></div>
+    </div>
+    <div style="margin-top:12px;padding:12px 16px;background:rgba(14,17,24,.3);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:.6rem;color:var(--text3);text-align:center;">
+      Premium 内容将于下一版本上线 ·
+      <span id="premiumTokenDisplay" style="font-family:var(--font-mono);color:var(--text2);font-size:.55rem;"></span>
+    </div>
+  </div>
+</div>
 
 </div><!-- /.main -->
 
@@ -716,6 +1072,222 @@ setInterval(function() {
 
 // Also reload IV mini chart periodically as a full re-init
 setTimeout(function() { location.reload(); }, 3600000); // 1h fallback
+
+
+// ── Premium Tab — Tab Switching ──
+// Handle data-tab clicks for Premium/Overview tab switching
+document.querySelectorAll('.nav-tab[data-tab]').forEach(function(tab) {
+  tab.addEventListener('click', function(e) {
+    e.preventDefault();
+    var target = this.getAttribute('data-tab');
+    // Update active state
+    document.querySelectorAll('.nav-tab').forEach(function(t) { t.classList.remove('active'); });
+    this.classList.add('active');
+
+    if (target === 'premium') {
+      document.getElementById('premiumSection').style.display = '';
+      document.querySelector('.portal-hero').style.display = 'none';
+      document.querySelector('.portal-tagline').style.display = 'none';
+      checkPremiumStatus();
+    } else {
+      document.getElementById('premiumSection').style.display = 'none';
+      document.querySelector('.portal-hero').style.display = '';
+      document.querySelector('.portal-tagline').style.display = '';
+    }
+  });
+});
+
+// ── Premium — Check subscription status ──
+function checkPremiumStatus() {
+  var token = localStorage.getItem('premium_token');
+  var pricingCard = document.getElementById('pricingCard');
+  var premiumContent = document.getElementById('premiumContent');
+
+  if (!token) {
+    pricingCard.style.display = '';
+    premiumContent.style.display = 'none';
+    return;
+  }
+
+  fetch('/api/premium/verify-token', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({token: token})
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d.valid) {
+      pricingCard.style.display = 'none';
+      premiumContent.style.display = '';
+      document.getElementById('premiumTokenDisplay').textContent = 'Token: ' + token.slice(0, 12) + '…';
+      // Load premium content data
+      loadRecommendations();
+      loadBreakoutAlerts();
+      loadTopOptions();
+    } else {
+      localStorage.removeItem('premium_token');
+      pricingCard.style.display = '';
+      premiumContent.style.display = 'none';
+    }
+  })
+  .catch(function(e) {
+    pricingCard.style.display = '';
+    premiumContent.style.display = 'none';
+  });
+}
+
+// ── Premium Content — Load Recommendations ──
+function loadRecommendations() {
+  var el = document.getElementById('pcRecommendations');
+  if (!el) return;
+  el.innerHTML = '<div class="pcc-label">📊 今日推荐</div>';
+
+  fetch('/api/premium/recommendations', { cache: 'no-cache' })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      var recs = d.recommendations || [];
+      if (!recs.length) {
+        el.innerHTML += '<div class="pcc-empty">暂无推荐</div>';
+        return;
+      }
+      var html = '';
+      recs.forEach(function(item) {
+        var dirLabel = item.direction === 'LONG' ? '▲ 多' : '▼ 空';
+        var dirClass = item.direction === 'LONG' ? 'long' : 'short';
+        html += '<div class="pcc-item">'
+          + '<span class="pi-sym">' + item.symbol + '</span>'
+          + '<span class="pi-name">' + item.name + '</span>'
+          + '<span class="pi-dir ' + dirClass + '">' + dirLabel + '</span>'
+          + '<span class="pi-score">' + item.resonance + '周期</span>'
+          + '<span class="pi-price" style="color:var(--brand);font-weight:600;">' + item.score + '</span>'
+          + '</div>';
+      });
+      el.innerHTML += html;
+    })
+    .catch(function(e) {
+      el.innerHTML += '<div class="pcc-error">加载失败</div>';
+    });
+}
+
+// ── Premium Content — Load Breakout Alerts ──
+function loadBreakoutAlerts() {
+  var el = document.getElementById('pcBreakoutAlerts');
+  if (!el) return;
+  el.innerHTML = '<div class="pcc-label">⚡ 突破预警</div>';
+
+  fetch('/api/premium/breakout-alerts', { cache: 'no-cache' })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      var alerts = d.alerts || [];
+      if (!alerts.length) {
+        el.innerHTML += '<div class="pcc-empty">暂无接近关键位品种</div>';
+        return;
+      }
+      var html = '';
+      alerts.slice(0, 5).forEach(function(item) {
+        var distClass = item.distance_pct < 0.2 ? 'hot' : 'warm';
+        var dirClass = item.direction === 'LONG' ? 'long' : 'short';
+        var dirLabel = item.direction === 'LONG' ? '▲' : '▼';
+        html += '<div class="pcc-item">'
+          + '<span class="pi-sym">' + item.symbol + '</span>'
+          + '<span class="pi-name">' + item.name + '</span>'
+          + '<span class="pi-price">' + item.level + ' ' + item.level_price + '</span>'
+          + '<span class="pi-dist ' + distClass + '">' + item.distance_pct.toFixed(2) + '%</span>'
+          + '<span class="pi-dir ' + dirClass + '">' + dirLabel + '</span>'
+          + '</div>';
+      });
+      el.innerHTML += html;
+    })
+    .catch(function(e) {
+      el.innerHTML += '<div class="pcc-error">加载失败</div>';
+    });
+}
+
+// ── Premium Content — Load Top Options ──
+function loadTopOptions() {
+  var el = document.getElementById('pcTopOptions');
+  if (!el) return;
+  el.innerHTML = '<div class="pcc-label">🎯 TOP 期权策略</div>';
+
+  fetch('/api/premium/top-options', { cache: 'no-cache' })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      var opts = d.options || [];
+      if (!opts.length) {
+        el.innerHTML += '<div class="pcc-empty">暂无期权策略</div>';
+        return;
+      }
+      var html = '';
+      opts.forEach(function(item) {
+        var thetaClass = item.net_theta >= 0 ? 'pos' : 'neg';
+        html += '<div class="pcc-item-options">'
+          + '<div class="po-header">'
+          + '<span class="po-sym">' + item.symbol + ' · ' + item.name + '</span>'
+          + '<span class="po-strat">' + item.strategy + '</span>'
+          + '</div>'
+          + '<div class="po-detail">'
+          + '<span>IV ' + item.iv_pct + '% (' + item.iv_level + ')</span>'
+          + '<span class="' + thetaClass + '">Θ ' + item.net_theta.toFixed(2) + '</span>'
+          + '<span>Δ ' + item.net_delta.toFixed(2) + '</span>'
+          + '<span class="po-score">评分 ' + item.score + '</span>'
+          + '</div>'
+          + '</div>';
+      });
+      el.innerHTML += html;
+    })
+    .catch(function(e) {
+      el.innerHTML += '<div class="pcc-error">加载失败</div>';
+    });
+}
+  btn.classList.add('loading');
+  btn.textContent = '⏳ 跳转中…';
+
+  fetch('/api/create-checkout-session', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({})
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d.url) {
+      window.location.href = d.url;
+    } else {
+      btn.classList.remove('loading');
+      btn.innerHTML = '✦ 立即订阅';
+      alert('创建支付会话失败，请稍后重试');
+    }
+  })
+  .catch(function(e) {
+    btn.classList.remove('loading');
+    btn.innerHTML = '✦ 立即订阅';
+    alert('网络错误，请稍后重试');
+  });
+}
+
+// ── Premium — Handle checkout success redirect ──
+(function() {
+  var params = new URLSearchParams(window.location.search);
+  var sessionId = params.get('session_id');
+  var isPremiumSuccess = params.get('premium') === 'success';
+
+  if (isPremiumSuccess && sessionId) {
+    fetch('/api/premium/token?session_id=' + encodeURIComponent(sessionId))
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (d.token) {
+          localStorage.setItem('premium_token', d.token);
+        }
+        // Clean URL — remove query params
+        window.history.replaceState({}, '', window.location.pathname);
+        // If user is on Premium tab, refresh status
+        var activeTab = document.querySelector('.nav-tab.active');
+        if (activeTab && activeTab.getAttribute('data-tab') === 'premium') {
+          checkPremiumStatus();
+        }
+      })
+      .catch(function(e) { /* silent — token retrieval best-effort */ });
+  }
+})();
 </script>
 </body>
 </html>

@@ -47,15 +47,27 @@ SYMBOL_NAMES = {
     "PF":"花生仁","PK":"花生","PR":"聚丙烯",
 }
 
+def _clean_contract_n_prefix(contract: str) -> str:
+    """清洗上期所合约 n 前缀: nag2607 → ag2607。"""
+    import re
+    return re.sub(r'^[nN]', '', contract or "")
+
+
 def _enrich_iv_status(status_list):
     """为 IV 状态列表添加中文名 + 清洗上期所合约 n 前缀。"""
-    import re
     for item in status_list:
         sym = (item.get("symbol") or "").upper()
         item["name"] = SYMBOL_NAMES.get(sym, item.get("symbol", ""))
         # 上期所主力合约 n 前缀清洗: nag2607 → ag2607
-        item["contract"] = re.sub(r'^[nN]', '', item.get("contract", ""))
+        item["contract"] = _clean_contract_n_prefix(item.get("contract", ""))
     return status_list
+
+
+def _enrich_options_signals(options_list):
+    """清洗期权信号数据的合约 n 前缀。"""
+    for item in options_list:
+        item["contract"] = _clean_contract_n_prefix(item.get("contract", ""))
+    return options_list
 
 
 SECTORS = {
@@ -118,7 +130,8 @@ def index() -> str:
 
         n_rows = conn.execute('''
             SELECT symbol, timeframe, direction, state,
-                   point_a_price, point_b_price, point_c_price, updated_at
+                   point_a_price, point_b_price, point_c_price,
+                   point_a_time, point_b_time, point_c_time, updated_at
             FROM futures_n_structures
             ORDER BY symbol, timeframe
         ''').fetchall()
@@ -128,6 +141,7 @@ def index() -> str:
             structures.setdefault(d["symbol"], {})[d["timeframe"]] = {
                 "dir": d["direction"], "state": d["state"],
                 "a": d["point_a_price"], "b": d["point_b_price"], "c": d["point_c_price"],
+                "at": d["point_a_time"], "bt": d["point_b_time"], "ct": d["point_c_time"],
             }
 
         TIMEFRAMES = ["15m", "1h", "1d", "1w"]
@@ -144,7 +158,8 @@ def index() -> str:
                     if sym in structures and tf in structures[sym]:
                         st = structures[sym][tf]
                         cells.append({"tf": tf, "dir": st["dir"], "state": st["state"],
-                                      "a": st["a"], "b": st["b"], "c": st["c"]})
+                                      "a": st["a"], "b": st["b"], "c": st["c"],
+                                      "at": st["at"], "bt": st["bt"], "ct": st["ct"]})
                     else:
                         # 没有N型结构但有信号数据，用信号方向填充
                         cells.append({"tf": tf, "dir": sig.get("dir") if sig else None, "state": None})
@@ -204,7 +219,7 @@ def index() -> str:
         elif "options.drifter.indevs.in" in host:
             # 期权独立面板 — 只加载期权/IV 数据
             hub = _get_hub()
-            options = [dict(s) for s in hub.get_recent_options(20)]
+            options = _enrich_options_signals([dict(s) for s in hub.get_recent_options(20)])
 
             iv_recorder = _get_iv_recorder()
             iv_status = _enrich_iv_status(iv_recorder.get_all_status(days=180))
@@ -218,7 +233,7 @@ def index() -> str:
         else:
             # 统一看板（默认）— 含期权信号 + IV 状态
             hub = _get_hub()
-            options = [dict(s) for s in hub.get_recent_options(15)]
+            options = _enrich_options_signals([dict(s) for s in hub.get_recent_options(15)])
 
             iv_recorder = _get_iv_recorder()
             iv_status = _enrich_iv_status(iv_recorder.get_all_status(days=180))
@@ -239,6 +254,9 @@ def index() -> str:
 def _restructure_active_structures(conn):
     """对所有有活跃 N 型结构的品种执行动态重算（A 突破迁移）。
 
+    委托 ``futures.n_structure.restructure_all_active()`` 执行，
+    与数据采集器共享同一套重算逻辑。
+
     KISS 原则：在 API 读取 N 型结构前按需刷新，不引入后台进程。
     仅对活跃（非 COMPLETED/IDLE）结构执行，开销可控。
 
@@ -246,39 +264,8 @@ def _restructure_active_structures(conn):
     确保 N 型检测基于最新 K 线数据，而非上次 pipeline 运行时的快照。
     """
     try:
-        from futures.n_structure import dynamic_restructure
-        from futures.swing_points import incremental_update
-
-        active = conn.execute(
-            """SELECT DISTINCT symbol, contract FROM futures_n_structures
-               WHERE state NOT IN ('COMPLETED', 'IDLE')"""
-        ).fetchall()
-
-        if not active:
-            return
-
-        timeframes = ["15m", "1h", "1d", "1w"]
-        for row in active:
-            sym, contract = row["symbol"], row["contract"]
-            # 0. 先刷新极值点 — 确保 dynamic_restructure 基于最新 swing points
-            for tf in timeframes:
-                try:
-                    incremental_update(sym, contract, tf, db)
-                except Exception:
-                    pass  # 单周期极值点失败不阻塞整体
-            # 0.5. 刷新周线K线聚合 — 日线→周线（确保周线包含本周最新价格）
-            #      否则周线数据停留在上周五收盘，dynamic_restructure 使用旧数据
-            try:
-                from futures.aggregator import aggregate_klines
-                aggregate_klines(sym, contract, db, "1d", "1w", limit=14)
-            except Exception:
-                pass  # 周线聚合失败不阻塞后续重算
-            # 1. 再执行 N 型动态重算
-            for tf in timeframes:
-                try:
-                    dynamic_restructure(sym, contract, tf, db)
-                except Exception:
-                    pass  # 单品种/周期失败不阻塞整体
+        from futures.n_structure import restructure_all_active
+        restructure_all_active(db)
     except Exception:
         pass  # 动态重算整体失败不阻塞矩阵渲染
 
@@ -324,7 +311,8 @@ def api_matrix():
         # N型结构（每个品种×周期最新状态）
         n_rows = conn.execute('''
             SELECT symbol, timeframe, direction, state,
-                   point_a_price, point_b_price, point_c_price, updated_at
+                   point_a_price, point_b_price, point_c_price,
+                   point_a_time, point_b_time, point_c_time, updated_at
             FROM futures_n_structures
             ORDER BY symbol, timeframe
         ''').fetchall()
@@ -335,6 +323,7 @@ def api_matrix():
             structures.setdefault(d["symbol"], {})[d["timeframe"]] = {
                 "dir": d["direction"], "state": d["state"],
                 "a": d["point_a_price"], "b": d["point_b_price"], "c": d["point_c_price"],
+                "at": d["point_a_time"], "bt": d["point_b_time"], "ct": d["point_c_time"],
             }
 
         # 构建矩阵
@@ -352,7 +341,8 @@ def api_matrix():
                     if sym in structures and tf in structures[sym]:
                         st = structures[sym][tf]
                         cells.append({"tf": tf, "dir": st["dir"], "state": st["state"],
-                                      "a": st["a"], "b": st["b"], "c": st["c"]})
+                                      "a": st["a"], "b": st["b"], "c": st["c"],
+                                      "at": st["at"], "bt": st["bt"], "ct": st["ct"]})
                     else:
                         cells.append({"tf": tf, "dir": None, "state": None})
                 
@@ -466,12 +456,10 @@ def api_klines():
     try:
         # 0. 先刷新极值点，再动态重算该品种的 N 型结构（确保标记线基于最新 swing points）
         try:
-            from futures.n_structure import dynamic_restructure
-            from futures.swing_points import incremental_update
+            from futures.n_structure import restructure_active_for_symbol
             contract = _get_futures_contract(conn, sym)
             if contract:
-                incremental_update(sym, contract, tf, db)
-                dynamic_restructure(sym, contract, tf, db)
+                restructure_active_for_symbol(sym, contract, db, timeframes=[tf])
         except Exception:
             pass  # 重算失败不阻塞 K 线返回
 
@@ -536,7 +524,31 @@ def api_klines():
                 "t": b["t"],  # 时间戳，前端用于检测交易断档
             })
         
-        return jsonify({"symbol": sym, "timeframe": tf, "bars": result})
+        # 1.5. 返回 N 型结构数据（浮窗标注用最新计算值，确保 A/B/C 实时）
+        n_row = conn.execute('''
+            SELECT direction, state,
+                   point_a_price, point_b_price, point_c_price,
+                   point_a_time, point_b_time, point_c_time
+            FROM futures_n_structures
+            WHERE symbol=? AND timeframe=?
+            ORDER BY updated_at DESC LIMIT 1
+        ''', (sym, tf)).fetchone()
+        n_struct = dict(n_row) if n_row else None
+
+        resp = {"symbol": sym, "timeframe": tf, "bars": result}
+        if n_struct:
+            resp["n_structure"] = {
+                "dir": n_struct["direction"],
+                "state": n_struct["state"],
+                "a": n_struct["point_a_price"],
+                "b": n_struct["point_b_price"],
+                "c": n_struct["point_c_price"],
+                "at": n_struct["point_a_time"],
+                "bt": n_struct["point_b_time"],
+                "ct": n_struct["point_c_time"],
+            }
+
+        return jsonify(resp)
     finally:
         pass  # 连接由 Database 管理生命周期
 
@@ -594,7 +606,7 @@ def api_options_signals():
     limit = request.args.get("limit", 20, type=int)
     hub = _get_hub()
     signals = hub.get_recent_options(limit)
-    return jsonify([dict(s) for s in signals])
+    return jsonify(_enrich_options_signals([dict(s) for s in signals]))
 
 
 @app.route("/api/iv/status")
@@ -848,6 +860,216 @@ def api_backtest():
     return jsonify(printable)
 
 
+# ─── Premium Content API ───────────────────────────────────────
+
+
+@app.route("/api/premium/recommendations")
+def api_premium_recommendations():
+    """Premium: 今日推荐 3 品种（基于 N 型结构共振 + 信号评分）。"""
+    conn = db.get_conn()
+    try:
+        _restructure_active_structures(conn)
+
+        # 所有活跃（非 COMPLETED/IDLE）N型结构
+        n_rows = conn.execute('''
+            SELECT symbol, timeframe, direction, state,
+                   point_a_price, point_b_price, point_c_price
+            FROM futures_n_structures
+            WHERE state NOT IN ('COMPLETED', 'IDLE')
+            ORDER BY symbol, timeframe
+        ''').fetchall()
+
+        # 按品种聚合，计算共振
+        struct_map = {}
+        for r in n_rows:
+            d = dict(r)
+            sym = d["symbol"]
+            if sym not in struct_map:
+                struct_map[sym] = {"tfs": {}}
+            struct_map[sym]["tfs"][d["timeframe"]] = {
+                "dir": d["direction"], "state": d["state"],
+                "a": d["point_a_price"], "b": d["point_b_price"], "c": d["point_c_price"],
+            }
+
+        # 最新信号评分
+        sig_rows = conn.execute('''
+            SELECT s.symbol, s.direction, s.score, s.contract
+            FROM futures_signals s
+            INNER JOIN (SELECT symbol, MAX(created_at) mt FROM futures_signals GROUP BY symbol) l
+                ON s.symbol=l.symbol AND s.created_at=l.mt
+        ''').fetchall()
+        sig_map = {}
+        for r in sig_rows:
+            d = dict(r)
+            sig_map[d["symbol"]] = d
+
+        # 计算推荐
+        TIMEFRAMES = ["15m", "1h", "1d", "1w"]
+        candidates = []
+        for sym, data in struct_map.items():
+            dirs = [data["tfs"][tf]["dir"] for tf in TIMEFRAMES if tf in data["tfs"] and data["tfs"][tf]["dir"]]
+            if not dirs:
+                continue
+            long_count = dirs.count("LONG")
+            short_count = dirs.count("SHORT")
+            dominant_dir = "LONG" if long_count >= short_count else "SHORT"
+            resonance = max(long_count, short_count)
+            sig = sig_map.get(sym, {})
+            score = round(sig.get("score", 0), 2) if sig else 0
+
+            candidates.append({
+                "symbol": sym,
+                "name": SYMBOL_NAMES.get(sym, sym),
+                "direction": dominant_dir,
+                "resonance": resonance,
+                "timeframes": resonance,
+                "score": score,
+                "contract": sig.get("contract", ""),
+                "levels": {tf: data["tfs"][tf] for tf in TIMEFRAMES if tf in data["tfs"]},
+            })
+
+        # 排序：共振从高到低 → 评分从高到低
+        candidates.sort(key=lambda x: (x["resonance"], x["score"]), reverse=True)
+        top = candidates[:3]
+
+        return jsonify({
+            "recommendations": top,
+            "total_candidates": len(candidates),
+            "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        })
+    finally:
+        pass
+
+
+@app.route("/api/premium/breakout-alerts")
+def api_premium_breakout_alerts():
+    """Premium: 距关键位 < 0.5% 的品种突破预警。
+
+    比较最新收盘价与 N 型结构的 A/B/C 点价格，
+    若距离任一关键位 < 0.5% 则视为接近突破。
+    """
+    conn = db.get_conn()
+    try:
+        _restructure_active_structures(conn)
+
+        # 活跃结构（含已完成的，因为突破可能发生在已形成的结构上）
+        n_rows = conn.execute('''
+            SELECT symbol, timeframe, direction, state,
+                   point_a_price, point_b_price, point_c_price
+            FROM futures_n_structures
+            ORDER BY symbol, timeframe
+        ''').fetchall()
+
+        # 最新收盘价
+        close_map = {}
+        rows = conn.execute('''
+            SELECT symbol, close FROM futures_klines
+            WHERE (symbol, timestamp) IN (
+                SELECT symbol, MAX(timestamp) FROM futures_klines WHERE timeframe='1d' GROUP BY symbol
+            ) AND timeframe='1d'
+        ''').fetchall()
+        for r in rows:
+            close_map[r["symbol"]] = r["close"]
+
+        alerts = []
+        seen = set()
+        for r in n_rows:
+            d = dict(r)
+            sym = d["symbol"]
+            price = close_map.get(sym)
+            if not price or not price > 0:
+                continue
+            if sym in seen:
+                continue
+            seen.add(sym)
+
+            # 检查所有点价格
+            points = [
+                ("A", d["point_a_price"]),
+                ("B", d["point_b_price"]),
+                ("C", d["point_c_price"]),
+            ]
+            for label, level_price in points:
+                if not level_price or level_price <= 0:
+                    continue
+                dist_pct = abs(price - level_price) / level_price * 100
+                if dist_pct <= 0.5:
+                    direction = "LONG" if price > level_price else "SHORT"
+                    alerts.append({
+                        "symbol": sym,
+                        "name": SYMBOL_NAMES.get(sym, sym),
+                        "level": f"点{label}",
+                        "level_price": round(level_price, 2),
+                        "current_price": round(price, 2),
+                        "direction": direction,
+                        "distance_pct": round(dist_pct, 2),
+                        "timeframe": d["timeframe"],
+                        "state": d["state"],
+                    })
+
+        # 按距离排序（最近优先）
+        alerts.sort(key=lambda x: x["distance_pct"])
+
+        return jsonify({
+            "alerts": alerts[:10],
+            "total": len(alerts),
+            "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        })
+    finally:
+        pass
+
+
+@app.route("/api/premium/top-options")
+def api_premium_top_options():
+    """Premium: 评分最高 2 个期权策略（按 unified_score 降序）。"""
+    conn = db.get_conn()
+    try:
+        rows = conn.execute('''
+            SELECT symbol, contract, strategy, unified_score,
+                   net_theta, net_delta, iv_level, iv_avg,
+                   max_profit, max_loss
+            FROM options_signals
+            ORDER BY unified_score DESC
+            LIMIT 10
+        ''').fetchall()
+
+        # 去重：同一品种+策略只取最高分
+        seen = set()
+        top = []
+        for r in rows:
+            d = dict(r)
+            key = f"{d['symbol']}_{d['strategy']}"
+            if key in seen:
+                continue
+            seen.add(key)
+            strat_label = {
+                "iron_condor": "铁鹰", "short_strangle": "卖跨",
+                "bull_put": "牛沽", "bear_call": "熊购",
+                "covered_call": "备兑", "protective_put": "保护沽",
+                "ratio_spread": "比例价差",
+            }.get(d["strategy"], d["strategy"])
+            top.append({
+                "symbol": d["symbol"],
+                "name": SYMBOL_NAMES.get(d["symbol"], d["symbol"]),
+                "contract": d["contract"],
+                "strategy": strat_label,
+                "score": round(d["unified_score"], 1) if d["unified_score"] else 0,
+                "net_theta": round(d["net_theta"], 4) if d["net_theta"] else 0,
+                "net_delta": round(d["net_delta"], 4) if d["net_delta"] else 0,
+                "iv_level": d["iv_level"] or "",
+                "iv_pct": round(d["iv_avg"] * 100, 1) if d["iv_avg"] else 0,
+            })
+            if len(top) >= 2:
+                break
+
+        return jsonify({
+            "options": top,
+            "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        })
+    finally:
+        pass
+
+
 # ─── Stripe 付费订阅 API ─────────────────────────────────────
 
 
@@ -904,5 +1126,49 @@ def api_premium_status():
     return jsonify(result)
 
 
+@app.route("/api/premium/verify-token", methods=["POST"])
+def api_premium_verify_token():
+    """验证 Premium Bearer Token 是否有效。
+
+    POST JSON body:
+        token (str): Bearer Token。
+
+    Returns:
+        {"valid": bool, "premium": bool}
+    """
+    from web.stripe_handler import verify_token
+
+    data = request.get_json() or {}
+    token = data.get("token", "")
+
+    if not token:
+        return jsonify({"valid": False, "premium": False, "error": "缺少 token"}), 400
+
+    valid = verify_token(db, token)
+    return jsonify({"valid": valid, "premium": valid})
+
+
+@app.route("/api/premium/token")
+def api_premium_token():
+    """获取指定 session_id 的 Bearer Token（支付成功后前端存储用）。"""
+    from web.stripe_handler import ensure_premium_table
+
+    session_id = request.args.get("session_id", "")
+    if not session_id:
+        return jsonify({"error": "session_id required"}), 400
+
+    ensure_premium_table(db)
+    conn = db.get_conn()
+    row = conn.execute(
+        "SELECT token FROM premium_subscriptions WHERE session_id=? AND status='active'",
+        (session_id,),
+    ).fetchone()
+
+    if row and row["token"]:
+        return jsonify({"token": row["token"]})
+    return jsonify({"token": None}), 404
+
+
 if __name__ == "__main__":
     app.run(host="127.0.0.1", port=5100, debug=False)
+

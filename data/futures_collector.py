@@ -496,7 +496,11 @@ class FuturesCollector:
 
     # ── 全量采集 ─────────────────────────────────────────────
 
-    def collect_all(self, period_map: Optional[Dict[str, str]] = None) -> dict:
+    def collect_all(
+        self,
+        period_map: Optional[Dict[str, str]] = None,
+        trigger_restructure: bool = False,
+    ) -> dict:
         """遍历所有品种，增量采集所有周期的K线数据。
 
         通过 ``self.registry.get_all()`` 获取品种列表。
@@ -506,6 +510,8 @@ class FuturesCollector:
         Args:
             period_map: 周期映射 ``{timeframe: AKShare period}``，
                 默认 ``{'15m': '15', '1h': '60', '1d': 'D'}``。
+            trigger_restructure: 采集完成后是否触发 N 型结构动态重算。
+                默认 False（由 Orchestrator 负责重算时不用重复触发）。
 
         Returns:
             采集汇总统计 ``{symbol: {timeframe: {fetched, saved, error, last_ts}}}``。
@@ -606,6 +612,15 @@ class FuturesCollector:
             total_saved,
         )
 
+        # 采集后触发 N 型结构动态重算（仅当调用方要求时）
+        if trigger_restructure:
+            try:
+                from futures.n_structure import restructure_all_active
+                restructure_all_active(self.db)
+                logger.info("N 型结构动态重算完成")
+            except Exception as e:
+                logger.warning("N 型结构动态重算失败(已跳过): %s", e)
+
         return total_stats
 
     # ── 便捷采集入口 ─────────────────────────────────────────
@@ -684,4 +699,4 @@ if __name__ == "__main__":
     db = Database(DB_PATH)
     registry = ContractRegistry(str(DB_PATH))
     collector = FuturesCollector(db, registry)
-    collector.collect_all()
+    collector.collect_all(trigger_restructure=True)

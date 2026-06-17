@@ -13,6 +13,7 @@
 """
 
 import pytest
+import time
 from unittest.mock import patch, MagicMock, call
 
 from futures.n_structure import dynamic_restructure, NState, detect_and_save
@@ -111,8 +112,8 @@ class TestABrokenMigration:
         assert result["point_c_time"] == T4
         # 方向翻转
         assert result["direction"] == "SHORT"
-        # 状态：SHORT C=92 <= B=85? No → LEG2
-        assert result["state"] == NState.LEG2.value
+        # 状态：SHORT C=92 <= B=85? No → LEG3（C-first 算法已确认 3 点有效结构）
+        assert result["state"] == NState.LEG3.value
         assert result["is_active"] is True
         # 验证 _save_n_structure 被调用
         mock_save.assert_called_once()
@@ -157,8 +158,8 @@ class TestABrokenMigration:
         assert result["point_c_time"] == T4
         # 方向翻转
         assert result["direction"] == "LONG"
-        # 状态：LONG C=95 >= B=105? No → LEG2
-        assert result["state"] == NState.LEG2.value
+        # 状态：LONG C=95 >= B=105? No → LEG3（C-first 算法已确认 3 点有效结构）
+        assert result["state"] == NState.LEG3.value
         assert result["is_active"] is True
         mock_save.assert_called_once()
 
@@ -342,9 +343,9 @@ class TestInsufficientSwings:
         result = dynamic_restructure("RB", "rb2510", "1w", _test_db)
 
         # 未触发迁移（B 后不足 2 个极值点）→ 回退 detect_and_save
-        # detect_and_save 用全量 3 个交替点形成 LONG LEG2
+        # detect_and_save 用全量 3 个交替点形成 LONG LEG3
         assert result["direction"] == "LONG"
-        assert result["state"] == NState.LEG2.value
+        assert result["state"] == NState.LEG3.value
         assert result["point_a_price"] == 80.0
         assert result["point_b_price"] == 110.0
 
@@ -444,9 +445,9 @@ class TestNoNewC:
 
         # fallback detect_and_save 用 4 个极值点：T95→P110→T100→T98
         # 合并同向 TROUGH: T100 被 T98(更低) 替换 → T95→P110→T98
-        # direction=LONG, C=98 > A=95 → 有效, C=98 < B=110 → LEG2
+        # direction=LONG, C=98 > A=95 → 有效 LEG3
         assert result["direction"] == "LONG"
-        assert result["state"] == NState.LEG2.value
+        assert result["state"] == NState.LEG3.value
         assert result["point_a_price"] == 95.0
         assert result["point_b_price"] == 110.0
         assert result["point_c_price"] == 98.0
@@ -481,7 +482,7 @@ class TestNoNewC:
         # fallback detect_and_save 用 4 个极值点
         # 合并→ PEAK(110,T1)→TROUGH(90,T2)→PEAK(105,T3) (T4.P100 < T3.P105 → 合并忽略)
         assert result["direction"] == "SHORT"
-        assert result["state"] == NState.LEG2.value
+        assert result["state"] == NState.LEG3.value
         assert result["is_active"] is True
         assert result["point_a_price"] == 110.0
         assert result["point_b_price"] == 90.0
@@ -489,7 +490,268 @@ class TestNoNewC:
 
 
 # ═══════════════════════════════════════════════════════
-# 7. 迁移后方向正确
+# 7. C 点更新 — A 未突破时的 C 点滑动更新
+# ═══════════════════════════════════════════════════════
+
+class TestCPointUpdate:
+    """C 点滑动更新：新 swing point 与 C 同类型且更极端时更新 C 点"""
+
+    @patch("futures.n_structure._save_n_structure")
+    @patch("futures.n_structure._get_swing_points")
+    @patch("futures.n_structure._get_klines")
+    @patch("futures.n_structure._get_active_n_structure")
+    def test_long_c_updated_lower_trough(
+        self,
+        mock_get_active: MagicMock,
+        mock_get_klines: MagicMock,
+        mock_get_swings: MagicMock,
+        mock_save: MagicMock,
+    ) -> None:
+        """LONG: A 未突破，但新 TROUGH(92) 比当前 C=TROUGH(95) 更低 → C 更新为 92"""
+        active = {
+            "symbol": "RB", "contract": "rb2510", "timeframe": "1w",
+            "direction": "LONG", "state": "LEG3",
+            "point_a_time": T1, "point_a_price": 90.0,
+            "point_b_time": T2, "point_b_price": 110.0,
+            "point_c_time": T3, "point_c_price": 95.0,
+        }
+        mock_get_active.return_value = active
+        # A=90 未突破：最新 low=98 > A=90
+        mock_get_klines.return_value = [
+            make_kline(T4, close=100, high=105, low=98, open_=102),
+            make_kline(T5, close=102, high=106, low=99, open_=101),
+        ]
+        # 最新 swing point: TROUGH(92) — 比当前 C=95 更低（更极端）
+        mock_get_swings.return_value = [
+            make_swing("TROUGH", 95, T3),   # 当前 C 点
+            make_swing("PEAK", 108, T4),    # 新 PEAK
+            make_swing("TROUGH", 92, T5),   # 新 TROUGH < C=95 → C 应更新
+        ]
+
+        result = dynamic_restructure("RB", "rb2510", "1w", _test_db)
+
+        # 方向不变
+        assert result["direction"] == "LONG"
+        # A/B 不变
+        assert result["point_a_price"] == 90.0
+        assert result["point_b_price"] == 110.0
+        # C 从 95 更新为 92
+        assert result["point_c_price"] == 92.0
+        assert result["point_c_time"] == T5
+        # 状态保持
+        assert result["state"] == NState.LEG3.value
+        assert result["is_active"] is True
+        # _save_n_structure 被调用（保存 C 更新）
+        mock_save.assert_called_once()
+
+    @patch("futures.n_structure._save_n_structure")
+    @patch("futures.n_structure._get_swing_points")
+    @patch("futures.n_structure._get_klines")
+    @patch("futures.n_structure._get_active_n_structure")
+    def test_short_c_updated_higher_peak(
+        self,
+        mock_get_active: MagicMock,
+        mock_get_klines: MagicMock,
+        mock_get_swings: MagicMock,
+        mock_save: MagicMock,
+    ) -> None:
+        """SHORT: A 未突破，但新 PEAK(108) 比当前 C=PEAK(105) 更高 → C 更新为 108"""
+        active = {
+            "symbol": "RB", "contract": "rb2510", "timeframe": "1w",
+            "direction": "SHORT", "state": "LEG3",
+            "point_a_time": T1, "point_a_price": 110.0,
+            "point_b_time": T2, "point_b_price": 90.0,
+            "point_c_time": T3, "point_c_price": 105.0,
+        }
+        mock_get_active.return_value = active
+        # A=110 未突破：最新 high=108 < A=110, low=99 不触发 B 反转（≤100 threshold）
+        mock_get_klines.return_value = [
+            make_kline(T4, close=106, high=108, low=99, open_=105),
+            make_kline(T5, close=107, high=109, low=100, open_=106),
+        ]
+        # 最新 swing point: PEAK(108) — 比当前 C=105 更高（更极端）
+        mock_get_swings.return_value = [
+            make_swing("PEAK", 105, T3),   # 当前 C 点
+            make_swing("TROUGH", 100, T4), # 新 TROUGH
+            make_swing("PEAK", 108, T5),   # 新 PEAK > C=105 → C 应更新
+        ]
+
+        result = dynamic_restructure("RB", "rb2510", "1w", _test_db)
+
+        assert result["direction"] == "SHORT"
+        assert result["point_a_price"] == 110.0
+        assert result["point_b_price"] == 90.0
+        assert result["point_c_price"] == 108.0
+        assert result["point_c_time"] == T5
+        assert result["state"] == NState.LEG3.value
+        assert result["is_active"] is True
+        mock_save.assert_called_once()
+
+    @patch("futures.n_structure._save_n_structure")
+    @patch("futures.n_structure._get_swing_points")
+    @patch("futures.n_structure._get_klines")
+    @patch("futures.n_structure._get_active_n_structure")
+    def test_c_not_updated_less_extreme(
+        self,
+        mock_get_active: MagicMock,
+        mock_get_klines: MagicMock,
+        mock_get_swings: MagicMock,
+        mock_save: MagicMock,
+    ) -> None:
+        """LONG: 新 TROUGH(97) 比当前 C=95 更高（不够极端）→ C 不变"""
+        active = {
+            "symbol": "RB", "contract": "rb2510", "timeframe": "1w",
+            "direction": "LONG", "state": "LEG3",
+            "point_a_time": T1, "point_a_price": 90.0,
+            "point_b_time": T2, "point_b_price": 110.0,
+            "point_c_time": T3, "point_c_price": 95.0,
+        }
+        mock_get_active.return_value = active
+        mock_get_klines.return_value = [
+            make_kline(T4, close=102, high=105, low=98, open_=100),
+        ]
+        # 最新 swing point: TROUGH(97) — 比当前 C=95 更高 → 不够极端
+        mock_get_swings.return_value = [
+            make_swing("TROUGH", 95, T3),
+            make_swing("PEAK", 108, T4),
+            make_swing("TROUGH", 97, T5),
+        ]
+
+        result = dynamic_restructure("RB", "rb2510", "1w", _test_db)
+
+        # C 未更新
+        assert result["point_c_price"] == 95.0
+        assert result["point_c_time"] == T3
+        mock_save.assert_not_called()
+
+    @patch("futures.n_structure._save_n_structure")
+    @patch("futures.n_structure._get_swing_points")
+    @patch("futures.n_structure._get_klines")
+    @patch("futures.n_structure._get_active_n_structure")
+    def test_c_not_updated_wrong_type(
+        self,
+        mock_get_active: MagicMock,
+        mock_get_klines: MagicMock,
+        mock_get_swings: MagicMock,
+        mock_save: MagicMock,
+    ) -> None:
+        """LONG: 新 swing point 是 PEAK（与 C=TROUGH 不同型）→ C 不变"""
+        active = _long_active()
+        mock_get_active.return_value = active
+        mock_get_klines.return_value = [
+            make_kline(T4, close=102, high=105, low=98, open_=100),
+        ]
+        # 最新 swing point: PEAK(112) — 与 C=TROUGH 不同型 → 不更新 C
+        mock_get_swings.return_value = [
+            make_swing("TROUGH", 95, T3),
+            make_swing("PEAK", 108, T4),
+            make_swing("PEAK", 112, T5),  # PEAK, 不是 TROUGH
+        ]
+
+        result = dynamic_restructure("RB", "rb2510", "1w", _test_db)
+
+        assert result["point_c_price"] == 95.0
+        assert result["point_c_time"] == T3
+        mock_save.assert_not_called()
+
+
+# ═══════════════════════════════════════════════════════
+# 8. C 点更新 + 真实 DB 验证
+# ═══════════════════════════════════════════════════════
+
+class TestCPointUpdateRealDB:
+    """使用真实内存 DB 验证 C 点更新持久化"""
+
+    def _seed_active(self, db: Database, ns: dict) -> None:
+        with db.get_conn() as conn:
+            conn.execute(
+                """INSERT INTO futures_n_structures
+                   (symbol, contract, timeframe, direction, state,
+                    point_a_time, point_a_price,
+                    point_b_time, point_b_price,
+                    point_c_time, point_c_price)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                (ns["symbol"], ns["contract"], ns["timeframe"],
+                 ns["direction"], ns["state"],
+                 ns["point_a_time"], ns["point_a_price"],
+                 ns["point_b_time"], ns["point_b_price"],
+                 ns["point_c_time"], ns["point_c_price"]),
+            )
+            conn.commit()
+
+    def _seed_klines(self, db: Database, klines: list) -> None:
+        with db.get_conn() as conn:
+            for k in klines:
+                conn.execute(
+                    """INSERT INTO futures_klines
+                       (symbol, contract, timeframe, timestamp,
+                        open, high, low, close, volume)
+                       VALUES (?,?,?,?,?,?,?,?,?)""",
+                    (k.get("symbol", "RB"), k.get("contract", "rb2510"),
+                     k.get("timeframe", "1w"),
+                     k["timestamp"], k["open"], k["high"],
+                     k["low"], k["close"], k.get("volume", 100)),
+                )
+            conn.commit()
+
+    def _seed_swings(self, db: Database, swings: list) -> None:
+        with db.get_conn() as conn:
+            for sp in swings:
+                conn.execute(
+                    """INSERT INTO futures_swing_points
+                       (symbol, contract, timeframe, timestamp, price, point_type)
+                       VALUES (?,?,?,?,?,?)""",
+                    (sp.get("symbol", "RB"), sp.get("contract", "rb2510"),
+                     sp.get("timeframe", "1w"),
+                     sp["timestamp"], sp["price"], sp["point_type"]),
+                )
+            conn.commit()
+
+    def test_long_c_updated_persisted(self, temp_db: Database) -> None:
+        """LONG C 更新 → 结果持久化到 DB（使用当前时间戳绕过新鲜度检查）"""
+        now = int(time.time())
+        TA, TB, TC = now - 10800, now - 7200, now - 3600  # A/B/C 在 freshness 窗口内
+        T4, T5 = now - 1800, now - 600  # 新 K 线和新 swing point
+
+        self._seed_active(temp_db, {
+            "symbol": "RB", "contract": "rb2510", "timeframe": "1w",
+            "direction": "LONG", "state": "LEG3",
+            "point_a_time": TA, "point_a_price": 90.0,
+            "point_b_time": TB, "point_b_price": 110.0,
+            "point_c_time": TC, "point_c_price": 95.0,
+        })
+        self._seed_klines(temp_db, [
+            make_kline(T4, close=100, high=105, low=98, open_=102),
+        ])
+        self._seed_swings(temp_db, [
+            make_swing("TROUGH", 95, TC),
+            make_swing("PEAK", 108, T4),
+            make_swing("TROUGH", 92, T5),  # 新 TROUGH < C=95
+        ])
+
+        result = dynamic_restructure("RB", "rb2510", "1w", temp_db)
+
+        assert result["point_c_price"] == 92.0
+        assert result["point_c_time"] == T5
+
+        # DB 验证
+        with temp_db.get_conn() as conn:
+            saved = conn.execute(
+                """SELECT * FROM futures_n_structures
+                   WHERE symbol='RB' AND timeframe='1w'
+                   ORDER BY id DESC LIMIT 1"""
+            ).fetchone()
+        assert saved is not None
+        saved = dict(saved)
+        assert saved["point_c_price"] == 92.0
+        assert saved["point_c_time"] == T5
+        assert saved["point_a_price"] == 90.0
+        assert saved["point_b_price"] == 110.0
+        assert saved["direction"] == "LONG"
+
+
+# ═══════════════════════════════════════════════════════
+# 9. 迁移后方向正确
 # ═══════════════════════════════════════════════════════
 
 class TestMigrationDirection:
@@ -608,15 +870,32 @@ class TestRealDBPersistence:
             conn.commit()
 
     def test_long_a_broken_persisted(self, temp_db: Database) -> None:
-        """LONG A 突破 → 迁移结果持久化到 DB，可读回验证"""
-        self._seed_active(temp_db, _long_active())
+        """LONG A 突破 → 迁移结果持久化到 DB，可读回验证。
+
+        使用 time.time() 相对时间戳确保通过 _get_active_n_structure 的：
+        1. 新鲜度检查（last_c_time 在 60d 内）
+        2. 止损检查（last kline close > A=90）
+        """
+        now = int(time.time())
+        TA, TB, TC = now - 10800, now - 7200, now - 3600  # A/B/C 在 freshness 窗口内
+        T4 = now - 1800  # 新 K 线和新 swing point 时间
+
+        self._seed_active(temp_db, {
+            "symbol": "RB", "contract": "rb2510", "timeframe": "1w",
+            "direction": "LONG", "state": "LEG3",
+            "point_a_time": TA, "point_a_price": 90.0,
+            "point_b_time": TB, "point_b_price": 110.0,
+            "point_c_time": TC, "point_c_price": 95.0,
+        })
+        # K 线：close=92 > A=90 通过止损检查，low=85 < A=90 触发 A 突破
         self._seed_klines(temp_db, [
-            make_kline(T4, close=88, high=100, low=85, open_=95),
+            make_kline(T4, close=92, low=85, high=100, open_=88),
         ])
+        # 极值点
         self._seed_swings(temp_db, [
-            make_swing("TROUGH", 80, T1),
-            make_swing("PEAK", 110, T2),
-            make_swing("TROUGH", 85, T3),
+            make_swing("TROUGH", 80, TA),
+            make_swing("PEAK", 110, TB),
+            make_swing("TROUGH", 85, TC),
             make_swing("PEAK", 92, T4),
         ])
 
@@ -634,7 +913,7 @@ class TestRealDBPersistence:
         saved = dict(saved)
         assert saved["direction"] == "SHORT"
         assert saved["point_a_price"] == 110.0
-        assert saved["point_a_time"] == T2
+        assert saved["point_a_time"] == TB
         assert saved["point_b_price"] == 85.0
         assert saved["point_c_price"] == 92.0
         assert saved["state"] in (NState.LEG2.value, NState.LEG3.value)

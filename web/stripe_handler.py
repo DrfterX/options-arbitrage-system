@@ -27,6 +27,8 @@ Stripe 付费订阅集成模块 — Signals Premium $19/月。
 
 import logging
 import os
+import secrets
+from functools import wraps
 from typing import Optional
 
 import stripe
@@ -177,12 +179,18 @@ def handle_webhook(db, payload: bytes, sig_header: str) -> dict:
     return {"received": True}
 
 
+def _generate_token() -> str:
+    """生成唯一的 Bearer Token。"""
+    return secrets.token_urlsafe(32)
+
+
 def _handle_checkout_completed(db, session: dict) -> None:
-    """处理 checkout.session.completed 事件——记录支付成功。"""
+    """处理 checkout.session.completed 事件——记录支付成功并生成 Bearer Token。"""
     session_id = session.get("id", "")
     customer_id = session.get("customer", "") or ""
     email = session.get("customer_details", {}).get("email", "") or ""
     status = session.get("status", "complete")
+    token = _generate_token()
 
     ensure_premium_table(db)
     conn = db.get_conn()
@@ -190,12 +198,12 @@ def _handle_checkout_completed(db, session: dict) -> None:
     try:
         conn.execute(
             """INSERT OR IGNORE INTO premium_subscriptions
-               (session_id, customer_id, email, status)
-               VALUES (?, ?, ?, ?)""",
-            (session_id, customer_id, email, "active" if status == "complete" else status),
+               (session_id, customer_id, email, status, token)
+               VALUES (?, ?, ?, ?, ?)""",
+            (session_id, customer_id, email, "active" if status == "complete" else status, token),
         )
         conn.commit()
-        logger.info("订阅记录已写入: session=%s email=%s", session_id, email)
+        logger.info("订阅记录已写入: session=%s email=%s token=%s", session_id, email, token[:8] + "...")
     except Exception as e:
         logger.error("写入订阅记录失败: %s", e)
 
@@ -298,3 +306,45 @@ def verify_token(db, token: str) -> bool:
         (token,),
     ).fetchone()
     return row is not None
+
+
+# ─── 鉴权装饰器 ────────────────────────────────────────────────
+
+
+def require_premium(f):
+    """Flask 路由装饰器：要求请求携带有效的 Premium Bearer Token。
+
+    用法::
+
+        @app.route("/api/premium/xxx")
+        @require_premium
+        def my_premium_api():
+            return jsonify({"data": "..."})
+
+    Token 通过以下方式获取（按优先级）:
+      1. ``Authorization: Bearer <token>`` 请求头
+      2. ``token`` URL query parameter
+    """
+
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        from flask import request, jsonify
+
+        from web.app import db as _db
+
+        token = ""
+        auth = request.headers.get("Authorization", "")
+        if auth.startswith("Bearer "):
+            token = auth[7:]
+        if not token:
+            token = request.args.get("token", "")
+
+        if not token:
+            return jsonify({"error": "缺少 token", "premium": False}), 401
+
+        if not verify_token(_db, token):
+            return jsonify({"error": "token 无效或已过期", "premium": False}), 403
+
+        return f(*args, **kwargs)
+
+    return decorated

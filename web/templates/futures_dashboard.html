@@ -116,6 +116,79 @@
 </style>
 </head>
 <body>
+
+<!-- ─── CSS-ONLY INITIAL SKELETON (shown before JS loads) ─── -->
+<div id="initialSkeleton" class="initial-skeleton">
+  <div class="is-topbar"></div>
+  <div class="is-stats">
+    <div class="is-stat"></div>
+    <div class="is-stat"></div>
+    <div class="is-stat"></div>
+    <div class="is-stat"></div>
+  </div>
+  <div class="is-matrix">
+    <div class="is-matrix-row"></div>
+    <div class="is-matrix-row"></div>
+    <div class="is-matrix-row"></div>
+    <div class="is-matrix-row"></div>
+    <div class="is-matrix-row"></div>
+    <div class="is-matrix-row"></div>
+    <div class="is-matrix-row"></div>
+    <div class="is-matrix-row"></div>
+  </div>
+</div>
+<style>
+.initial-skeleton {
+  padding: 16px 24px;
+  background: var(--bg);
+  position: absolute;
+  inset: 0;
+  z-index: 999;
+}
+.initial-skeleton .is-topbar {
+  height: 32px;
+  background: linear-gradient(90deg, rgba(79,91,128,0.06) 25%, rgba(79,91,128,0.16) 50%, rgba(79,91,128,0.06) 75%);
+  background-size: 200% 100%;
+  border-radius: var(--radius-sm);
+  margin-bottom: 14px;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+.initial-skeleton .is-stats {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.initial-skeleton .is-stat {
+  flex: 1;
+  height: 48px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, rgba(79,91,128,0.06) 25%, rgba(79,91,128,0.16) 50%, rgba(79,91,128,0.06) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+.initial-skeleton .is-matrix {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.initial-skeleton .is-matrix-row {
+  height: 24px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, rgba(79,91,128,0.06) 25%, rgba(79,91,128,0.16) 50%, rgba(79,91,128,0.06) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+  animation-delay: calc(var(--i, 0) * 0.06s);
+}
+.initial-skeleton .is-matrix-row:nth-child(1) { --i: 0; }
+.initial-skeleton .is-matrix-row:nth-child(2) { --i: 1; }
+.initial-skeleton .is-matrix-row:nth-child(3) { --i: 2; }
+.initial-skeleton .is-matrix-row:nth-child(4) { --i: 3; }
+.initial-skeleton .is-matrix-row:nth-child(5) { --i: 4; }
+.initial-skeleton .is-matrix-row:nth-child(6) { --i: 5; }
+.initial-skeleton .is-matrix-row:nth-child(7) { --i: 6; }
+.initial-skeleton .is-matrix-row:nth-child(8) { --i: 7; }
+</style>
+
 <div class="app">
 
 <!-- ─── TOPBAR ─── -->
@@ -209,9 +282,9 @@
           {% if cell.a %}
           {% set alpha = [0.9, item.score * 1.2]|min %}
           {% if alpha < 0.25 %}{% set alpha = 0.25 %}{% endif %}
-          <td><div class="signal-cell kline-trigger" style="opacity:{{ alpha }}" onclick="showKlinePopup(this)" data-sym="{{ item.sym }}" data-tf="{{ cell.tf }}" data-dir="{{ cell.dir }}" data-a="{{ "%.2f"|format(cell.a) }}" data-b="{{ "%.2f"|format(cell.b) }}" data-c="{{ "%.2f"|format(cell.c) }}" title="N型结构: {{ cell.state or '' }}"><span class="inner-text">{{ '多' if is_long else '空' }}</span></div></td>
+          <td><div class="signal-cell kline-trigger" style="opacity:{{ alpha }}" onclick="showKlinePopup(this)" data-sym="{{ item.sym }}" data-tf="{{ cell.tf }}" data-dir="{{ cell.dir }}" data-a="{{ "%.2f"|format(cell.a) }}" data-b="{{ "%.2f"|format(cell.b) }}" data-c="{{ "%.2f"|format(cell.c) }}" data-at="{{ cell.at or '' }}" data-bt="{{ cell.bt or '' }}" data-ct="{{ cell.ct or '' }}" title="N型结构: {{ cell.state or '' }}"><span class="inner-text">{{ '多' if is_long else '空' }}</span></div></td>
           {% else %}
-          <td><div class="signal-cell kline-trigger" style="opacity:0.45" onclick="showKlinePopup(this)" data-sym="{{ item.sym }}" data-tf="{{ cell.tf }}" data-dir="{{ cell.dir }}" data-a="" data-b="" data-c="" title="信号方向（待N型确认）"><span class="inner-text">{{ '多' if is_long else '空' }}</span></div></td>
+          <td><div class="signal-cell kline-trigger" style="opacity:0.45" onclick="showKlinePopup(this)" data-sym="{{ item.sym }}" data-tf="{{ cell.tf }}" data-dir="{{ cell.dir }}" data-a="" data-b="" data-c="" data-at="" data-bt="" data-ct="" title="信号方向（待N型确认）"><span class="inner-text">{{ '多' if is_long else '空' }}</span></div></td>
           {% endif %}
           {% else %}
           <td><div class="signal-cell empty"><span class="inner-text">-</span></div></td>
@@ -355,6 +428,9 @@
 </div>
 
 <script>
+// ── Remove CSS-only initial skeleton (loaded before JS) ──
+document.getElementById('initialSkeleton')?.remove();
+
 // ── SKELETON LOADING: matrix table placeholder ──
 function createMatrixSkeleton(n, hasSectors) {
   // Build skeleton rows that mirror the real 6-column matrix structure
@@ -461,11 +537,14 @@ if (AUTO_REFRESH) {
               var aStr = cell.a != null ? cell.a.toFixed(2) : '';
               var bStr = cell.b != null ? cell.b.toFixed(2) : '';
               var cStr = cell.c != null ? cell.c.toFixed(2) : '';
+              var atStr = cell.at != null ? cell.at : '';
+              var btStr = cell.bt != null ? cell.bt : '';
+              var ctStr = cell.ct != null ? cell.ct : '';
               var stateStr = cell.state || '';
               var titleText = stateStr ? 'N型结构: ' + stateStr : '信号方向（待N型确认）';
               var innerText = isLong ? '多' : '空';
 
-              html += '<td><div class="signal-cell kline-trigger" style="opacity:' + alpha + '" onclick="showKlinePopup(this)" data-sym="' + esc(row.sym) + '" data-tf="' + esc(cell.tf) + '" data-dir="' + cell.dir + '" data-a="' + aStr + '" data-b="' + bStr + '" data-c="' + cStr + '" title="' + esc(titleText) + '"><span class="inner-text">' + innerText + '</span></div></td>';
+              html += '<td><div class="signal-cell kline-trigger" style="opacity:' + alpha + '" onclick="showKlinePopup(this)" data-sym="' + esc(row.sym) + '" data-tf="' + esc(cell.tf) + '" data-dir="' + cell.dir + '" data-a="' + aStr + '" data-b="' + bStr + '" data-c="' + cStr + '" data-at="' + atStr + '" data-bt="' + btStr + '" data-ct="' + ctStr + '" title="' + esc(titleText) + '"><span class="inner-text">' + innerText + '</span></div></td>';
             } else {
               html += '<td><div class="signal-cell empty"><span class="inner-text">-</span></div></td>';
             }
@@ -569,7 +648,7 @@ var popup = document.getElementById('klinePopup');
 var canvas = document.getElementById('kpCanvas');
 var ctx = canvas.getContext('2d');
 
-function drawKline(bars, nA, nB, nC, nDir) {
+function drawKline(bars, nA, nB, nC, nDir, nAt, nBt, nCt) {
     var dpr = window.devicePixelRatio || 1;
     var rect = canvas.getBoundingClientRect();
     canvas.width = rect.width * dpr; canvas.height = 160 * dpr;
@@ -632,32 +711,24 @@ function drawKline(bars, nA, nB, nC, nDir) {
             ctx.fillRect(x - barW/2, H - volH, barW, volH);
         }
     });
-    // ── N 型结构 A/B/C 线段标记（连接至对应 K 线端点） ──
-    var nPoints = [
-        {label: 'A', price: nA, cls: 'A'},
-        {label: 'B', price: nB, cls: 'B'},
-        {label: 'C', price: nC, cls: 'C'},
-    ];
-    // Find the bar index that best matches each N-point's price
-    // LONG: A=low, B=high, C=low  |  SHORT: A=high, B=low, C=high
-    function findBarForNPoint(bars, price, isHigh) {
-        if (price == null || isNaN(price)) return -1;
+    // ── N 型结构 A/B/C 线段标记（按时间戳匹配 K 线位置） ──
+    // Find the bar index whose timestamp is closest to the target time
+    function findBarForNPoint(bars, targetTime) {
+        if (targetTime == null || isNaN(targetTime)) return -1;
         var bestIdx = -1, bestDist = Infinity;
         bars.forEach(function(bar, i) {
-            var bp = isHigh ? bar.h : bar.l;
-            var dist = Math.abs(bp - price);
+            var dist = Math.abs(bar.t - targetTime);
             if (dist < bestDist) { bestDist = dist; bestIdx = i; }
         });
         return bestIdx;
     }
+    // Convert timestamps to numbers (passed as strings from data-* attributes)
+    var nAtNum = Number(nAt), nBtNum = Number(nBt), nCtNum = Number(nCt);
     var nDir = (typeof nDir !== 'undefined' && nDir) || 'LONG';
-    var aIsHigh = (nDir !== 'LONG');  // LONG: A=low, SHORT: A=high
-    var bIsHigh = (nDir === 'LONG');  // LONG: B=high, SHORT: B=low
-    var cIsHigh = (nDir !== 'LONG');  // LONG: C=low, SHORT: C=high
     var nIdxs = [
-        {idx: findBarForNPoint(bars, nA, aIsHigh), price: nA, cls: 'A'},
-        {idx: findBarForNPoint(bars, nB, bIsHigh), price: nB, cls: 'B'},
-        {idx: findBarForNPoint(bars, nC, cIsHigh), price: nC, cls: 'C'},
+        {idx: findBarForNPoint(bars, nAtNum), price: nA, cls: 'A', time: nAtNum},
+        {idx: findBarForNPoint(bars, nBtNum), price: nB, cls: 'B', time: nBtNum},
+        {idx: findBarForNPoint(bars, nCtNum), price: nC, cls: 'C', time: nCtNum},
     ];
     // Draw line segments A→B and B→C
     var prevPt = null;
@@ -711,6 +782,34 @@ function drawKline(bars, nA, nB, nC, nDir) {
         ctx.fillStyle = color;
         ctx.fillText(label, lx + 4, ly + 12);
     });
+    // ── C 点到最新价：第三笔方向提示（虚线箭头） ──
+    var lastBar = bars[bars.length - 1];
+    if (lastBar && nIdxs[2].idx >= 0 && nIdxs[2].idx < barXs.length) {
+        var cIdx = nIdxs[2].idx;
+        var cX = barXs[cIdx];
+        var cY = priceToY(nIdxs[2].price);
+        var lastX = barXs[barXs.length - 1];
+        var lastCloseY = priceToY(lastBar.c);
+        if (lastX > cX) {
+            ctx.setLineDash([6, 4]);
+            ctx.strokeStyle = nDir === 'LONG' ? 'rgba(240,68,56,0.35)' : 'rgba(34,197,94,0.35)';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(cX, cY);
+            ctx.lineTo(lastX, lastCloseY);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            // Arrowhead at the end
+            var angle = Math.atan2(lastCloseY - cY, lastX - cX);
+            ctx.fillStyle = nDir === 'LONG' ? 'rgba(240,68,56,0.5)' : 'rgba(34,197,94,0.5)';
+            ctx.beginPath();
+            ctx.moveTo(lastX, lastCloseY);
+            ctx.lineTo(lastX - 8 * Math.cos(angle - 0.4), lastCloseY - 8 * Math.sin(angle - 0.4));
+            ctx.lineTo(lastX - 8 * Math.cos(angle + 0.4), lastCloseY - 8 * Math.sin(angle + 0.4));
+            ctx.closePath();
+            ctx.fill();
+        }
+    }
     ctx.strokeStyle = 'rgba(90,97,115,0.08)';
     ctx.lineWidth = 0.5;
     ctx.beginPath(); ctx.moveTo(chartLeft, H - 16); ctx.lineTo(chartRight, H - 16); ctx.stroke();
@@ -730,6 +829,7 @@ async function showKlinePopup(el) {
     _currentCell = el;
     var sym = el.dataset.sym, tf = el.dataset.tf, dir = el.dataset.dir;
     var a = el.dataset.a, b = el.dataset.b, c_val = el.dataset.c;
+    var at = el.dataset.at, bt = el.dataset.bt, ct = el.dataset.ct;
     var rect = el.getBoundingClientRect();
     var left = rect.right + 10, top = rect.top - 20;
     if (left + 360 > window.innerWidth) left = rect.left - 370;
@@ -755,15 +855,36 @@ async function showKlinePopup(el) {
         var resp = await fetch('/api/klines?symbol=' + sym + '&timeframe=' + tf);
         if (!resp.ok) throw new Error('HTTP ' + resp.status);
         var data = await resp.json();
+        // 优先使用 API 返回的最新 N 型结构数据（而非页面加载时的陈旧 data-* 属性）
+        var ns = data.n_structure;
+        if (ns) {
+            if (ns.a != null) a = ns.a;
+            if (ns.b != null) b = ns.b;
+            if (ns.c != null) c_val = ns.c;
+            if (ns.at != null) at = ns.at;
+            if (ns.bt != null) bt = ns.bt;
+            if (ns.ct != null) ct = ns.ct;
+            if (ns.dir) dir = ns.dir;
+            // 更新方向标签
+            var dirEl2 = document.getElementById('kpDir');
+            dirEl2.textContent = dir === 'LONG' ? '做多' : '做空';
+            dirEl2.className = 'kp-dir ' + (dir === 'LONG' ? 'long' : 'short');
+        }
         if (!data.bars || !data.bars.length) {
             document.getElementById('kpTime').textContent = '暂无K线数据';
             if (skel) skel.style.display = 'none';
             return;
         }
         if (skel) skel.style.display = 'none';
-        document.getElementById('kpPrice').textContent = a && b && c_val ? 'A:'+parseFloat(a).toFixed(2)+' B:'+parseFloat(b).toFixed(2)+' C:'+parseFloat(c_val).toFixed(2) : '';
+        var priceLine = '';
+        if (a && b && c_val) {
+            var lastC = data.bars[data.bars.length-1].c;
+            var leg3Dir = parseFloat(lastC) > parseFloat(c_val) ? '↑第三笔偏多' : '↓第三笔偏空';
+            priceLine = 'A:'+parseFloat(a).toFixed(2)+' B:'+parseFloat(b).toFixed(2)+' C:'+parseFloat(c_val).toFixed(2)+' | '+leg3Dir;
+        }
+        document.getElementById('kpPrice').textContent = priceLine;
         document.getElementById('kpTime').textContent = data.bars.length + '根K线 | 最新:' + data.bars[data.bars.length-1].c;
-        requestAnimationFrame(function() { drawKline(data.bars, parseFloat(a), parseFloat(b), parseFloat(c_val), dir); });
+        requestAnimationFrame(function() { drawKline(data.bars, parseFloat(a), parseFloat(b), parseFloat(c_val), dir, parseFloat(at), parseFloat(bt), parseFloat(ct)); });
     } catch(err) {
         console.error('Kline popup error:', err);
         if (skel) skel.style.display = 'none';

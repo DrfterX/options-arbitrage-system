@@ -410,7 +410,7 @@ class TestSlidingWindow:
     def test_sliding_window_picks_latest_valid(
         self, mock_get_swings: MagicMock, mock_save: MagicMock,
     ) -> None:
-        """4个交替点：最新3个如果有效则优先选"""
+        """4个交替点：前向扫描找到最早有效 T80→P120→T90 → LONG结构"""
         mock_get_swings.return_value = [
             make_swing("TROUGH", 80, T1),
             make_swing("PEAK", 120, T2),
@@ -418,10 +418,11 @@ class TestSlidingWindow:
             make_swing("PEAK", 105, T4),
         ]
         result = detect_and_save("RB", "rb2510", "1w", _test_db)
-        assert result["direction"] == "SHORT"
-        assert result["point_a_price"] == 120
-        assert result["point_b_price"] == 90
-        assert result["point_c_price"] == 105
+        # 前向非重叠扫描：A=T80, B=P120, C=T90 → LONG
+        assert result["direction"] == "LONG"
+        assert result["point_a_price"] == 80
+        assert result["point_b_price"] == 120
+        assert result["point_c_price"] == 90
 
     @patch("futures.n_structure._save_n_structure")
     @patch("futures.n_structure._get_swing_points")
@@ -443,7 +444,7 @@ class TestSlidingWindow:
     def test_five_points_window(
         self, mock_get_swings: MagicMock, mock_save: MagicMock,
     ) -> None:
-        """5个交替点"""
+        """5个交替点：前向扫描取最早有效 P120→T90→P105 → SHORT结构"""
         mock_get_swings.return_value = [
             make_swing("PEAK", 120, T1),
             make_swing("TROUGH", 90, T2),
@@ -452,10 +453,11 @@ class TestSlidingWindow:
             make_swing("PEAK", 100, T5),
         ]
         result = detect_and_save("RB", "rb2510", "1w", _test_db)
+        # 前向非重叠扫描：A=P120, B=T90, C=P105 → SHORT (C=105 < A=120 ✓)
         assert result["direction"] == "SHORT"
-        assert result["point_a_price"] == 105
-        assert result["point_b_price"] == 85
-        assert result["point_c_price"] == 100
+        assert result["point_a_price"] == 120
+        assert result["point_b_price"] == 90
+        assert result["point_c_price"] == 105
 
     @patch("futures.n_structure._save_n_structure")
     @patch("futures.n_structure._get_swing_points")

@@ -718,12 +718,12 @@ var IV_DATA = JSON.parse('{{ iv_json|safe }}');
   var chart = echarts.init(el, null, { renderer: 'canvas' });
   chart.setOption({
     backgroundColor: 'transparent',
-    grid: { top: 20, right: 20, bottom: 110, left: 45 },
+    grid: { top: 20, right: 20, bottom: 140, left: 45 },
     xAxis: {
       type: 'category',
       data: IV_DATA.map(function(d){ return (d.symbol||'').toUpperCase(); }),
       axisLabel: {
-        color: '#8b92a5', fontSize: 9, interval: 0, rotate: 45,
+        color: '#8b92a5', fontSize: 8, interval: 0, rotate: 35,
         lineHeight: 14, margin: 4,
         // 格式: "AG 白银" — 合约名在 tooltip 中显示，x 轴不重复展示
         formatter: function(val, idx) {
@@ -1172,87 +1172,97 @@ function renderOptionCards(signals) {
   container.innerHTML = html;
 }
 function showStratDetailFromData(el) {
-  var idx = parseInt(el.dataset.idx);
-  var signals = window._signalsData;
-  if (!signals || idx == null || !signals[idx]) return;
-  var s = signals[idx];
-  var popup = document.getElementById('stratPopup');
-  var titleEl = document.getElementById('spTitle');
-  var bodyEl = document.getElementById('spBody');
-  titleEl.textContent = s.symbol + ' ' + (s.contract || '') + ' — ' + (s.strategy || '').replace(/_/g, ' ');
-
-  // ── Try to use strategy_details (rich detail object) ──
-  var detail = s.strategy_details;
-  if (detail && typeof detail === 'string') {
-    try { detail = JSON.parse(sanitizeJSONString(detail)); } catch(e) { detail = null; }
+  // ── Safe number formatter: handles Infinity/NaN/undefined without throwing ──
+  function sf(val, decimals, prefix) {
+    if (val == null || typeof val !== 'number' || !isFinite(val)) return '—';
+    var v = val.toFixed(decimals);
+    return (prefix || '') + v;
   }
+  try {
+    var idx = parseInt(el.dataset.idx);
+    var signals = window._signalsData;
+    if (!signals || idx == null || !signals[idx]) return;
+    var s = signals[idx];
+    var popup = document.getElementById('stratPopup');
+    var titleEl = document.getElementById('spTitle');
+    var bodyEl = document.getElementById('spBody');
+    titleEl.textContent = s.symbol + ' ' + (s.contract || '') + ' — ' + (s.strategy || '').replace(/_/g, ' ');
 
-  var html = '';
-  if (detail && typeof detail === 'object') {
-    // ── Full detail mode (strategy_details available) ──
-    var fields = [
-      { label: '类型', value: (detail.type || s.strategy || '').replace(/_/g, ' ') },
-      { label: '标的价', value: detail.underlying ? detail.underlying.toFixed(1) : '—' },
-      { label: 'IV 均值', value: s.iv_avg ? (s.iv_avg * 100).toFixed(1) + '%' : '—' },
-      { label: '到期天数', value: detail.days_to_expiry != null ? detail.days_to_expiry : '—' },
-      { label: '净 Delta', value: s.net_delta != null ? s.net_delta.toFixed(4) : '—' },
-      { label: '净 Theta', value: s.net_theta != null ? s.net_theta.toFixed(4) : '—' },
-      { label: '净 Vega', value: s.net_vega != null ? s.net_vega.toFixed(2) : '—' },
-      { label: '净成本', value: detail.net_cost != null ? detail.net_cost.toFixed(0) : '—' },
-      { label: '最大盈利', value: s.max_profit != null ? '+' + s.max_profit.toFixed(0) : '—' },
-      { label: '最大亏损', value: s.max_loss != null ? s.max_loss.toFixed(0) : '—' },
-      { label: '盈亏平衡低', value: detail.breakeven_low != null ? detail.breakeven_low.toFixed(1) : '—' },
-      { label: '盈亏平衡高', value: detail.breakeven_high != null ? detail.breakeven_high.toFixed(1) : '—' },
-      { label: '盈利区宽度', value: detail.profit_zone_width != null ? detail.profit_zone_width.toFixed(0) : '—' },
-      { label: '胜率', value: detail.win_rate != null ? (detail.win_rate * 100).toFixed(1) + '%' : '—' },
-      { label: '评分', value: detail.score != null ? detail.score.toFixed(1) : (s.unified_score != null ? s.unified_score.toFixed(1) : '—') },
-      { label: '保证金', value: detail.margin_required != null ? detail.margin_required.toFixed(0) : '—' },
-    ];
-    fields.forEach(function(f) {
-      html += '<div class=\"strat-popup-row\"><span class=\"sp-label\">' + f.label + '</span><span class=\"sp-value\">' + f.value + '</span></div>';
-    });
-    // ── 评分维度分解 ──
-    if (detail.score_components) {
-      var sc = detail.score_components;
-      var labels = { theta: 'Θ 贡献', vega: 'V 贡献', win_rate: '胜率贡献', width: '区间贡献', efficiency: '效率贡献', delta: '中性贡献', iv_bonus: 'IV 奖励' };
-      var compHtml = '';
-      Object.keys(labels).forEach(function(k) {
-        if (sc[k] !== undefined && sc[k] !== null) {
-          compHtml += '<div class=\"strat-popup-row\" style=\"font-size:.62rem\"><span class=\"sp-label\">' + labels[k] + '</span><span class=\"sp-value\" style=\"font-size:.62rem\">' + sc[k].toFixed(1) + '</span></div>';
-        }
-      });
-      if (compHtml) {
-        html += '<div style=\"margin-top:6px;padding-top:4px;border-top:1px solid rgba(26,32,64,.5)\">';
-        html += '<div style=\"font-size:.6rem;color:var(--text3);margin-bottom:3px;letter-spacing:.05em\">评分分解</div>';
-        html += compHtml;
-        html += '</div>';
-      }
+    // ── Try to use strategy_details (rich detail object) ──
+    var detail = s.strategy_details;
+    if (detail && typeof detail === 'string') {
+      try { detail = JSON.parse(sanitizeJSONString(detail)); } catch(e) { detail = null; }
     }
-    if (detail.legs_detail) html += '<div class=\"strat-popup-desc\"><strong>腿组合:</strong> ' + detail.legs_detail + '</div>';
-    if (detail.description) html += '<div class=\"strat-popup-desc\"><strong>描述:</strong> ' + detail.description + '</div>';
-    if (detail.strikes && detail.strikes.length) html += '<div class=\"strat-popup-desc\"><strong>行权价:</strong> ' + detail.strikes.map(function(s) { return s.toFixed(0); }).join(', ') + '</div>';
-  } else {
-    // ── Fallback mode (no strategy_details — show basic info from signal fields) ──
-    html += '<div class=\"strat-popup-row\"><span class=\"sp-label\">类型</span><span class=\"sp-value\">' + (s.strategy || '').replace(/_/g, ' ') + '</span></div>';
-    html += '<div class=\"strat-popup-row\"><span class=\"sp-label\">评分</span><span class=\"sp-value\" style=\"color:var(--brand);font-weight:600\">' + (s.unified_score != null ? s.unified_score.toFixed(1) : '—') + '</span></div>';
-    html += '<div class=\"strat-popup-row\"><span class=\"sp-label\">IV 均值</span><span class=\"sp-value\">' + (s.iv_avg ? (s.iv_avg * 100).toFixed(1) + '%' : '—') + '</span></div>';
-    html += '<div class=\"strat-popup-row\"><span class=\"sp-label\">IV 百分位</span><span class=\"sp-value\">' + (s.iv_percentile != null ? s.iv_percentile.toFixed(0) + '%' : '—') + '</span></div>';
-    html += '<div class=\"strat-popup-row\"><span class=\"sp-label\">净 Delta</span><span class=\"sp-value\">' + (s.net_delta != null ? s.net_delta.toFixed(4) : '—') + '</span></div>';
-    html += '<div class=\"strat-popup-row\"><span class=\"sp-label\">净 Theta</span><span class=\"sp-value\">' + (s.net_theta != null ? s.net_theta.toFixed(4) : '—') + '</span></div>';
-    html += '<div class=\"strat-popup-row\"><span class=\"sp-label\">最大盈利</span><span class=\"sp-value strat-pnl-pos\">' + (s.max_profit != null ? '+' + s.max_profit.toFixed(0) : '—') + '</span></div>';
-    html += '<div class=\"strat-popup-row\"><span class=\"sp-label\">最大亏损</span><span class=\"sp-value strat-pnl-neg\">' + (s.max_loss != null ? s.max_loss.toFixed(0) : '—') + '</span></div>';
-    if (s.reason) html += '<div class=\"strat-popup-desc\"><strong>理由:</strong> ' + s.reason + '</div>';
-    html += '<div style=\"margin-top:6px;padding-top:4px;border-top:1px solid rgba(26,32,64,.3);text-align:center;font-size:.55rem;color:var(--text3)\">基础视图 · 信号详情数据暂缺</div>';
+
+    var html = '';
+    if (detail && typeof detail === 'object') {
+      // ── Full detail mode (strategy_details available) ──
+      var fields = [
+        { label: '类型', value: (detail.type || s.strategy || '').replace(/_/g, ' ') },
+        { label: '标的价', value: sf(detail.underlying, 1) },
+        { label: 'IV 均值', value: s.iv_avg ? (s.iv_avg * 100).toFixed(1) + '%' : '—' },
+        { label: '到期天数', value: detail.days_to_expiry != null ? detail.days_to_expiry : '—' },
+        { label: '净 Delta', value: sf(s.net_delta, 4) },
+        { label: '净 Theta', value: sf(s.net_theta, 4) },
+        { label: '净 Vega', value: sf(s.net_vega, 2) },
+        { label: '净成本', value: sf(detail.net_cost, 0) },
+        { label: '最大盈利', value: sf(s.max_profit, 0, '+') },
+        { label: '最大亏损', value: sf(s.max_loss, 0) },
+        { label: '盈亏平衡低', value: sf(detail.breakeven_low, 1) },
+        { label: '盈亏平衡高', value: sf(detail.breakeven_high, 1) },
+        { label: '盈利区宽度', value: sf(detail.profit_zone_width, 0) },
+        { label: '胜率', value: detail.win_rate != null ? (detail.win_rate * 100).toFixed(1) + '%' : '—' },
+        { label: '评分', value: detail.score != null ? detail.score.toFixed(1) : (s.unified_score != null ? s.unified_score.toFixed(1) : '—') },
+        { label: '保证金', value: sf(detail.margin_required, 0) },
+      ];
+      fields.forEach(function(f) {
+        html += '<div class="strat-popup-row"><span class="sp-label">' + f.label + '</span><span class="sp-value">' + f.value + '</span></div>';
+      });
+      // ── 评分维度分解 ──
+      if (detail.score_components) {
+        var sc = detail.score_components;
+        var labels = { theta: 'Θ 贡献', vega: 'V 贡献', win_rate: '胜率贡献', width: '区间贡献', efficiency: '效率贡献', delta: '中性贡献', iv_bonus: 'IV 奖励' };
+        var compHtml = '';
+        Object.keys(labels).forEach(function(k) {
+          if (sc[k] !== undefined && sc[k] !== null && typeof sc[k] === 'number' && isFinite(sc[k])) {
+            compHtml += '<div class="strat-popup-row" style="font-size:.62rem"><span class="sp-label">' + labels[k] + '</span><span class="sp-value" style="font-size:.62rem">' + sc[k].toFixed(1) + '</span></div>';
+          }
+        });
+        if (compHtml) {
+          html += '<div style="margin-top:6px;padding-top:4px;border-top:1px solid rgba(26,32,64,.5)">';
+          html += '<div style="font-size:.6rem;color:var(--text3);margin-bottom:3px;letter-spacing:.05em">评分分解</div>';
+          html += compHtml;
+          html += '</div>';
+        }
+      }
+      if (detail.legs_detail) html += '<div class="strat-popup-desc"><strong>腿组合:</strong> ' + detail.legs_detail + '</div>';
+      if (detail.description) html += '<div class="strat-popup-desc"><strong>描述:</strong> ' + detail.description + '</div>';
+      if (detail.strikes && detail.strikes.length) html += '<div class="strat-popup-desc"><strong>行权价:</strong> ' + detail.strikes.map(function(s) { return s.toFixed(0); }).join(', ') + '</div>';
+    } else {
+      // ── Fallback mode (no strategy_details — show basic info from signal fields) ──
+      html += '<div class="strat-popup-row"><span class="sp-label">类型</span><span class="sp-value">' + (s.strategy || '').replace(/_/g, ' ') + '</span></div>';
+      html += '<div class="strat-popup-row"><span class="sp-label">评分</span><span class="sp-value" style="color:var(--brand);font-weight:600">' + sf(s.unified_score, 1) + '</span></div>';
+      html += '<div class="strat-popup-row"><span class="sp-label">IV 均值</span><span class="sp-value">' + (s.iv_avg ? (s.iv_avg * 100).toFixed(1) + '%' : '—') + '</span></div>';
+      html += '<div class="strat-popup-row"><span class="sp-label">IV 百分位</span><span class="sp-value">' + (s.iv_percentile != null ? s.iv_percentile.toFixed(0) + '%' : '—') + '</span></div>';
+      html += '<div class="strat-popup-row"><span class="sp-label">净 Delta</span><span class="sp-value">' + sf(s.net_delta, 4) + '</span></div>';
+      html += '<div class="strat-popup-row"><span class="sp-label">净 Theta</span><span class="sp-value">' + sf(s.net_theta, 4) + '</span></div>';
+      html += '<div class="strat-popup-row"><span class="sp-label">最大盈利</span><span class="sp-value strat-pnl-pos">' + sf(s.max_profit, 0, '+') + '</span></div>';
+      html += '<div class="strat-popup-row"><span class="sp-label">最大亏损</span><span class="sp-value strat-pnl-neg">' + sf(s.max_loss, 0) + '</span></div>';
+      if (s.reason) html += '<div class="strat-popup-desc"><strong>理由:</strong> ' + s.reason + '</div>';
+      html += '<div style="margin-top:6px;padding-top:4px;border-top:1px solid rgba(26,32,64,.3);text-align:center;font-size:.55rem;color:var(--text3)">基础视图 · 信号详情数据暂缺</div>';
+    }
+    bodyEl.innerHTML = html;
+    var rect = el.getBoundingClientRect();
+    var left = rect.right + 10;
+    var top = rect.top - 20;
+    if (left + 420 > window.innerWidth) left = rect.left - 430;
+    if (top < 10) top = 10;
+    popup.style.left = left + 'px';
+    popup.style.top = top + 'px';
+    popup.classList.add('show');
+  } catch(e) {
+    console.error('[detail-popup] showStratDetailFromData error:', e, 'el:', el, 'idx:', idx);
   }
-  bodyEl.innerHTML = html;
-  var rect = el.getBoundingClientRect();
-  var left = rect.right + 10;
-  var top = rect.top - 20;
-  if (left + 420 > window.innerWidth) left = rect.left - 430;
-  if (top < 10) top = 10;
-  popup.style.left = left + 'px';
-  popup.style.top = top + 'px';
-  popup.classList.add('show');
 }
 // ── 5min refresh: keep table visible (preserve click handlers), show skeleton only on cards ──
 var _prevSignalsData = null;
