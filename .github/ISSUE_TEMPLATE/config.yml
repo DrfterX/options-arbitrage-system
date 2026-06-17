@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: StatusHub 产品文档
+    url: https://github.com/DrfterX/options-arbitrage-system#readme
+    about: 查看 README 了解产品功能和使用说明
+  - name: 问题讨论
+    url: https://github.com/DrfterX/options-arbitrage-system/discussions
+    about: 如有使用疑问或需要帮助，请先发起 Discussion
