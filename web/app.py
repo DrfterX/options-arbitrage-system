@@ -15,6 +15,7 @@ Flask Web 看板应用 — 期货期权统一信号平台。
 
 import logging
 import json
+import os
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from functools import wraps
@@ -23,6 +24,7 @@ from flask import Flask, render_template, jsonify, request
 from core import PositionTracker
 from core.db import Database
 from config.settings import DB_PATH
+from web.stripe_handler import require_premium
 from web.iron_ore_api import _build_bp
 from futures.backtest import run_backtest as _run_backtest
 
@@ -30,6 +32,9 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 db = Database(DB_PATH)
+
+# 管理员密码（从环境变量读取，默认值让人类可以立即使用）
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "autocompany2024")
 
 # 注册铁矿石API Blueprint
 app.register_blueprint(_build_bp(db))
@@ -864,6 +869,7 @@ def api_backtest():
 
 
 @app.route("/api/premium/recommendations")
+@require_premium
 def api_premium_recommendations():
     """Premium: 今日推荐 3 品种（基于 N 型结构共振 + 信号评分）。"""
     conn = db.get_conn()
@@ -942,6 +948,7 @@ def api_premium_recommendations():
 
 
 @app.route("/api/premium/breakout-alerts")
+@require_premium
 def api_premium_breakout_alerts():
     """Premium: 距关键位 < 0.5% 的品种突破预警。
 
@@ -1020,6 +1027,7 @@ def api_premium_breakout_alerts():
 
 
 @app.route("/api/premium/top-options")
+@require_premium
 def api_premium_top_options():
     """Premium: 评分最高 2 个期权策略（按 unified_score 降序）。"""
     conn = db.get_conn()
@@ -1167,6 +1175,87 @@ def api_premium_token():
     if row and row["token"]:
         return jsonify({"token": row["token"]})
     return jsonify({"token": None}), 404
+
+
+# ─── Admin 管理面板 API ────────────────────────────────────────
+
+
+@app.route("/admin")
+def admin_panel():
+    """管理面板页面（密码保护，用于手动生成 Pro Token）。"""
+    return render_template("admin_panel.html")
+
+
+@app.route("/api/admin/verify-password", methods=["POST"])
+def api_admin_verify_password():
+    """验证管理员密码。"""
+    data = request.get_json() or {}
+    password = data.get("password", "")
+    if password == ADMIN_PASSWORD:
+        return jsonify({"ok": True})
+    return jsonify({"ok": False})
+
+
+@app.route("/api/admin/generate-token", methods=["POST"])
+def api_admin_generate_token():
+    """管理员手动生成 Pro Token 并写入数据库。
+
+    POST JSON body:
+        password (str): 管理员密码
+        email (str): 用户邮箱
+
+    Returns:
+        {"token": "...", "email": "..."}
+    """
+    from web.stripe_handler import _generate_token, ensure_premium_table
+
+    data = request.get_json() or {}
+    password = data.get("password", "")
+    email = data.get("email", "")
+
+    if password != ADMIN_PASSWORD:
+        return jsonify({"error": "密码错误"}), 403
+
+    if not email:
+        return jsonify({"error": "缺少 email"}), 400
+
+    token = _generate_token()
+    ensure_premium_table(db)
+
+    conn = db.get_conn()
+    try:
+        conn.execute(
+            """INSERT INTO premium_subscriptions
+               (session_id, customer_id, email, status, token)
+               VALUES (?, ?, ?, ?, ?)""",
+            (f"manual_{int(__import__('time').time())}", "manual", email, "active", token),
+        )
+        conn.commit()
+        logger.info("管理员手动生成 Token: token=%s email=%s", token[:8] + "...", email)
+        return jsonify({"token": token, "email": email})
+    except Exception as e:
+        conn.rollback()
+        logger.error("生成 Token 失败: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/admin/list-subscriptions")
+def api_admin_list_subscriptions():
+    """列出所有 premium_subscriptions 记录（需密码验证）。"""
+    password = request.args.get("password", "")
+
+    if password != ADMIN_PASSWORD:
+        return jsonify({"error": "密码错误"}), 403
+
+    from web.stripe_handler import ensure_premium_table
+    ensure_premium_table(db)
+
+    conn = db.get_conn()
+    rows = conn.execute(
+        "SELECT id, session_id, email, status, created_at, expires_at FROM premium_subscriptions ORDER BY id DESC"
+    ).fetchall()
+
+    return jsonify([dict(r) for r in rows])
 
 
 if __name__ == "__main__":
