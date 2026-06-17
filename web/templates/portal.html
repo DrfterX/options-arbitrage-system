@@ -409,6 +409,151 @@
   .portal-sector-grid { grid-template-columns: 1fr; }
 }
 
+/* ── Manual Payment Section (备用支付) ── */
+.manual-pay-section {
+  margin-top: 28px;
+  padding-top: 4px;
+}
+.mp-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+  font-size: .6rem;
+  color: var(--text3);
+  letter-spacing: .04em;
+  opacity: .6;
+}
+.mp-divider::before,
+.mp-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+.mp-methods {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-align: left;
+}
+.mp-method {
+  background: rgba(14, 17, 24, .3);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--teal, #0ea5e9);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  transition: border-color .2s var(--ease-out), background .2s var(--ease-out);
+}
+.mp-method:hover {
+  background: rgba(14, 17, 24, .5);
+  border-color: var(--border-light);
+}
+.mp-method-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.mp-icon {
+  font-size: .85rem;
+  opacity: .7;
+}
+.mp-label {
+  font-size: .68rem;
+  font-weight: 600;
+  color: var(--text2);
+  letter-spacing: .03em;
+}
+.mp-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.mp-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: .6rem;
+  color: var(--text3);
+  line-height: 1.4;
+}
+.mp-step strong {
+  color: var(--brand);
+  font-weight: 700;
+}
+.mp-step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(240, 180, 41, .1);
+  border: 1px solid rgba(240, 180, 41, .2);
+  color: var(--brand);
+  font-size: .52rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.mp-manual-qr-placeholder {
+  background: rgba(8, 11, 16, .4);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  text-align: center;
+}
+.mp-qr-note {
+  font-size: .58rem;
+  color: var(--text3);
+  letter-spacing: .04em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.mp-qr-note .mp-qr-link {
+  color: var(--brand);
+  text-decoration: none;
+  font-weight: 600;
+  transition: color .15s;
+}
+.mp-qr-note .mp-qr-link:hover {
+  color: #fff;
+  text-decoration: underline;
+}
+.mp-contact-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.mp-contact-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: .62rem;
+  color: var(--text2);
+  font-family: var(--font-mono);
+}
+.mp-ci-icon {
+  width: 20px;
+  text-align: center;
+  font-size: .65rem;
+  opacity: .6;
+}
+.mp-admin-link {
+  color: var(--brand);
+  text-decoration: none;
+  font-weight: 600;
+  transition: color .15s;
+  font-family: var(--font-ui);
+}
+.mp-admin-link:hover {
+  color: #fff;
+  text-decoration: underline;
+}
+
 /* ── Skeleton loading ── */
 @keyframes skeleton-shimmer {
   0% { background-position: 200% 0; }
@@ -876,6 +1021,78 @@
     </div>
     <button class="pc-btn" id="subscribeBtn" onclick="handleSubscribe()">✦ 立即订阅</button>
     <div class="pc-note">首次订阅自动扣款，可随时取消。支付由 Stripe 安全处理。</div>
+
+    <!-- ── 备用支付方式（非 Stripe 用户） ── -->
+    <div class="manual-pay-section">
+      <div class="mp-divider"><span>或选择其他支付方式</span></div>
+
+      <div class="mp-methods">
+        <!-- 微信支付 -->
+        <div class="mp-method">
+          <div class="mp-method-header">
+            <span class="mp-icon">💳</span>
+            <span class="mp-label">微信支付 / 支付宝</span>
+          </div>
+          <div class="mp-steps">
+            <div class="mp-step">
+              <span class="mp-step-num">1</span>
+              <span>扫码支付 <strong>$19 (¥138)</strong> 至以下收款码</span>
+            </div>
+            <div class="mp-step">
+              <span class="mp-step-num">2</span>
+              <span>截图支付凭证，发送至微信/Telegram 联系管理员</span>
+            </div>
+            <div class="mp-step">
+              <span class="mp-step-num">3</span>
+              <span>管理员核实后生成 Pro Token，在下方输入框激活</span>
+            </div>
+          </div>
+          <div class="mp-manual-qr-placeholder">
+            <div class="mp-qr-note">
+              ⚡ 当前为手动审核模式
+            </div>
+          </div>
+        </div>
+
+        <!-- 联系管理员 -->
+        <div class="mp-method" style="border-left-color:var(--brand);">
+          <div class="mp-method-header">
+            <span class="mp-icon">✉️</span>
+            <span class="mp-label">联系管理员</span>
+          </div>
+          <div class="mp-contact-info">
+            <div class="mp-contact-item">
+              <span class="mp-ci-icon">📧</span>
+              <span>admin@drifter.indevs.in</span>
+            </div>
+            <div class="mp-contact-item">
+              <span class="mp-ci-icon">💬</span>
+              <span>Telegram: @drifter_admin</span>
+            </div>
+            <div class="mp-contact-item">
+              <span class="mp-ci-icon">🔗</span>
+              <a href="/admin" class="mp-admin-link">管理员后台 →</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Token 输入区 ── -->
+    <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
+      <div style="font-size:.62rem;color:var(--text3);margin-bottom:12px;letter-spacing:.04em;">
+        ⚡ 已有 Token？直接验证即可解锁 Premium
+      </div>
+      <div style="display:flex;gap:8px;max-width:360px;margin:0 auto;">
+        <input type="text" id="tokenInput" class="admin-input" placeholder="输入 Pro Token"
+               style="flex:1;font-size:.65rem;letter-spacing:.04em;background:rgba(8,11,16,.5);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 12px;color:var(--text);font-family:var(--font-mono);outline:none;transition:border-color .2s var(--ease-out);">
+        <button id="verifyTokenBtn" onclick="verifyManualToken()" style="padding:8px 16px;border-radius:var(--radius-sm);border:1px solid rgba(240,180,41,.3);background:rgba(240,180,41,.08);color:var(--brand);font-size:.65rem;font-weight:600;cursor:pointer;transition:all .2s var(--ease-out);font-family:var(--font-ui);white-space:nowrap;">
+          <span>验证</span>
+        </button>
+      </div>
+      <div id="tokenVerifyResult" style="margin-top:8px;font-size:.58rem;font-family:var(--font-mono);display:none;"></div>
+    </div>
+
   </div>
 
   <!-- Premium Content (shown when premium token is valid) -->
@@ -1142,8 +1359,9 @@ function loadRecommendations() {
   if (!el) return;
   el.innerHTML = '<div class="pcc-label">📊 今日推荐</div>';
 
-  fetch('/api/premium/recommendations', { cache: 'no-cache' })
-    .then(function(r) { return r.json(); })
+  var token = localStorage.getItem('premium_token') || '';
+  fetch('/api/premium/recommendations?token=' + encodeURIComponent(token), { cache: 'no-cache' })
+    .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
     .then(function(d) {
       var recs = d.recommendations || [];
       if (!recs.length) {
@@ -1175,8 +1393,9 @@ function loadBreakoutAlerts() {
   if (!el) return;
   el.innerHTML = '<div class="pcc-label">⚡ 突破预警</div>';
 
-  fetch('/api/premium/breakout-alerts', { cache: 'no-cache' })
-    .then(function(r) { return r.json(); })
+  var token = localStorage.getItem('premium_token') || '';
+  fetch('/api/premium/breakout-alerts?token=' + encodeURIComponent(token), { cache: 'no-cache' })
+    .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
     .then(function(d) {
       var alerts = d.alerts || [];
       if (!alerts.length) {
@@ -1209,8 +1428,9 @@ function loadTopOptions() {
   if (!el) return;
   el.innerHTML = '<div class="pcc-label">🎯 TOP 期权策略</div>';
 
-  fetch('/api/premium/top-options', { cache: 'no-cache' })
-    .then(function(r) { return r.json(); })
+  var token = localStorage.getItem('premium_token') || '';
+  fetch('/api/premium/top-options?token=' + encodeURIComponent(token), { cache: 'no-cache' })
+    .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
     .then(function(d) {
       var opts = d.options || [];
       if (!opts.length) {
@@ -1239,8 +1459,12 @@ function loadTopOptions() {
       el.innerHTML += '<div class="pcc-error">加载失败</div>';
     });
 }
-  btn.classList.add('loading');
+
+// ── Premium — Subscribe button handler ──
+function handleSubscribe() {
+  var btn = document.getElementById('subscribeBtn');
   btn.textContent = '⏳ 跳转中…';
+  btn.classList.add('loading');
 
   fetch('/api/create-checkout-session', {
     method: 'POST',
@@ -1252,15 +1476,20 @@ function loadTopOptions() {
     if (d.url) {
       window.location.href = d.url;
     } else {
+      // Stripe unavailable — redirect to manual payment section
       btn.classList.remove('loading');
-      btn.innerHTML = '✦ 立即订阅';
-      alert('创建支付会话失败，请稍后重试');
+      btn.innerHTML = '✦ 备用支付';
+      btn.style.background = 'rgba(14,165,233,.12)';
+      btn.style.borderColor = 'rgba(14,165,233,.3)';
+      btn.style.color = '#0ea5e9';
+      btn.onclick = function() { document.querySelector('.manual-pay-section').scrollIntoView({behavior:'smooth', block:'center'}); };
+      alert('⚠️ 在线支付暂不可用\n\n请使用下方的「微信支付 / 支付宝」手动支付方式，\n联系管理员获取 Pro Token 后输入即可解锁 Premium ($19/月)。');
     }
   })
   .catch(function(e) {
     btn.classList.remove('loading');
     btn.innerHTML = '✦ 立即订阅';
-    alert('网络错误，请稍后重试');
+    alert('网络错误\n\nStripe 服务暂不可用，请使用下方的手动支付方式。');
   });
 }
 
@@ -1288,6 +1517,59 @@ function loadTopOptions() {
       .catch(function(e) { /* silent — token retrieval best-effort */ });
   }
 })();
+
+// ── Premium — 手动 Token 验证 ──
+function verifyManualToken() {
+  var token = document.getElementById('tokenInput').value.trim();
+  var resultEl = document.getElementById('tokenVerifyResult');
+  var btn = document.getElementById('verifyTokenBtn');
+
+  if (!token) {
+    resultEl.style.display = '';
+    resultEl.style.color = 'var(--long)';
+    resultEl.textContent = '请粘贴 Pro Token';
+    return;
+  }
+
+  btn.textContent = '⏳';
+  btn.style.opacity = '.6';
+
+  fetch('/api/premium/verify-token', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({token: token})
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    btn.textContent = '验证';
+    btn.style.opacity = '1';
+    resultEl.style.display = '';
+
+    if (d.valid) {
+      resultEl.style.color = 'var(--short)';
+      resultEl.textContent = '✅ Token 验证成功! Premium 已解锁';
+      localStorage.setItem('premium_token', token);
+      // Switch to premium content view
+      document.getElementById('pricingCard').style.display = 'none';
+      document.getElementById('premiumContent').style.display = '';
+      document.getElementById('premiumTokenDisplay').textContent = 'Token: ' + token.slice(0, 12) + '…';
+      loadRecommendations();
+      loadBreakoutAlerts();
+      loadTopOptions();
+    } else {
+      resultEl.style.color = 'var(--long)';
+      resultEl.textContent = '❌ Token 无效或已过期';
+    }
+  })
+  .catch(function(e) {
+    btn.textContent = '验证';
+    btn.style.opacity = '1';
+    resultEl.style.display = '';
+    resultEl.style.color = 'var(--long)';
+    resultEl.textContent = '网络错误，请重试';
+  });
+}
+
 </script>
 </body>
 </html>
