@@ -159,6 +159,87 @@ def _save_n_structure(db: Database, ns: Dict[str, Any]) -> int:
 # ─── 核心：N型检测 ────────────────────────────────────────────
 
 
+def _merge_same_type(swing_points: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """合并连续同向极值点，保留最极端值。"""
+    merged: List[Dict[str, Any]] = []
+    for sp in swing_points:
+        if merged and sp["point_type"] == merged[-1]["point_type"]:
+            prev = merged[-1]
+            if sp["point_type"] == "TROUGH":
+                if sp["price"] < prev["price"]:
+                    merged[-1] = sp
+            else:  # PEAK
+                if sp["price"] > prev["price"]:
+                    merged[-1] = sp
+        else:
+            merged.append(sp)
+    return merged
+
+
+def _find_n_structure_forward(
+    merged: List[Dict[str, Any]],
+) -> Optional[Dict[str, Any]]:
+    """前向非重叠扫描，返回最后一个有效的 N 型结构。
+
+    N 型结构的正确定义（上升 N 型示例）：
+        A = 第一笔起点（最低点）
+        A → B：第一笔上涨，B 是第一笔终点（最高点）
+        B → C：第二笔下跌，C 是第二笔低点
+        C > A（否则上升 N 型不成立）
+        从 C 到最新价格 = 潜在的第三笔
+
+    下降 N 型同理，方向相反。
+
+    非重叠约束：一旦从 A 找到 C，下一个结构必须从 C 之后开始。
+    这防止了"第三笔内部的小波动被误认为新结构"的滑动错误。
+
+    Returns:
+        结构字典（含 a/b/c/direction/index 信息）或 None。
+    """
+    merged_len = len(merged)
+    structures: List[Dict[str, Any]] = []
+
+    i = 0
+    while i < merged_len - 2:
+        a = merged[i]
+        found = False
+
+        for b_idx in range(i + 1, merged_len):
+            if merged[b_idx]["point_type"] == a["point_type"]:
+                continue  # 同类型，不是 B
+            b = merged[b_idx]
+            direction = _determine_direction(a["price"], b["price"])
+
+            for c_idx in range(b_idx + 1, merged_len):
+                if merged[c_idx]["point_type"] != a["point_type"]:
+                    continue  # 不是与 A 同类型，不是 C
+                c = merged[c_idx]
+
+                # C 不可突破 A
+                if direction == "LONG" and c["price"] <= a["price"]:
+                    continue
+                if direction == "SHORT" and c["price"] >= a["price"]:
+                    continue
+
+                # 有效结构！记录后跳到 C 之后继续扫描
+                structures.append({
+                    "direction": direction,
+                    "a": a, "b": b, "c": c,
+                    "a_idx": i, "b_idx": b_idx, "c_idx": c_idx,
+                })
+                i = c_idx + 1  # 非重叠：下一结构从 C 之后开始
+                found = True
+                break  # c loop → 找到 C 即可
+
+            if found:
+                break  # b loop → 找到 B 和 C 即可
+
+        if not found:
+            i += 1  # 当前点不适合做 A，试下一个
+
+    return structures[-1] if structures else None
+
+
 def detect_and_save(
     symbol: str,
     contract: str,
@@ -168,9 +249,14 @@ def detect_and_save(
 ) -> Dict[str, Any]:
     """从极值点运行N型状态机，保存最新结构。
 
-    哲学：只看当下——从最新极值点反推当前形成中的结构。
-    只要3个极值点交替出现（峰↔谷↔峰 或 谷↔峰↔谷），就视为有效。
-    连续的同向极值点合并：以最极端值为准。
+    哲学：前向非重叠扫描——从最早极值点开始，找到第一个有效的
+    A→B→C 三笔结构，然后跳到 C 之后继续扫描后续结构。
+    取最后一个有效结构作为当前 N 型结构。
+
+    与旧版（逆向 C→B→A 滑动扫描）的区别：
+    - 旧版从最新极值点反推，导致 A/B/C 随新极值点滑动
+    - 新版定位 A 为第一笔的起点（最早端点），B 为第一笔终点，
+      C 为第二笔终点，不再随第三笔内部的小波动而滑动
 
     Args:
         symbol: 品种代码。
@@ -180,7 +266,7 @@ def detect_and_save(
         limit: 读取的极值点数量，默认用 DETECT_WINDOWS。
 
     Returns:
-        N型结构字典，含 state/direction/point_abc/ is_active。
+        N型结构字典，含 state/direction/point_abc/is_active。
     """
     if limit is None:
         limit = DETECT_WINDOWS.get(timeframe, 40)
@@ -190,42 +276,12 @@ def detect_and_save(
     if len(swing_points) < 3:
         return {"state": NState.IDLE.value, "is_active": False}
 
-    # 同向合并
-    filtered: List[Dict[str, Any]] = []
-    for sp in swing_points:
-        if filtered and sp["point_type"] == filtered[-1]["point_type"]:
-            prev = filtered[-1]
-            if sp["point_type"] == "TROUGH":
-                if sp["price"] < prev["price"]:
-                    filtered[-1] = sp
-            else:  # PEAK
-                if sp["price"] > prev["price"]:
-                    filtered[-1] = sp
-        else:
-            filtered.append(sp)
+    merged = _merge_same_type(swing_points)
 
-    if len(filtered) < 3:
+    if len(merged) < 3:
         return {"state": NState.IDLE.value, "is_active": False}
 
-    # 从最新往前滑窗，找第一个有效的3点结构
-    best: Optional[List[Dict[str, Any]]] = None
-    n = len(filtered)
-    for start in range(n - 3, max(n - 5, -1), -1):
-        trio = filtered[start : start + 3]
-        types = [p["point_type"] for p in trio]
-        if not (types[0] != types[1] and types[1] != types[2]):
-            continue
-
-        pa, pb, pc = trio[0], trio[1], trio[2]
-        direction = _determine_direction(pa["price"], pb["price"])
-
-        if direction == "LONG" and pc["price"] <= pa["price"]:
-            continue
-        if direction == "SHORT" and pc["price"] >= pa["price"]:
-            continue
-
-        best = trio
-        break
+    best = _find_n_structure_forward(merged)
 
     if best is None:
         return {
@@ -234,26 +290,14 @@ def detect_and_save(
             "reason": "无有效3点结构",
         }
 
-    pa, pb, pc = best[0], best[1], best[2]
-    direction = _determine_direction(pa["price"], pb["price"])
+    pa, pb, pc = best["a"], best["b"], best["c"]
+    direction = best["direction"]
 
-    # 状态判定 — 已有有效3点交替结构（通过前方类型+价格筛选）→ LEG3
-    # LEG3 = C点确认（同向极值，第三段运行中）
-    # 注意：LONG=C=TROUGH, SHORT=C=PEAK；当前LEG3条件无需比较C与B
-    # （V型结构的C天然小于/大于B，比较无意义）
+    # 状态判定 — 已有有效3点交替结构 → LEG3（第三段运行中）
     state = NState.LEG3.value
 
-    # COMPLETED 判定
-    a_idx = next(
-        (
-            i
-            for i, fp in enumerate(filtered)
-            if fp["timestamp"] == best[0]["timestamp"]
-            and fp["point_type"] == best[0]["point_type"]
-        ),
-        -1,
-    )
-    if a_idx > 0 and filtered[a_idx - 1]["point_type"] == best[0]["point_type"]:
+    # COMPLETED 判定：A 之前还有同类型极值点 → 旧结构已结束
+    if best["a_idx"] > 0 and merged[best["a_idx"] - 1]["point_type"] == pa["point_type"]:
         state = NState.COMPLETED.value
 
     ns = {
@@ -276,6 +320,52 @@ def detect_and_save(
 
 
 # ─── 动态重算 ────────────────────────────────────────────────
+
+
+def _update_c_point(active: dict, swing_points: list, db: Database) -> Optional[dict]:
+    """更新 C 点 — 最新 swing point 与 C 同类型且更极端时滑动更新。
+
+    场景：行情更新后形成新的 swing point，与当前 C 点同类型但更极端。
+    例如 LONG（上升 N 型）：C=TROUGH，新 TROUGH 更低 → C 点更新到新位置。
+    这符合"从 C 点到最新价格 = 第三笔"的语义 — A/B 保持，C 滑动。
+
+    Args:
+        active: 当前活跃 N 型结构字典（会被原地修改）。
+        swing_points: 极值点列表（时间升序）。
+        db: Database 实例。
+
+    Returns:
+        更新后的结构字典，或 None（无需更新）。
+    """
+    if not swing_points:
+        return None
+
+    latest = swing_points[-1]
+    # C 的类型：LONG=C=TROUGH, SHORT=C=PEAK
+    if active["direction"] == "LONG":
+        c_type = "TROUGH"
+        more_extreme = latest["price"] < active["point_c_price"]
+    else:
+        c_type = "PEAK"
+        more_extreme = latest["price"] > active["point_c_price"]
+
+    if latest["point_type"] != c_type or not more_extreme:
+        return None
+    if latest["timestamp"] <= active["point_c_time"]:
+        return None
+
+    old_price = active["point_c_price"]
+    active["point_c_price"] = latest["price"]
+    active["point_c_time"] = latest["timestamp"]
+    _save_n_structure(db, active)
+
+    logger.info(
+        "[dynamic_restructure] %s/%s %s: C point updated "
+        "(%.2f → %.2f, %s)",
+        active["symbol"], active["contract"], active["timeframe"],
+        old_price, latest["price"], c_type,
+    )
+    return active
 
 
 def dynamic_restructure(
@@ -361,6 +451,16 @@ def dynamic_restructure(
                     symbol, contract, timeframe, b_price, b_range,
                 )
                 return detect_and_save(symbol, contract, timeframe, db)
+
+        # 3.6 C 点更新 — A 未突破、B 未反穿时检查 C 点滑动
+        c_updated = _update_c_point(
+            active,
+            _get_swing_points(db, symbol, contract, timeframe, limit=10),
+            db,
+        )
+        if c_updated is not None:
+            active['is_active'] = True
+            return c_updated
 
         active['is_active'] = True
         return active  # 结构仍有效，无需变动
