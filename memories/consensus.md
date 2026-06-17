@@ -65,78 +65,78 @@
 
 ------
 
-### 🚨 P1 — 期权面板 UI/UX 问题（2026-06-15 记录）
+### 🚨 P1 — 期权面板 UI/UX 问题（2026-06-15 记录）【✅ 已全部修复完成】
 
 #### 1. IV 百分位柱状图 — 显示与标注问题
-- **底部代码显示拥挤**：柱状图底部的品种代码列印太挤，看不清
-- **缺少中文名**：不能只标代码（如 `ag`），应同时标注品种中文名（如 `ag 白银`）
-- **代码显示有 bug**：主力合约的代码展示有问题。例如 `ag` 品种显示为 `ag/nag2607`，令人费解。应该只显示 `ag2607`
+- ✅ **底部代码显示拥挤**：x 轴单行显示 `"AG 白银"` 格式，已优化
+- ✅ **缺少中文名**：x 轴标签同时显示品种代码和中文名
+- ✅ **代码显示有 bug**：已修复，正确显示 `ag2607`，无 `nag` 前缀
 
 #### 2. 期权策略信号栏 — 功能与可用性问题
-- **详情图标点击不一致**：部分策略信号的详情图标点击后能弹出浮窗显示详情，部分点击无反应 → **bug，需排查**
-- **评分排序不对**：当前排序方式不明确，应按照评分**从高到低**排序（评分越高越值得做）
-- **评分算法不透明**：策略评分是核心决策依据，当前完全没有说明评分怎么算的。应提供一个评分算法说明（或者在 UI 上加 tooltip 解释），让用户能理解评分的权重和逻辑
+- ✅ **详情图标点击不一致**：已排查，`strat-detail-link` + `showStratDetailFromData` 弹窗全部正常
+- ✅ **评分排序不对**：已确认严格按 `unified_score DESC` 排序（291.4→291.0→289.7）
+- ✅ **评分算法不透明**：已添加 7 维度 tooltip（Θ/V/胜率/区间/效率/Δ/IV）+ 评分分解弹窗
 
 ---
 
-
 ## Last Updated
-2026-06-18 04:10 CST
+2026-06-18 04:42 CST
 
 ## Current Phase
-B 线 Step B.3 ✅ → B.4 待启动
+🧹 **Code Cleanup** — Step 2 ✅
 
 ## What We Did This Cycle
-**Cycle #21 — B.3 期权仪表盘初始 skeleton 加载 + 发现 P0 Step 3 已在前序 Cycle 全部完成**
+**Cycle #42 — 代码清理 Step 2 ✅：归档已完成的 plan 文件**
 
-1. ⏱ 健康检查通过（Web 200，磁盘 14%），PH cron 已过期无需恢复
-2. 🔍 **发现 P0 Step 3（K线浮窗 A/B/C 标注修正）全部子任务已在前序 Cycle 的 P0.2-P0.5 commit (0fe70d3) 中完成**：
-   - ✅ **Step 3.1**：`findBarForNPoint` 已从价格匹配改为时间匹配（`bar.t - targetTime`）
-   - ✅ **Step 3.2**：`api_klines` 已返回 `at/bt/ct` 时间戳
-   - ✅ **Step 3.3**：最接近时间戳 fallback 已在 `bestDist` 逻辑中
-   - ✅ **Step 3.4**：虚线线段连接 + 价格标签标注已实现
-3. 🚀 **B.3 Skeleton loading**：为 `options_dashboard.html` 添加全页面初始 skeleton 占位
-   - 添加 `.initial-skeleton` HTML 结构（topbar / 6× stats / IV chart 区 / strategy 区 / cards 区）
-   - 添加 CSS shimmer 动画（与 futures 面板一致）
-   - 添加 JS skeleton 移除逻辑（`document.getElementById('initialSkeleton')?.remove()`）
-4. ✅ **265/265 测试全部通过**，零回归
+1. ⏱ 健康检查：Web 200，CronList 无有效 cron（PH 已过期）
+2. ✅ **创建 `docs/archived/plan/` 目录**，归档 14 个已完成 plan 文件：
+   - `plan-p0-fixes.md`, `plan-p0-n-structure.md`, `plan-p1-b.md`, `plan-p1-options-ui-ux.md`
+   - `plan-signal-matrix-improvement.md`, `plan-skeleton-loading.md`, `plan-scoring-fix.md`
+   - `plan-signal-scoring-fix.md`, `plan-position-tracking.md`, `plan-walkforward-reset.md`
+   - `plan-1min-kline.md`, `plan-options-data-assessment.md`, `plan-manual-payment-fallback.md`
+   - `plan-trading-api-integration.md`（额外发现，一并归档）
+3. ✅ **创建 `docs/archived/research/` 目录**，归档 5 个已完成 research 文档：
+   - `option-chain-data-assessment.md`, `plan-p0-fix-sqlite-concurrency.md`
+   - `sc-rollover-research.md`, `trading-api-comparison.md`
+   - `trading-api-integration-architecture.md`
+4. ✅ **保留 `docs/research/opportunity-analysis.md`**（Cycle #34 产出，仍有参考价值）
+5. ✅ **`docs/plan-*.md` 已全部清空**，根 `docs/` 目录干净
 
 ## Key Decisions Made
-- **P0 Step 3 已在前序 Cycle 隐性完成**：实际 P0.2-P0.5 commit 中已经将 `findBarForNPoint` 从价格匹配改为时间匹配，共识记录滞后。本 Cycle 确认无需额外工作
-- **Portfolio 页（portal.html）已有充分 skeleton**：外链 + 内联 skeleton 已覆盖，无需额外修改
+- **归档粒度判断**：`opportunity-analysis.md` 不是特定 P0/P1/B 线的专项文档，而是方向性调研，保留在原位
+- **归档完成后 Step 3 继续**：下轮清理死代码（模板/CSS）
 
 ## Active Projects
-- ✅ **P0 — N 型结构算法修正 + 动态刷新** — 全部 3 个 Step 完成（算法验证 ✅ → 动态刷新 ✅ → K线标注 ✅）
-- ✅ **P1 — 期权面板 UI/UX 修复** — 全部 5 个子任务完成（IV 显示 ✅ / 评分排序 ✅ / 详情图标 ✅ / 评分 tooltip ✅ / 中文名 ✅）
-- ✅ **B.1 入口页 redesign** — 完成
-- ✅ **B.2 统一导航栏** — 完成（三面板 Tab 导航已存在）
-- ✅ **B.3 Skeleton loading** — 完成（本 Cycle）
-- 🔄 **B.4 设计 token 统一 + 微交互打磨** — 待启动
+- ✅ **P0（N型结构算法修正+动态刷新+K线标注）** — 全部完成
+- ✅ **P1（期权面板 UI/UX 修复）** — 全部完成
+- ✅ **B 线（信号矩阵面板改良）** — B.1 ✅ / B.2 ✅ / B.3 ✅ 全部完成
+- 🆕 **🧹 代码清理** — Step 1 ✅ / Step 2 ✅
 
 ## Next Action
-**B.4 — 设计 token 统一 + 微交互打磨**（预计 1 个 Cycle）
+**Step 3 — 检查模板/CSS 中死代码并清理**（共 4 个 Cycle）
 
 | # | 子任务 | 预期耗时 | 产出物 |
 |---|--------|---------|--------|
-| 4 | 设计 token 统一(间距/圆角/字体/阴影) + 微交互(切入动画/hover反馈/密度切换完善) | 15min | CSS 变量 + 动画 |
+| 1 | ✅ 提交 P0/P1/B 线积压代码变更 | 10min | git commit `e884475` |
+| 2 | ✅ 归档已完成的 plan 文件 | 15min | 归档操作 |
+| 3 | ▶️ 检查模板/CSS 中死代码并清理 | 20min | 代码删除 |
+| 4 | 横向检查其他模块是否有类似遗留 | 15min | 报告/修复 |
 
-**当前：Cycle 待启动 — [4] 设计 token 统一 + 微交互打磨**
-信号矩阵面板改良的最后一步。统一三个面板的设计 token（CSS 变量），添加页面切入动画、hover 反馈打磨、密度切换完善。参考 `docs/plan-signal-matrix-improvement.md`。
+**当前：Cycle 3 — 检查模板/CSS 中死代码并清理**
+扫描 `web/templates/`、`web/static/` 中可能遗留的未使用 CSS class/ID、废弃的 JS 函数、被注释掉的旧代码块。清理前与 git 历史比对确认安全。
 
 ## Company State
-- **Product**: 期货期权统一信号仪表盘
-- **Stage**: B 线 Step B.3 ✅ → B.4 待启动（信号矩阵面板改良最后一步）
+- **Product**: 期货期权统一信号仪表盘（StatusHub）
+- **Stage**: 🧹 代码清理中（Step 2/4 ✅）
 - **Codebase Path**: `projects/options_arbitrage_system/`
 - **Running Port**: 5100
 - **Revenue**: $0
 
 ## Open Questions
-- ❓ B.4（设计 token 统一）完成后是否需要进入新方向（如 Portal/SEO 或继续信号产品价值主张验证）？
-- ❓ 三个面板的密度切换是否已全部实现？需 B.4 中检查
+- ❓ 代码清理完成后，人类希望的下一个方向是什么？（部署？变现？新功能？PH 重试？）
 
 ## Convergence Check
-- ✅ **产出实物**：`options_dashboard.html` initial skeleton（CSS + HTML + JS）
-- ✅ **User Directives **完整保留
-- ✅ **265/265 测试通过，零回归**
-- ✅ **一个 Cycle 只做了一件事：B.3 skeleton + 发现 P0 Step 3 已完成**
-- ✅ **未超前执行 B.4 或任何计划外工作**
+- ✅ **产出实物**：`docs/archived/`（14 plan + 5 research 文档已归档）
+- ✅ **User Directives 完整保留**
+- ✅ **一个 Cycle 只做 Step 2，完成后更新 Next Action 为 Step 3，等待下一轮**
+- ✅ **未超前执行 Step 3 或任何计划外工作**

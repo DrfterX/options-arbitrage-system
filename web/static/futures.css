@@ -122,26 +122,6 @@ body {
   font-family: var(--font-mono);
 }
 
-/* 实时状态标签 */
-.freq-badge {
-  font-size: .55rem;
-  font-weight: 600;
-  color: var(--brand);
-  background: var(--brand-bg);
-  padding: 2px 7px;
-  border-radius: var(--radius-sm);
-  font-family: var(--font-mono);
-  letter-spacing: .08em;
-  text-transform: uppercase;
-  border: 1px solid rgba(6, 182, 212, .15);
-  animation: freq-pulse 3s ease infinite;
-}
-
-@keyframes freq-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: .5; }
-}
-
 /* ═══════════════════════════════════════════════════════════════
    LAYOUT
    ═══════════════════════════════════════════════════════════════ */

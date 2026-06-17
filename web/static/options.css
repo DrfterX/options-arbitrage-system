@@ -128,38 +128,6 @@ body {
   font-family: var(--font-mono);
 }
 
-.nav-link {
-  font-size: .65rem;
-  color: var(--text3);
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  transition: all .2s var(--ease-out);
-  font-family: var(--font-ui);
-  letter-spacing: .03em;
-}
-.nav-link:hover {
-  color: var(--brand);
-  border-color: rgba(168, 85, 247, .3);
-  background: var(--brand-dim);
-}
-.nav-icon { font-size: .7rem; opacity: .6; }
-
-.topbar::after {
-  content: '';
-  position: absolute;
-  bottom: -1px;
-  left: 20px;
-  width: 140px;
-  height: 2px;
-  background: linear-gradient(90deg, var(--brand) 0%, transparent 100%);
-  border-radius: 1px;
-}
-
 /* ═══════════════════════════════════════════════════════════════
    LAYOUT
    ═══════════════════════════════════════════════════════════════ */
