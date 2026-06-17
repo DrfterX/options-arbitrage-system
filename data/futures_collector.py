@@ -388,6 +388,20 @@ class FuturesCollector:
                 if timeframe == "1m":
                     self._collect_3m_from_1m(symbol, contract, klines)
 
+                # ── N 型结构重算钩子 ──────────────────────────────────
+                # 新 K 线写入后立即触发该品种的 N 型结构动态重算
+                # restructure_active_for_symbol 内部有 _should_full_recalc 的
+                # 30s 频率控制保护，高频调用不会过度消耗
+                if saved > 0:
+                    try:
+                        from futures.n_structure import restructure_active_for_symbol
+
+                        restructure_active_for_symbol(symbol, contract, self.db)
+                    except Exception as e2:
+                        logger.warning(
+                            "%s restructure 触发失败(已跳过): %s", contract, e2,
+                        )
+
             except Exception as e:
                 result_stats[timeframe] = {
                     "fetched": 0,
@@ -421,6 +435,17 @@ class FuturesCollector:
 
         if klines_3m:
             self._batch_insert_klines(klines_3m)
+            # ── N 型结构重算钩子（3m） ────────────────────────────────
+            try:
+                from futures.n_structure import restructure_active_for_symbol
+
+                restructure_active_for_symbol(
+                    symbol, contract, self.db, timeframes=["3m"],
+                )
+            except Exception as e:
+                logger.warning(
+                    "%s 3m restructure 触发失败(已跳过): %s", contract, e,
+                )
             logger.info(
                 "%s period=3m: 聚合生成 %d 条", contract, len(klines_3m)
             )
@@ -499,7 +524,7 @@ class FuturesCollector:
     def collect_all(
         self,
         period_map: Optional[Dict[str, str]] = None,
-        trigger_restructure: bool = False,
+        trigger_restructure: bool = True,
     ) -> dict:
         """遍历所有品种，增量采集所有周期的K线数据。
 

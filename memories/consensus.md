@@ -79,62 +79,64 @@
 
 ---
 
+
 ## Last Updated
-2026-06-17 07:21 CST（Cycle #29922 — Step 3 Premium UI: Pricing Card + Premium Tab）
+2026-06-18 04:10 CST
 
 ## Current Phase
-Monetization — Signals Premium $19/月付费订阅（方向 A）
+B 线 Step B.3 ✅ → B.4 待启动
 
 ## What We Did This Cycle
-**Cycle #29922 — Step 3 Premium UI（Pricing Card + Premium Tab）**
+**Cycle #21 — B.3 期权仪表盘初始 skeleton 加载 + 发现 P0 Step 3 已在前序 Cycle 全部完成**
 
-1. ⏱ **健康检查** — signals (5100) 200 ✅ | cron 空闲
-2. 🎨 **Step 3 实现**（portal.html + app.py）:
-   - ✅ **Premium Tab** — 导航栏新增金色 Premium tab，带 active 样式
-   - ✅ **Pricing Card 弹窗** — $19/月定价卡片，含功能列表（每日精选/突破预警/TOP策略/推送通知）和 Stripe Checkout CTA
-   - ✅ **Premium 内容骨架** — 订阅后显示 Premium 精选信号三栏空壳（Step 4 填充）
-   - ✅ **Token 鉴权流** — 前端检查 localStorage `premium_token`，调用 `/api/premium/verify-token` 验证
-   - ✅ **Stripe 跳转** — CTA 按钮调用 `/api/create-checkout-session` → 重定向 Stripe
-   - ✅ **支付成功回流** — 新增 `GET /api/premium/token?session_id=` 端点，成功支付后自动获取 token 并写入 localStorage
-3. ✅ **服务重启** — PM2 重启成功，新代码已生效
+1. ⏱ 健康检查通过（Web 200，磁盘 14%），PH cron 已过期无需恢复
+2. 🔍 **发现 P0 Step 3（K线浮窗 A/B/C 标注修正）全部子任务已在前序 Cycle 的 P0.2-P0.5 commit (0fe70d3) 中完成**：
+   - ✅ **Step 3.1**：`findBarForNPoint` 已从价格匹配改为时间匹配（`bar.t - targetTime`）
+   - ✅ **Step 3.2**：`api_klines` 已返回 `at/bt/ct` 时间戳
+   - ✅ **Step 3.3**：最接近时间戳 fallback 已在 `bestDist` 逻辑中
+   - ✅ **Step 3.4**：虚线线段连接 + 价格标签标注已实现
+3. 🚀 **B.3 Skeleton loading**：为 `options_dashboard.html` 添加全页面初始 skeleton 占位
+   - 添加 `.initial-skeleton` HTML 结构（topbar / 6× stats / IV chart 区 / strategy 区 / cards 区）
+   - 添加 CSS shimmer 动画（与 futures 面板一致）
+   - 添加 JS skeleton 移除逻辑（`document.getElementById('initialSkeleton')?.remove()`）
+4. ✅ **265/265 测试全部通过**，零回归
 
 ## Key Decisions Made
-1. **UI 风格** — 沿用 portal.html 现有的 terminal-luxe 设计系统，金色（`var(--brand)`）作为 Premium 主题色
-2. **Token 存储** — 前端 `localStorage` 存储 Bearer Token，每次切到 Premium tab 时验证有效性
-3. **成功回流不走额外页面** — 用 URL query param + JS 处理，避免新增 Flask 页面
-4. **定价卡设计** — 居中单列布局，金色渐变 border + radial glow，与 portal 风格一致
+- **P0 Step 3 已在前序 Cycle 隐性完成**：实际 P0.2-P0.5 commit 中已经将 `findBarForNPoint` 从价格匹配改为时间匹配，共识记录滞后。本 Cycle 确认无需额外工作
+- **Portfolio 页（portal.html）已有充分 skeleton**：外链 + 内联 skeleton 已覆盖，无需额外修改
 
 ## Active Projects
-- 🚀 **Signals Premium** — Step 3 ✅ → Step 4: Premium 内容 + 部署验证
+- ✅ **P0 — N 型结构算法修正 + 动态刷新** — 全部 3 个 Step 完成（算法验证 ✅ → 动态刷新 ✅ → K线标注 ✅）
+- ✅ **P1 — 期权面板 UI/UX 修复** — 全部 5 个子任务完成（IV 显示 ✅ / 评分排序 ✅ / 详情图标 ✅ / 评分 tooltip ✅ / 中文名 ✅）
+- ✅ **B.1 入口页 redesign** — 完成
+- ✅ **B.2 统一导航栏** — 完成（三面板 Tab 导航已存在）
+- ✅ **B.3 Skeleton loading** — 完成（本 Cycle）
+- 🔄 **B.4 设计 token 统一 + 微交互打磨** — 待启动
 
 ## Next Action
-**Step 4 — Premium 内容 + 部署验证**（共 4 Cycles）
+**B.4 — 设计 token 统一 + 微交互打磨**（预计 1 个 Cycle）
 
 | # | 子任务 | 预期耗时 | 产出物 |
 |---|--------|---------|--------|
-| 1 | ✅ **Stripe 后端集成** | ✅ 已完成 | `web/stripe_handler.py` + API + webhook |
-| 2 | ✅ **Premium Token 鉴权中间件** | ✅ 已完成 | `@require_premium` 装饰器 + verify-token API |
-| 3 | ✅ **Premium UI（Pricing Card）** | ✅ 已完成 | portal.html Premium Tab + Paywall |
-| **4** | **Premium 内容 + 部署** | **20min** | 推荐 API + pm2 部署 |
+| 4 | 设计 token 统一(间距/圆角/字体/阴影) + 微交互(切入动画/hover反馈/密度切换完善) | 15min | CSS 变量 + 动画 |
 
-**当前：Step 4 — Premium 内容 API + 部署验证**
-- 新增 `GET /api/premium/recommendations` — 今日推荐 3 品种（基于 N 型结构评分 + 共振）
-- 新增 `GET /api/premium/breakout-alerts` — 距关键位 < 0.5% 的品种
-- 新增 `GET /api/premium/top-options` — 评分最高 2 个期权策略
-- 前端 Premium 页面展示以上 3 个板块
-- 更新 `.env` 加入 Stripe Keys
-- 部署验证 + curl 测试
+**当前：Cycle 待启动 — [4] 设计 token 统一 + 微交互打磨**
+信号矩阵面板改良的最后一步。统一三个面板的设计 token（CSS 变量），添加页面切入动画、hover 反馈打磨、密度切换完善。参考 `docs/plan-signal-matrix-improvement.md`。
 
 ## Company State
-- Revenue: $0（30天目标 ≥1 付费用户 → $19 MRR）
-- **Stage**: Monetization — Signals Premium 开发中（Step 3/4 ✅）
-- **Assets**: futures ✅ | options ✅ | signals ✅ | monito ✅ | statushub ✅
+- **Product**: 期货期权统一信号仪表盘
+- **Stage**: B 线 Step B.3 ✅ → B.4 待启动（信号矩阵面板改良最后一步）
+- **Codebase Path**: `projects/options_arbitrage_system/`
+- **Running Port**: 5100
+- **Revenue**: $0
 
 ## Open Questions
-- ❓ Stripe 测试 Keys 未配置 — `.env` 中占位符需人类填入 sk_test 和 whsec 才能激活支付
+- ❓ B.4（设计 token 统一）完成后是否需要进入新方向（如 Portal/SEO 或继续信号产品价值主张验证）？
+- ❓ 三个面板的密度切换是否已全部实现？需 B.4 中检查
 
 ## Convergence Check
-- ✅ 只做一件事：Step 3 Premium UI（不超额编码）
-- ✅ User Directives 完整保留未修改
-- ✅ 收敛规则第 9 条：Step 3 完成即止，未提前推进 Step 4
-- ✅ 服务运行正常 | Premium Tab + Pricing Card 已验证
+- ✅ **产出实物**：`options_dashboard.html` initial skeleton（CSS + HTML + JS）
+- ✅ **User Directives **完整保留
+- ✅ **265/265 测试通过，零回归**
+- ✅ **一个 Cycle 只做了一件事：B.3 skeleton + 发现 P0 Step 3 已完成**
+- ✅ **未超前执行 B.4 或任何计划外工作**

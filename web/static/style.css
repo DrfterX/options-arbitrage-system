@@ -1458,3 +1458,140 @@ body {
     overflow-y: auto;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   B.4 — 设计 token 统一 + 微交互打磨
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── 间距/密度 token (继承至三个面板) ── */
+:root {
+  --space-xs: 4px;
+  --space-sm: 6px;
+  --space-md: 10px;
+  --space-lg: 16px;
+  --space-xl: 24px;
+  --card-pad: 12px;
+  --card-gap: 8px;
+  --card-radius: var(--radius-md);
+  --section-gap: 14px;
+  --transition-fast: .15s var(--ease-out);
+  --transition-base: .25s var(--ease-out);
+  --hover-lift: translateY(-1px);
+  --hover-shadow: 0 2px 12px rgba(0,0,0,.25);
+  --active-scale: scale(.97);
+}
+
+/* ── 密度模式切换 ── */
+[data-density="compact"] {
+  --card-pad: 8px;
+  --card-gap: 5px;
+  --section-gap: 10px;
+  --space-md: 6px;
+  --space-lg: 10px;
+  --space-xl: 16px;
+}
+[data-density="comfortable"] {
+  --card-pad: 16px;
+  --card-gap: 12px;
+  --section-gap: 20px;
+  --space-md: 12px;
+  --space-lg: 20px;
+  --space-xl: 32px;
+}
+
+/* ── 密度切换按钮 ── */
+.density-btn {
+  font-size: .62rem;
+  color: var(--text3);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 2px 7px;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  letter-spacing: .04em;
+  transition: all var(--transition-fast);
+  line-height: 1.4;
+}
+.density-btn:hover {
+  color: var(--text);
+  border-color: var(--text3);
+  background: rgba(79,91,128,.08);
+}
+.density-btn:active {
+  transform: var(--active-scale);
+}
+
+/* ── 全局面板通用卡片微交互 ── */
+.card,
+.sector-card,
+.option-card,
+.fs-card,
+.ps-card,
+.health-card,
+.ht-card,
+.pos-card,
+.admin-card,
+.pc-card,
+.ns-card {
+  transition: background var(--transition-base),
+              border-color var(--transition-base),
+              box-shadow var(--transition-base),
+              transform var(--transition-fast);
+}
+.card:hover,
+.sector-card:hover,
+.fs-card:hover,
+.ps-card:hover,
+.health-card:hover,
+.ht-card:hover,
+.pos-card:hover,
+.admin-card:hover,
+.ns-card:hover {
+  background: var(--card-hover);
+}
+/* 可点击卡片暗示 */
+.card,
+.pos-card:not(:has(.pos-empty)),
+.ns-card,
+.sector-card { cursor: default; }
+
+/* ── 按钮/链接微交互 ── */
+button, .btn, a.nav-tab, .density-btn, .freq-badge {
+  transition: all var(--transition-fast);
+}
+button:active, .btn:active, .density-btn:active {
+  transform: var(--active-scale);
+}
+
+/* ── 骨架屏微交互 ── */
+.skeleton {
+  display: inline-block;
+  background: linear-gradient(90deg,
+    var(--border) 25%,
+    var(--border-light) 50%,
+    var(--border) 75%
+  ) !important;
+  background-size: 200% 100% !important;
+  animation: skeleton-shimmer 1.8s ease-in-out infinite;
+  border-radius: 2px;
+  line-height: 1;
+}
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ── 行 hover 增强 ── */
+tr:hover { background: rgba(90,97,115,.04); }
+table tbody tr {
+  transition: background var(--transition-fast);
+}
+
+/* ── 表格 hover ── */
+.pos-table tbody tr:hover {
+  background: rgba(240,180,41,.04);
+}
+
+/* ── freq-badge pulse 微交互 ── */
+.freq-badge { animation: freq-pulse 3s ease infinite; }

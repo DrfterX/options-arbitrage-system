@@ -27,6 +27,7 @@
     </div>
     <span class="data-badge">{{ total_signals }} 品种</span>
     <span class="topbar-time">{{ now }}</span>
+    <button class="density-btn" onclick="toggleDensity()" title="切换显示密度" id="densityBtn">▣ 舒适</button>
   </div>
 </div>
 
@@ -1065,6 +1066,10 @@ setInterval(function() {
     .catch(function(e) { /* silent */ });
 }, 30000);
 
+</script>
+<script>
+/* ── 密度切换 ── */
+(function(){var b=document.getElementById('densityBtn'),d=localStorage.getItem('density');if(d){document.body.setAttribute('data-density',d);if(b)b.textContent='▣ '+(d==='compact'?'紧凑':'舒适')}window.toggleDensity=function(){var c=document.body.getAttribute('data-density'),n=c==='compact'?'comfortable':'compact';document.body.setAttribute('data-density',n);localStorage.setItem('density',n);if(b)b.textContent='▣ '+(n==='compact'?'紧凑':'舒适')}})();
 </script>
 </body>
 </html>

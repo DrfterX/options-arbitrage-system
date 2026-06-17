@@ -421,7 +421,9 @@ class Orchestrator:
 
         # 1. 采集K线
         logger.info("[1/5] 采集K线数据...")
-        collect_stats = self.futures_collector.collect_all()
+        # trigger_restructure=False: Pipeline 后续步骤 2-5 已包含
+        # 聚合→MACD→极值点→N 型重算，避免在此重复触发
+        collect_stats = self.futures_collector.collect_all(trigger_restructure=False)
 
         # 1.5 风控价格采集：为持仓合约采集 1m K 线（更实时价格）
         try:

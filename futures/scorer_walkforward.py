@@ -25,6 +25,27 @@ logger = logging.getLogger(__name__)
 
 LOOKAHEAD_DAYS = [1, 2, 5, 10, 20]
 
+# ─── 7 品种 Walk-Forward 配置 ──────────────────────────────
+# 覆盖 5 大板块：黑色 / 有色 / 贵金属 / 能化 / 油脂
+# 全部使用连续合约（symbol 自身）以获得最长历史数据
+
+TARGET_SYMBOLS = [
+    ("RB", "RB", "螺纹钢", "黑色"),
+    ("CU", "CU", "铜",     "有色"),
+    ("AU", "AU", "黄金",   "贵金属"),
+    ("AG", "AG", "白银",   "贵金属"),
+    ("MA", "MA", "甲醇",   "能化"),
+    ("TA", "TA", "PTA",    "能化"),
+    ("I",  "I",  "铁矿石", "黑色"),
+]
+
+# 多时间窗口配置（训练期 / 验证期 / 标签）
+WINDOW_CONFIGS = [
+    (3, 6,  "3y+6m"),    # 基准：3 年训练 + 6 月验证
+    (2, 3,  "2y+3m"),    # 敏捷：2 年训练 + 3 月验证
+    (5, 12, "5y+12m"),   # 长期：5 年训练 + 12 月验证
+]
+
 # 需要时间过滤的表及其对应的时间列
 TIME_FILTER_COLUMNS: Dict[str, str] = {
     "futures_klines": "timestamp",
@@ -56,6 +77,9 @@ class _TimeFilteredConnection:
         self, sql: str, parameters: Any = None
     ) -> sqlite3.Cursor:
         new_sql, params = self._rewrite(sql, parameters)
+        # _rewrite 返回 (sql, params)：
+        # - SELECT:  params 永远是 list（经 _to_list 统一化）
+        # - 非 SELECT: params 保持原始类型（如 dict），不改动
         return self._conn.execute(new_sql, params)
 
     def executemany(
@@ -99,10 +123,17 @@ class _TimeFilteredConnection:
 
     # ── 内部重写 ─────────────────────────────────────────
 
-    def _rewrite(self, sql: str, parameters: Any = None) -> Tuple[str, list]:
-        """检测 SQL 中的目标表，追加时间过滤条件。"""
+    def _rewrite(self, sql: str, parameters: Any = None) -> Tuple[str, Any]:
+        """检测 SQL 中的目标表，追加时间过滤条件。
+
+        SELECT 查询：重写 SQL + 参数转换为 list（为插入时间参数做准备）。
+        非 SELECT 查询：不动 params（原生传递，如 dict→INSERT）。
+
+        返回:
+            (重写后的SQL, params) — params 类型取决于 SQL 类型。
+        """
         if not _SELECT_RE.match(sql):
-            return sql, self._to_list(parameters)
+            return sql, parameters
 
         # 检查是否涉及需要过滤的表
         for table, ts_col in TIME_FILTER_COLUMNS.items():
@@ -112,11 +143,42 @@ class _TimeFilteredConnection:
             params = self._to_list(parameters)
             sql_clean = sql.rstrip("; \t\n\r")
             condition = f"AND {ts_col} <= ?"
-            sql_clean = self._insert_where(sql_clean, condition)
-            params.append(self._current_ts)
+
+            # 找到插入位置（ORDER BY / LIMIT 之前）
+            insert_pos = self._find_insert_pos(sql_clean)
+            sql_clean = (
+                sql_clean[:insert_pos]
+                + condition + " "
+                + sql_clean[insert_pos:]
+            )
+
+            # 计算插入位置之前有多少个 ? 参数
+            # 从 SQL 开头到 insert_pos 之间，在引号外部的 ? 数量
+            before_sql = sql_clean[:insert_pos]
+            # 确保 ? 不是在字符串字面量或注释中（简单版：统计所有 ?）
+            # 为了安全，统计原始 SQL 中 insert_pos 之前的 ? 数量
+            # insert_pos 在加了 condition 之前就已确定
+            param_count_before = sql[:insert_pos].count("?")
+            insert_param_at = min(param_count_before, len(params))
+            params.insert(insert_param_at, self._current_ts)
+
             return sql_clean, params
 
         return sql, self._to_list(parameters)
+
+    @staticmethod
+    def _find_insert_pos(sql: str) -> int:
+        """找到 WHERE 条件插入位置：ORDER BY / LIMIT 之前，或末尾。"""
+        # ORDER BY 优先
+        m = re.search(r"\bORDER\s+BY\b", sql, re.IGNORECASE)
+        if m:
+            return m.start()
+        # LIMIT（无 ORDER BY 时）
+        m = re.search(r"\bLIMIT\b", sql, re.IGNORECASE)
+        if m:
+            return m.start()
+        # 无排序/限制——追加末尾
+        return len(sql)
 
     @staticmethod
     def _to_list(parameters: Any) -> list:
@@ -126,20 +188,6 @@ class _TimeFilteredConnection:
         if isinstance(parameters, (list, tuple)):
             return list(parameters)
         return [parameters]
-
-    @staticmethod
-    def _insert_where(sql: str, condition: str) -> str:
-        """在 ORDER BY / LIMIT 之前或末尾插入条件。"""
-        # ORDER BY 优先
-        m = re.search(r"\bORDER\s+BY\b", sql, re.IGNORECASE)
-        if m:
-            return sql[: m.start()] + condition + " " + sql[m.start() :]
-        # LIMIT（无 ORDER BY 时）
-        m = re.search(r"\bLIMIT\b", sql, re.IGNORECASE)
-        if m:
-            return sql[: m.start()] + condition + " " + sql[m.start() :]
-        # 无排序/限制——追加末尾
-        return sql + " " + condition
 
 
 # ─── HistoricalDatabase ────────────────────────────────────
@@ -261,6 +309,7 @@ def run_scorer_at_timestamp(
     db: Database,
     ts: int,
     enable_reset: bool = True,
+    level1_only: bool = False,
 ) -> Dict[str, Any]:
     """在历史时间点运行 scorer.evaluate()。
 
@@ -294,18 +343,23 @@ def run_scorer_at_timestamp(
     # ── 延迟导入（避免循环依赖） ─────────────────────────
     import futures.scorer as scorer_module
     from futures.n_structure import detect_and_save
-    from config.settings import LEVEL1_TIMEFRAME, LEVEL2_TIMEFRAME, LEVEL3_TIMEFRAME
+    from config.settings import (
+        LEVEL1_TIMEFRAME, LEVEL1_MACD_TIMEFRAME,
+        LEVEL2_TIMEFRAME, LEVEL3_TIMEFRAME,
+    )
 
     # ── 1. 创建历史数据库 ───────────────────────────────
     hist_db = HistoricalDatabase(db, ts)
 
-    # ── 2. 修补 time.time ───────────────────────────────
+    # ── 2. 修补 time.time（全局级别） ──────────────────
     # scorer._get_active_n_structure 内部执行
     #   import time as time_module
     #   now = int(time_module.time())
-    # 修补全局 time.time 即可影响其新鲜度检查。
-    orig_time = time_module.time
-    time_module.time = lambda: float(ts)
+    # 修补全局 time.time（而非 time_module）以影响所有
+    # 模块内部的 ``import time; time.time`` 调用。
+    import time as _real_time
+    orig_time = _real_time.time
+    _real_time.time = lambda: float(ts)
 
     # ── 3. 修补 _apply_score_reset（如需绕过） ──────────
     orig_apply_reset = scorer_module._apply_score_reset
@@ -313,18 +367,76 @@ def run_scorer_at_timestamp(
         scorer_module._apply_score_reset = lambda *a, **kw: False
 
     reset_triggered = False
+    level1_direction = "NONE"
+    level1_signal = None  # 仅 level1_only 时设置
 
     try:
         # ── 3.5 运行 N 型结构检测（通过时间过滤数据库） ──
         # 历史时间点无 N 型结构，需要从当时的 swing points 检测生成
-        for tf in (LEVEL1_TIMEFRAME, LEVEL2_TIMEFRAME, LEVEL3_TIMEFRAME):
+        if level1_only:
+            # Level1-only：只需周线 N 型 + 日线 MACD
             try:
-                detect_and_save(symbol, contract, tf, hist_db)
+                detect_and_save(symbol, contract, LEVEL1_TIMEFRAME, hist_db)
             except Exception as e:
-                logger.debug("N型检测 %s %s 异常: %s", symbol, tf, e)
+                logger.debug("N型检测 %s %s 异常: %s", symbol, LEVEL1_TIMEFRAME, e)
+
+            # 获取 Level1 结构 + MACD 用于方向判别
+            try:
+                from futures.shared import FRESHNESS as _wf_freshness
+                # Walk-Forward 模式下跳过新鲜度检查（60天窗口对历史回测太短）
+                _orig_freshness_1w = _wf_freshness.get("1w")
+                _wf_freshness["1w"] = 100 * 365 * 86400  # 100年
+
+                from futures.shared import _get_active_n_structure
+                l1_struct = _get_active_n_structure(
+                    hist_db, symbol, contract, LEVEL1_TIMEFRAME
+                )
+
+                # 恢复原始新鲜度
+                if _orig_freshness_1w is not None:
+                    _wf_freshness["1w"] = _orig_freshness_1w
+
+                if l1_struct and l1_struct.get("state") in ("LEG2", "LEG3"):
+                    level1_direction = l1_struct["direction"]
+                    from futures.color_tracker import check_macd_trajectory
+                    l1_macd = check_macd_trajectory(
+                        symbol, symbol, l1_struct,
+                        LEVEL1_MACD_TIMEFRAME, level1_direction, hist_db
+                    )
+                    level1_signal = {
+                        "direction": level1_direction,
+                        "state": l1_struct["state"],
+                        "entry_price": l1_struct.get("point_b_price"),
+                        "macd_passed": l1_macd.get("passed", False),
+                        "macd_description": l1_macd.get("description", ""),
+                        "n_structure": {
+                            "point_a_price": l1_struct["point_a_price"],
+                            "point_b_price": l1_struct["point_b_price"],
+                            "point_c_price": l1_struct.get("point_c_price"),
+                        },
+                    }
+            except Exception as e:
+                logger.debug("Level1-only 评估 %s 异常: %s", symbol, e)
+        else:
+            for tf in (LEVEL1_TIMEFRAME, LEVEL2_TIMEFRAME, LEVEL3_TIMEFRAME):
+                try:
+                    detect_and_save(symbol, contract, tf, hist_db)
+                except Exception as e:
+                    logger.debug("N型检测 %s %s 异常: %s", symbol, tf, e)
 
         # ── 4. 运行 evaluate ────────────────────────────
         signal_result = scorer_module.evaluate(symbol, contract, hist_db)
+
+        # ── 4.5 Level1-only 前进验证 ──────────────────
+        if level1_only and level1_signal is not None:
+            direction = level1_direction
+            entry_price = level1_signal["entry_price"]
+            level1_signal["forward_verification"] = {}
+            if entry_price is not None and direction != "NONE":
+                klines = _load_klines_since(db, symbol, contract, ts)
+                level1_signal["forward_verification"] = _verify_forward(
+                    klines, ts, entry_price, direction, LOOKAHEAD_DAYS
+                )
 
         # 判断是否触发了重置（仅在 enable_reset=True 时有意义）
         if enable_reset and signal_result.direction != "NONE":
@@ -355,7 +467,7 @@ def run_scorer_at_timestamp(
 
     finally:
         # ── 6. 恢复修补 ────────────────────────────────
-        time_module.time = orig_time
+        _real_time.time = orig_time
         scorer_module._apply_score_reset = orig_apply_reset
 
     # ── 7. 组装结果 ────────────────────────────────────
@@ -369,6 +481,8 @@ def run_scorer_at_timestamp(
         "enable_reset": enable_reset,
         "reset_triggered": reset_triggered,
         "forward_verification": forward,
+        "level1_only": level1_only,
+        "level1_signal": level1_signal,
     }
 
 
@@ -393,7 +507,20 @@ def _aggregate_accuracy(
             ...
         }
     """
-    signals = [r for r in results if r.get("signal", {}).get("direction", "NONE") != "NONE"]
+    # 兼容 Level1-only 模式（signal 存在 level1_signal 中）
+    def _get_direction(r: Dict) -> str:
+        l1s = r.get("level1_signal")
+        if r.get("level1_only") and l1s:
+            return l1s.get("direction", "NONE")
+        return r.get("signal", {}).get("direction", "NONE")
+
+    def _get_forward_verification(r: Dict) -> Dict:
+        l1s = r.get("level1_signal")
+        if r.get("level1_only") and l1s:
+            return l1s.get("forward_verification", {})
+        return r.get("forward_verification", {})
+
+    signals = [r for r in results if _get_direction(r) != "NONE"]
     total = len(results)
     signal_count = len(signals)
     reset_count = sum(1 for r in results if r.get("reset_triggered"))
@@ -409,18 +536,18 @@ def _aggregate_accuracy(
         dk = str(d)
         correct = sum(
             1 for s in signals
-            if s.get("forward_verification", {}).get(dk, {}).get("correct") is True
+            if _get_forward_verification(s).get(dk, {}).get("correct") is True
         )
         wrong = sum(
             1 for s in signals
-            if s.get("forward_verification", {}).get(dk, {}).get("correct") is False
+            if _get_forward_verification(s).get(dk, {}).get("correct") is False
         )
         valid = correct + wrong
 
         returns = [
-            s["forward_verification"][dk]["return_pct"]
+            _get_forward_verification(s)[dk]["return_pct"]
             for s in signals
-            if s.get("forward_verification", {}).get(dk, {}).get("return_pct") is not None
+            if _get_forward_verification(s).get(dk, {}).get("return_pct") is not None
         ]
 
         acc[f"accuracy_{d}d"] = round(correct / valid * 100, 1) if valid else 0
@@ -461,6 +588,7 @@ def run_walkforward_with_reset(
     train_years: int = 3,
     valid_months: int = 6,
     lookahead_days: Optional[List[int]] = None,
+    level1_only: bool = False,
 ) -> Dict[str, Any]:
     """Walk-Forward 验证：评分重置机制 vs 无重置的准确率对比。
 
@@ -579,8 +707,8 @@ def run_walkforward_with_reset(
                     _ts_to_date_str(ck_ts),
                 )
 
-            wr = run_scorer_at_timestamp(symbol, contract, db, ck_ts, enable_reset=True)
-            wo = run_scorer_at_timestamp(symbol, contract, db, ck_ts, enable_reset=False)
+            wr = run_scorer_at_timestamp(symbol, contract, db, ck_ts, enable_reset=True, level1_only=level1_only)
+            wo = run_scorer_at_timestamp(symbol, contract, db, ck_ts, enable_reset=False, level1_only=level1_only)
             with_results.append(wr)
             without_results.append(wo)
 
@@ -626,7 +754,145 @@ def run_walkforward_with_reset(
     }
 
 
-# ─── CLI 入口 ─────────────────────────────────────────────
+# ─── 多品种聚合报告 ────────────────────────────────────────
+
+
+def _build_grouped_report(
+    all_results: Dict[str, Dict[str, Any]]
+) -> Dict[str, Any]:
+    """将多品种/多窗口结果整理为结构化报告。
+
+    Args:
+        all_results: {symbol: {window_label: walkforward_result, ...}, ...}
+
+    Returns:
+        含 summary、by_symbol、by_window、by_sector 的报告字典。
+    """
+    from datetime import datetime, timezone
+
+    report: Dict[str, Any] = {
+        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+        "symbols_tested": len(all_results),
+        "by_symbol": [],
+        "by_window": {},
+        "by_sector": {},
+        "all_results": all_results,
+    }
+
+    # ── by_symbol: 每个品种的最佳窗口准确率 ────────────────
+    for sym, windows in sorted(all_results.items()):
+        entry = {"symbol": sym}
+        best_acc_1d = 0
+        best_window = None
+        for wl, result in windows.items():
+            if "error" in result:
+                continue
+            acc_1d = result.get("avg_improvement", {}).get("accuracy_1d", 0)
+            if acc_1d > best_acc_1d:
+                best_acc_1d = acc_1d
+                best_window = wl
+            entry[wl] = {
+                "folds": result.get("total_checkpoints", 0),
+                "improvement_1d": result.get("avg_improvement", {}).get("accuracy_1d", 0),
+                "improvement_5d": result.get("avg_improvement", {}).get("accuracy_5d", 0),
+            }
+        entry["best_window"] = best_window
+        entry["best_improvement_1d"] = best_acc_1d
+        report["by_symbol"].append(entry)
+
+    # ── by_window: 每个窗口在所有品种上的均值 ─────────────
+    for wl in [c[2] for c in WINDOW_CONFIGS]:
+        improvements = []
+        for sym, windows in all_results.items():
+            result = windows.get(wl, {})
+            if "error" not in result:
+                imp = result.get("avg_improvement", {})
+                improvements.append(imp.get("accuracy_1d", 0))
+        report["by_window"][wl] = {
+            "symbol_count": len(improvements),
+            "avg_improvement_1d": round(sum(improvements) / len(improvements), 1) if improvements else 0,
+        }
+
+    # ── by_sector: 按板块聚合 ──────────────────────────────
+    sector_map: Dict[str, List[float]] = {}
+    for sym, _contract, _name, sector in TARGET_SYMBOLS:
+        if sym not in sector_map:
+            sector_map[sector] = []
+        windows = all_results.get(sym, {})
+        for wl, result in windows.items():
+            if "error" not in result:
+                imp = result.get("avg_improvement", {})
+                sector_map[sector].append(imp.get("accuracy_1d", 0))
+
+    for sector, values in sector_map.items():
+        report["by_sector"][sector] = {
+            "symbol_count": len([s for s, _, _, sec in TARGET_SYMBOLS if sec == sector]),
+            "avg_improvement_1d": round(sum(values) / len(values), 1) if values else 0,
+        }
+
+    return report
+
+
+def run_batch_walkforward(
+    db: Database,
+    symbols: Optional[List[str]] = None,
+    level1_only: bool = False,
+) -> Dict[str, Dict[str, Any]]:
+    """批量运行多品种/多窗口 Walk-Forward 回测。
+
+    Args:
+        db: Database 实例。
+        symbols: 品种代码列表（如 ['RB', 'CU']），默认全部 7 个。
+
+    Returns:
+        {symbol: {window_label: result_dict, ...}, ...}
+        每项结果同 run_walkforward_with_reset() 返回值。
+    """
+    # 解析目标品种
+    if symbols is None:
+        targets = TARGET_SYMBOLS  # (symbol, contract, name, sector)
+    else:
+        targets = [
+            t for t in TARGET_SYMBOLS if t[0] in symbols
+        ]
+
+    logger.info("===== 批量 Walk-Forward 回测启动 =====")
+    logger.info("品种: %s", ", ".join(f"{s[0]}({s[2]})" for s in targets))
+    logger.info("窗口: %s", ", ".join(c[2] for c in WINDOW_CONFIGS))
+
+    all_results: Dict[str, Dict[str, Any]] = {}
+
+    for sym, contract, name, sector in targets:
+        logger.info("──── %s(%s) ────", sym, name)
+        window_results: Dict[str, Any] = {}
+
+        for train_years, valid_months, label in WINDOW_CONFIGS:
+            logger.info("  窗口 %s (%dy+%dm)...", label, train_years, valid_months)
+            try:
+                result = run_walkforward_with_reset(
+                    sym, contract, db,
+                    train_years=train_years,
+                    valid_months=valid_months,
+                    level1_only=level1_only,
+                )
+                window_results[label] = result
+                if "error" in result:
+                    logger.warning("    ❌ %s", result["error"])
+                else:
+                    imp = result.get("avg_improvement", {})
+                    logger.info(
+                        "    ✅ folds=%d, imp_1d=%.1f%%",
+                        result.get("total_checkpoints", 0),
+                        imp.get("accuracy_1d", 0),
+                    )
+            except Exception as e:
+                logger.error("    ❌ 异常: %s", e)
+                window_results[label] = {"error": str(e)}
+
+        all_results[sym] = window_results
+
+    logger.info("===== 批量 Walk-Forward 回测完成 =====")
+    return all_results
 
 
 def main() -> None:
@@ -661,6 +927,10 @@ def main() -> None:
                         help="Walk-Forward 验证期月数（默认 6）")
     parser.add_argument("--compact", action="store_true",
                         help="简洁输出")
+    parser.add_argument("--batch", nargs="*", default=None,
+                        help="批量运行 7 品种/多窗口 Walk-Forward（可指定品种，如 --batch RB CU）")
+    parser.add_argument("--level1-only", action="store_true",
+                        help="仅使用 Level1（周线 N 型 + 日线 MACD），不需要更低周期数据，提高历史信号覆盖率")
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -678,6 +948,13 @@ def main() -> None:
         ts = int(time_module.time()) - 86400
 
     db = Database(DB_PATH)
+
+    if args.batch is not None:
+        symbols = args.batch if args.batch else None  # None = 全部 7 个
+        all_results = run_batch_walkforward(db, symbols=symbols, level1_only=args.level1_only)
+        report = _build_grouped_report(all_results)
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return
 
     if args.walkforward:
         result = run_walkforward_with_reset(

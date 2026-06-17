@@ -1020,6 +1020,19 @@
       <div class="pc-feature"><span class="pc-f-icon">🔔</span> Telegram 推送通知</div>
     </div>
     <button class="pc-btn" id="subscribeBtn" onclick="handleSubscribe()">✦ 立即订阅</button>
+
+    <!-- ── 免费试用按钮 ── -->
+    <div style="margin-top:18px;padding-top:14px;border-top:1px solid rgba(255,255,255,.04);">
+      <div style="font-size:.58rem;color:var(--text3);margin-bottom:10px;letter-spacing:.04em;">
+        🆓 想先体验？免费试用 7 天，无需支付信息
+      </div>
+      <button id="trialBtn" onclick="handleFreeTrial()"
+              style="padding:10px 28px;border-radius:var(--radius-md);border:1px solid rgba(34,197,94,.3);background:rgba(34,197,94,.08);color:#22c55e;font-size:.72rem;font-weight:700;cursor:pointer;transition:all .2s var(--ease-out);font-family:var(--font-ui);letter-spacing:.04em;">
+        🆓 开始 7 天免费试用
+      </button>
+      <div id="trialResult" style="margin-top:10px;font-size:.58rem;font-family:var(--font-mono);display:none;"></div>
+    </div>
+
     <div class="pc-note">首次订阅自动扣款，可随时取消。支付由 Stripe 安全处理。</div>
 
     <!-- ── 备用支付方式（非 Stripe 用户） ── -->
@@ -1517,6 +1530,55 @@ function handleSubscribe() {
       .catch(function(e) { /* silent — token retrieval best-effort */ });
   }
 })();
+
+// ── Free Trial — 自动生成试用 Token ──
+function handleFreeTrial() {
+  var btn = document.getElementById('trialBtn');
+  var resultEl = document.getElementById('trialResult');
+  btn.textContent = '⏳ 生成中…';
+  btn.style.opacity = '.6';
+  btn.disabled = true;
+  resultEl.style.display = 'none';
+
+  fetch('/api/public/request-trial', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({})
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    btn.textContent = '✅ 试用已激活';
+    btn.style.opacity = '1';
+    btn.disabled = false;
+    resultEl.style.display = '';
+
+    if (d.token) {
+      // 存储 Token → 自动验证 → 解锁 Premium
+      localStorage.setItem('premium_token', d.token);
+      resultEl.style.color = '#22c55e';
+      resultEl.innerHTML = '✅ 7 天免费试用已激活！Token: <strong>' + d.token.slice(0, 12) + '…</strong><br><span style="color:var(--text3);font-size:.52rem;">到期: ' + d.expires_at + ' · 已自动解锁 Premium</span>';
+
+      // 自动切换到 Premium 视图
+      document.getElementById('pricingCard').style.display = 'none';
+      document.getElementById('premiumContent').style.display = '';
+      document.getElementById('premiumTokenDisplay').textContent = 'Token: ' + d.token.slice(0, 12) + '…';
+      loadRecommendations();
+      loadBreakoutAlerts();
+      loadTopOptions();
+    } else {
+      resultEl.style.color = 'var(--long)';
+      resultEl.textContent = '❌ 生成失败: ' + (d.error || '未知错误');
+    }
+  })
+  .catch(function(e) {
+    btn.textContent = '🆓 开始 7 天免费试用';
+    btn.style.opacity = '1';
+    btn.disabled = false;
+    resultEl.style.display = '';
+    resultEl.style.color = 'var(--long)';
+    resultEl.textContent = '网络错误，请稍后重试';
+  });
+}
 
 // ── Premium — 手动 Token 验证 ──
 function verifyManualToken() {

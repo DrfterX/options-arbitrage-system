@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>期权信号仪表盘 · IV 状态监控</title>
+<link rel="stylesheet" href="/static/style.css">
 <link rel="stylesheet" href="/static/options.css">
 <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
 <style>
@@ -505,9 +506,146 @@
 /* Stats bar loading state */
 .stats-bar.is-loading .stat-item .value:not(.skeleton) { opacity: .5; transition: opacity .25s var(--ease-out); }
 .stats-bar .stat-item .value { transition: opacity .25s var(--ease-out); }
+
+/* ── Full-page initial skeleton ── */
+.initial-skeleton {
+  padding: 16px 24px;
+  background: var(--bg);
+  position: absolute;
+  inset: 0;
+  z-index: 999;
+}
+.initial-skeleton .is-topbar {
+  height: 32px;
+  background: linear-gradient(90deg, rgba(79,91,128,0.06) 25%, rgba(79,91,128,0.16) 50%, rgba(79,91,128,0.06) 75%);
+  background-size: 200% 100%;
+  border-radius: var(--radius-sm);
+  margin-bottom: 14px;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+.initial-skeleton .is-stats {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.initial-skeleton .is-stat {
+  flex: 1;
+  height: 48px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, rgba(79,91,128,0.06) 25%, rgba(79,91,128,0.16) 50%, rgba(79,91,128,0.06) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+.initial-skeleton .is-iv-section {
+  margin-bottom: 14px;
+}
+.initial-skeleton .is-iv-chart {
+  height: 220px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, rgba(79,91,128,0.06) 25%, rgba(79,91,128,0.16) 50%, rgba(79,91,128,0.06) 75%);
+  background-size: 200% 100%;
+  margin-bottom: 10px;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+  animation-delay: .1s;
+}
+.initial-skeleton .is-iv-summary {
+  display: flex;
+  gap: 10px;
+}
+.initial-skeleton .is-iv-summary-item {
+  flex: 1;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, rgba(79,91,128,0.06) 25%, rgba(79,91,128,0.16) 50%, rgba(79,91,128,0.06) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+  animation-delay: .2s;
+}
+.initial-skeleton .is-grid {
+  display: flex;
+  gap: 14px;
+}
+.initial-skeleton .is-grid-left {
+  flex: 1.4;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.initial-skeleton .is-grid-right {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.initial-skeleton .is-strat-header {
+  height: 24px;
+  width: 60%;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, rgba(79,91,128,0.06) 25%, rgba(79,91,128,0.16) 50%, rgba(79,91,128,0.06) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+  animation-delay: .3s;
+  margin-bottom: 6px;
+}
+.initial-skeleton .is-strat-row {
+  height: 28px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, rgba(79,91,128,0.06) 25%, rgba(79,91,128,0.16) 50%, rgba(79,91,128,0.06) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+.initial-skeleton .is-strat-row:nth-child(1) { animation-delay: .35s; }
+.initial-skeleton .is-strat-row:nth-child(2) { animation-delay: .4s; }
+.initial-skeleton .is-strat-row:nth-child(3) { animation-delay: .45s; }
+.initial-skeleton .is-strat-row:nth-child(4) { animation-delay: .5s; }
+.initial-skeleton .is-strat-row:nth-child(5) { animation-delay: .55s; }
+.initial-skeleton .is-card-area {
+  flex: 1;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, rgba(79,91,128,0.06) 25%, rgba(79,91,128,0.16) 50%, rgba(79,91,128,0.06) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+  animation-delay: .4s;
+}
 </style>
 </head>
 <body>
+
+<!-- ─── CSS-ONLY INITIAL SKELETON (shown before JS loads) ─── -->
+<div id="initialSkeleton" class="initial-skeleton">
+  <div class="is-topbar"></div>
+  <div class="is-stats">
+    <div class="is-stat"></div>
+    <div class="is-stat"></div>
+    <div class="is-stat"></div>
+    <div class="is-stat"></div>
+    <div class="is-stat"></div>
+    <div class="is-stat"></div>
+  </div>
+  <div class="is-iv-section">
+    <div class="is-iv-chart"></div>
+    <div class="is-iv-summary">
+      <div class="is-iv-summary-item"></div>
+      <div class="is-iv-summary-item"></div>
+      <div class="is-iv-summary-item"></div>
+    </div>
+  </div>
+  <div class="is-grid">
+    <div class="is-grid-left">
+      <div class="is-strat-header"></div>
+      <div class="is-strat-row"></div>
+      <div class="is-strat-row"></div>
+      <div class="is-strat-row"></div>
+      <div class="is-strat-row"></div>
+      <div class="is-strat-row"></div>
+    </div>
+    <div class="is-grid-right">
+      <div class="is-strat-header"></div>
+      <div class="is-card-area"></div>
+    </div>
+  </div>
+</div>
+
 <div class="app">
 
 <!-- ─── TOPBAR ─── -->
@@ -521,6 +659,7 @@
     </div>
     <span class="data-badge" id="optionCount">{{ options|length }} 策略</span>
     <span class="topbar-time">{{ now }}</span>
+    <button class="density-btn" onclick="toggleDensity()" title="切换显示密度" id="densityBtn">▣ 舒适</button>
   </div>
 </div>
 
@@ -703,6 +842,9 @@
 </div>
 
 <script>
+// ── Remove CSS-only initial skeleton ──
+document.getElementById('initialSkeleton')?.remove();
+
 // ── Auto refresh: 30s poll + 5min full reload ──
 // ── Initialize signals data for detail popup ──
 window._signalsData = {{ options|tojson|safe }};
@@ -734,7 +876,7 @@ var IV_DATA = JSON.parse('{{ iv_json|safe }}');
   var chart = echarts.init(el, null, { renderer: 'canvas' });
   chart.setOption({
     backgroundColor: 'transparent',
-    grid: { top: 20, right: 24, bottom: 180, left: 48 },
+    grid: { top: 20, right: 24, bottom: 280, left: 48 },
     xAxis: {
       type: 'category',
       data: IV_DATA.map(function(d){ return (d.symbol||'').toUpperCase(); }),
@@ -1197,7 +1339,10 @@ function showStratDetailFromData(el) {
   try {
     var idx = parseInt(el.dataset.idx);
     var signals = window._signalsData;
-    if (!signals || idx == null || !signals[idx]) return;
+    if (!signals || idx == null || !signals[idx]) {
+      console.warn('[detail-popup] silent return: signals=' + !!signals + ' idx=' + idx + ' has_signal=' + !!(signals && signals[idx]));
+      return;
+    }
     var s = signals[idx];
     var popup = document.getElementById('stratPopup');
     var titleEl = document.getElementById('spTitle');
@@ -1271,7 +1416,14 @@ function showStratDetailFromData(el) {
     var rect = el.getBoundingClientRect();
     var left = rect.right + 10;
     var top = rect.top - 20;
+    // 弹窗定位保护：如果右侧放不下则切换到左侧
     if (left + 420 > window.innerWidth) left = rect.left - 430;
+    // 左边界保护：确保弹窗不超出屏幕左侧
+    if (left < 10) left = 10;
+    // 上边界保护
+    if (top < 10) top = 10;
+    // 下边界保护：确保弹窗上沿不会太低（给弹窗留至少 360px 空间）
+    if (top + 360 > window.innerHeight) top = window.innerHeight - 370;
     if (top < 10) top = 10;
     popup.style.left = left + 'px';
     popup.style.top = top + 'px';
@@ -1314,6 +1466,10 @@ setInterval(function() {
       _prevSignalsData = null;
     });
 }, 300000); // 5 minutes
+</script>
+<script>
+/* ── 密度切换 ── */
+(function(){var b=document.getElementById('densityBtn'),d=localStorage.getItem('density');if(d){document.body.setAttribute('data-density',d);if(b)b.textContent='▣ '+(d==='compact'?'紧凑':'舒适')}window.toggleDensity=function(){var c=document.body.getAttribute('data-density'),n=c==='compact'?'comfortable':'compact';document.body.setAttribute('data-density',n);localStorage.setItem('density',n);if(b)b.textContent='▣ '+(n==='compact'?'紧凑':'舒适')}})();
 </script>
 </body>
 </html>

@@ -53,9 +53,14 @@ SYMBOL_NAMES = {
 }
 
 def _clean_contract_n_prefix(contract: str) -> str:
-    """清洗上期所合约 n 前缀: nag2607 → ag2607。"""
+    """清洗合约前缀: ag/nag2607 → ag2607, nag2607 → ag2607。"""
     import re
-    return re.sub(r'^[nN]', '', contract or "")
+    c = contract or ""
+    # 去掉 symbol/ 前缀 (如 ag/nag2607 → nag2607)
+    c = re.sub(r'^[A-Za-z0-9]+/', '', c)
+    # 去掉上期所 n 前缀 (如 nag2607 → ag2607)
+    c = re.sub(r'^[nN]', '', c)
+    return c
 
 
 def _enrich_iv_status(status_list):
@@ -376,6 +381,125 @@ def api_matrix():
         return jsonify({"matrix": matrix, "cards": cards})
     finally:
         pass  # 连接由 Database 管理生命周期
+
+
+@app.route("/api/n-structures")
+def api_n_structures():
+    """N 型结构信号面板（F.1）—— 所有品种当前 N 型结构展开列表。
+
+    返回按品种分组的结构数据，包含 ABC 价格、方向、状态、建议持有期。
+    每次请求先触发动态重算，确保实时性。
+    """
+    conn = db.get_conn()
+    try:
+        _restructure_active_structures(conn)
+
+        n_rows = conn.execute('''
+            SELECT symbol, contract, timeframe, direction, state,
+                   point_a_price, point_b_price, point_c_price,
+                   point_a_time, point_b_time, point_c_time, updated_at
+            FROM futures_n_structures
+            WHERE state NOT IN ('COMPLETED', 'IDLE')
+            ORDER BY symbol, timeframe
+        ''').fetchall()
+
+        # 品种最新信号评分（含评分才有显示优先级）
+        sig_rows = conn.execute('''
+            SELECT s.symbol, s.score
+            FROM futures_signals s
+            INNER JOIN (SELECT symbol, MAX(created_at) mt FROM futures_signals GROUP BY symbol) l
+                ON s.symbol=l.symbol AND s.created_at=l.mt
+        ''').fetchall()
+        scores = {r["symbol"]: round(r["score"], 2) if r["score"] else 0 for r in sig_rows}
+
+        # 各品种当前价格
+        price_rows = conn.execute('''
+            SELECT symbol, close, timestamp
+            FROM futures_klines
+            WHERE timeframe='1d'
+              AND (symbol, timestamp) IN (
+                  SELECT symbol, MAX(timestamp) FROM futures_klines WHERE timeframe='1d' GROUP BY symbol
+              )
+        ''').fetchall()
+        current_prices = {r["symbol"]: {"close": r["close"], "ts": r["timestamp"]} for r in price_rows}
+
+        # 建议持有期映射
+        HOLDING_MAP = {
+            "15m": {"label": "短线", "days": "1-3 天"},
+            "1h":  {"label": "短中线", "days": "2-5 天"},
+            "1d":  {"label": "中线", "days": "5-10 天"},
+            "1w":  {"label": "长线", "days": "2-4 周"},
+        }
+        STATE_LABELS = {
+            "LEG1": "第一笔形成中", "LEG2": "第二笔形成中",
+            "LEG3": "第三笔形成中", "COMPLETED": "已完成",
+            "IDLE": "待激活",
+        }
+
+        by_symbol = {}
+        for r in n_rows:
+            d = dict(r)
+            sym = d["symbol"]
+            tf = d["timeframe"]
+            name = SYMBOL_NAMES.get(sym, sym)
+            if sym not in by_symbol:
+                by_symbol[sym] = {
+                    "symbol": sym, "name": name,
+                    "contract": d["contract"],
+                    "score": scores.get(sym, 0),
+                    "timeframes": {},
+                    "total_signal": 0,
+                }
+            # 计算 C→最新价的第三笔方向
+            cur_price = current_prices.get(sym, {})
+            cp = cur_price.get("close")
+            c_price = d["point_c_price"]
+            leg3_dir = None
+            if cp and c_price:
+                leg3_dir = "LONG" if cp > c_price else "SHORT" if cp < c_price else "中性"
+
+            # 持有期
+            hold = HOLDING_MAP.get(tf, {"label": "—", "days": "—"})
+
+            # 最新 k 线时间（用于判断数据新鲜度）
+            last_price_time = cur_price.get("ts")
+            updated = d.get("updated_at", "")
+
+            by_symbol[sym]["timeframes"][tf] = {
+                "direction": d["direction"],
+                "state": d["state"],
+                "state_label": STATE_LABELS.get(d["state"], d["state"]),
+                "a_price": d["point_a_price"],
+                "b_price": d["point_b_price"],
+                "c_price": d["point_c_price"],
+                "a_time": d["point_a_time"],
+                "b_time": d["point_b_time"],
+                "c_time": d["point_c_time"],
+                "leg3_dir": leg3_dir,
+                "hold_label": hold["label"],
+                "hold_days": hold["days"],
+                "current_price": cp,
+                "price_time": last_price_time,
+                "updated_at": updated,
+            }
+
+        # 总信号数统计
+        for sym_data in by_symbol.values():
+            sym_data["total_signal"] = sum(
+                1 for tf_data in sym_data["timeframes"].values()
+                if tf_data["direction"] and tf_data["state"] not in ("COMPLETED", "IDLE")
+            )
+
+        # 排序：按评分降序
+        structures_list = sorted(by_symbol.values(), key=lambda x: (-x["score"], -x["total_signal"]))
+
+        return jsonify({
+            "structures": structures_list,
+            "count": len(structures_list),
+            "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        })
+    finally:
+        pass
 
 
 def _bar_key(bar, tf):
@@ -1256,6 +1380,48 @@ def api_admin_list_subscriptions():
     ).fetchall()
 
     return jsonify([dict(r) for r in rows])
+
+
+# ─── 免费试用 API ────────────────────────────────────────────────
+
+
+@app.route("/api/public/request-trial", methods=["POST"])
+def api_request_trial():
+    """公开发送的 API：生成 7 天免费试用 Token（无需人工介入）。
+
+    POST JSON body:
+        email (str, optional): 用户邮箱。
+
+    Returns:
+        {"token": "...", "days": 7, "expires_at": "..."} 或 {"error": "..."}
+    """
+    from web.stripe_handler import _generate_token, ensure_premium_table
+    import time
+
+    data = request.get_json() or {}
+    email = data.get("email", "").strip()
+
+    token = _generate_token()
+    ensure_premium_table(db)
+
+    expires_at = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d %H:%M")
+
+    conn = db.get_conn()
+    try:
+        conn.execute(
+            """INSERT INTO premium_subscriptions
+               (session_id, customer_id, email, status, token, expires_at)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (f"trial_{int(time.time())}", "trial", email or "trial@autocompany.ai",
+             "active", token, expires_at),
+        )
+        conn.commit()
+        logger.info("免费试用 Token 已生成: token=%s email=%s", token[:8] + "...", email or "(空)")
+        return jsonify({"token": token, "days": 7, "expires_at": expires_at})
+    except Exception as e:
+        conn.rollback()
+        logger.error("生成试用 Token 失败: %s", e)
+        return jsonify({"error": str(e)}), 500
 
 
 if __name__ == "__main__":
