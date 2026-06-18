@@ -196,16 +196,23 @@ def index() -> str:
     """
     conn = db.get_conn()
     try:
+        # 0. 延迟判断
+        is_delayed = _is_delayed_user()
+        delayed_warning = _render_delayed_warning()
+        delay_sig = _delay_filter("s.created_at")
+        delay_n = _delay_filter("updated_at", "text", 15)  # futures_n_structures 用 updated_at
+
         # 0. 动态重算：所有活跃 N 型结构（确保初始页面显示最新数据）
         _restructure_active_structures(conn)
 
         # 1. 信号矩阵数据
-        sig_rows = conn.execute('''
+        sig_rows = conn.execute(f'''
             SELECT s.symbol, s.contract, s.direction, s.signal_type,
                    s.level1_pass, s.level2_pass, s.level3_pass, s.score, s.created_at
             FROM futures_signals s
             INNER JOIN (SELECT symbol, MAX(created_at) mt FROM futures_signals GROUP BY symbol) l
                 ON s.symbol=l.symbol AND s.created_at=l.mt
+            WHERE 1=1 {delay_sig}
             ORDER BY s.score DESC
         ''').fetchall()
         signals = {}
@@ -217,11 +224,12 @@ def index() -> str:
                 "l1": bool(d["level1_pass"]), "l2": bool(d["level2_pass"]), "l3": bool(d["level3_pass"]),
             }
 
-        n_rows = conn.execute('''
+        n_rows = conn.execute(f'''
             SELECT symbol, timeframe, direction, state,
                    point_a_price, point_b_price, point_c_price,
                    point_a_time, point_b_time, point_c_time, updated_at
             FROM futures_n_structures
+            WHERE 1=1 {delay_n}
             ORDER BY symbol, timeframe
         ''').fetchall()
         structures = {}
@@ -304,25 +312,27 @@ def index() -> str:
                 now=now, matrix=matrix, cards=cards,
                 long_count=long_count, short_count=short_count,
                 total_signals=len(signal_list), max_score=max_score,
-                sector_stats=sector_stats)
+                sector_stats=sector_stats,
+                delayed_warning=delayed_warning)
         elif "options.drifter.indevs.in" in host:
             # 期权独立面板 — 只加载期权/IV 数据
             hub = _get_hub()
-            options = _enrich_options_signals([dict(s) for s in hub.get_recent_options(20)])
+            options = _enrich_options_signals([dict(s) for s in hub.get_recent_options(20, delay=is_delayed)])
 
             iv_recorder = _get_iv_recorder()
             iv_status = _enrich_iv_status(iv_recorder.get_all_status(days=180))
 
             return render_template("options_dashboard.html",
                 now=now, options=options,
-                iv_status=iv_status, iv_json=json.dumps(iv_status, ensure_ascii=False))
+                iv_status=iv_status, iv_json=json.dumps(iv_status, ensure_ascii=False),
+                delayed_warning=delayed_warning)
         elif "signals.drifter.indevs.in" in host:
             # 信号矩阵门户页 — 期货×期权入口，数据由 JS 实时拉取
-            return render_template("portal.html", now=now)
+            return render_template("portal.html", now=now, delayed_warning=delayed_warning)
         else:
             # 统一看板（默认）— 含期权信号 + IV 状态
             hub = _get_hub()
-            options = _enrich_options_signals([dict(s) for s in hub.get_recent_options(15)])
+            options = _enrich_options_signals([dict(s) for s in hub.get_recent_options(15, delay=is_delayed)])
 
             iv_recorder = _get_iv_recorder()
             iv_status = _enrich_iv_status(iv_recorder.get_all_status(days=180))
@@ -332,7 +342,8 @@ def index() -> str:
                 long_count=long_count, short_count=short_count,
                 total_signals=len(signal_list), max_score=max_score,
                 sector_stats=sector_stats, options=options,
-                iv_status=iv_status, iv_json=json.dumps(iv_status, ensure_ascii=False))
+                iv_status=iv_status, iv_json=json.dumps(iv_status, ensure_ascii=False),
+                delayed_warning=delayed_warning)
     finally:
         pass  # 连接由 Database 管理生命周期
 
@@ -385,16 +396,22 @@ def api_matrix():
     """
     conn = db.get_conn()
     try:
+        # 0. 延迟判断
+        is_delayed = _is_delayed_user()
+        delay_sig = _delay_filter("s.created_at")
+        delay_n = _delay_filter("updated_at")
+
         # 0. 动态重算：对所有有活跃结构的品种执行 A 突破迁移
         _restructure_active_structures(conn)
 
         # 最新信号（每个品种取最新一条）
-        rows = conn.execute('''
+        rows = conn.execute(f'''
             SELECT s.symbol, s.contract, s.direction, s.signal_type,
                    s.level1_pass, s.level2_pass, s.level3_pass, s.score, s.created_at
             FROM futures_signals s
             INNER JOIN (SELECT symbol, MAX(created_at) mt FROM futures_signals GROUP BY symbol) l
                 ON s.symbol=l.symbol AND s.created_at=l.mt
+            WHERE 1=1 {delay_sig}
             ORDER BY s.score DESC
         ''').fetchall()
         signals = {}
@@ -407,11 +424,12 @@ def api_matrix():
             }
 
         # N型结构（每个品种×周期最新状态）
-        n_rows = conn.execute('''
+        n_rows = conn.execute(f'''
             SELECT symbol, timeframe, direction, state,
                    point_a_price, point_b_price, point_c_price,
                    point_a_time, point_b_time, point_c_time, updated_at
             FROM futures_n_structures
+            WHERE 1=1 {delay_n}
             ORDER BY symbol, timeframe
         ''').fetchall()
 
@@ -481,30 +499,35 @@ def api_n_structures():
     conn = db.get_conn()
     try:
         _restructure_active_structures(conn)
+        is_delayed = _is_delayed_user()
+        delay_n = _delay_filter("updated_at")
+        delay_sig = _delay_filter("s.created_at")
+        delay_klines = _delay_filter("timestamp", "int")
 
-        n_rows = conn.execute('''
+        n_rows = conn.execute(f'''
             SELECT symbol, contract, timeframe, direction, state,
                    point_a_price, point_b_price, point_c_price,
                    point_a_time, point_b_time, point_c_time, updated_at
             FROM futures_n_structures
-            WHERE state NOT IN ('COMPLETED', 'IDLE')
+            WHERE state NOT IN ('COMPLETED', 'IDLE') {delay_n}
             ORDER BY symbol, timeframe
         ''').fetchall()
 
         # 品种最新信号评分（含评分才有显示优先级）
-        sig_rows = conn.execute('''
+        sig_rows = conn.execute(f'''
             SELECT s.symbol, s.score
             FROM futures_signals s
             INNER JOIN (SELECT symbol, MAX(created_at) mt FROM futures_signals GROUP BY symbol) l
                 ON s.symbol=l.symbol AND s.created_at=l.mt
+            WHERE 1=1 {delay_sig}
         ''').fetchall()
         scores = {r["symbol"]: round(r["score"], 2) if r["score"] else 0 for r in sig_rows}
 
         # 各品种当前价格
-        price_rows = conn.execute('''
+        price_rows = conn.execute(f'''
             SELECT symbol, close, timestamp
             FROM futures_klines
-            WHERE timeframe='1d'
+            WHERE timeframe='1d' {delay_klines}
               AND (symbol, timestamp) IN (
                   SELECT symbol, MAX(timestamp) FROM futures_klines WHERE timeframe='1d' GROUP BY symbol
               )
@@ -671,6 +694,10 @@ def api_klines():
 
     conn = db.get_conn()
     try:
+        # 0. 延迟判断
+        is_delayed = _is_delayed_user()
+        delay_klines = _delay_filter("k.timestamp", "int")
+
         # 0. 先刷新极值点，再动态重算该品种的 N 型结构（确保标记线基于最新 swing points）
         try:
             from futures.n_structure import restructure_active_for_symbol
@@ -680,7 +707,7 @@ def api_klines():
         except Exception:
             pass  # 重算失败不阻塞 K 线返回
 
-        rows = conn.execute('''
+        rows = conn.execute(f'''
             SELECT k.timestamp, k.open, k.high, k.low, k.close, k.volume
             FROM futures_klines k
             INNER JOIN (
@@ -689,6 +716,7 @@ def api_klines():
                 WHERE symbol=? AND timeframe=?
                 GROUP BY symbol, timeframe, timestamp
             ) sub ON k.rowid = sub.max_rowid
+            WHERE 1=1 {delay_klines}
             ORDER BY k.timestamp DESC
         ''', (sym, tf)).fetchall()
         
@@ -775,11 +803,14 @@ def api_stats():
     """板块统计 + 总体概览。"""
     conn = db.get_conn()
     try:
-        rows = conn.execute('''
+        is_delayed = _is_delayed_user()
+        delay_sig = _delay_filter("s.created_at")
+        rows = conn.execute(f'''
             SELECT s.symbol, s.direction, s.signal_type, s.score
             FROM futures_signals s
             INNER JOIN (SELECT symbol, MAX(created_at) mt FROM futures_signals GROUP BY symbol) l
                 ON s.symbol=l.symbol AND s.created_at=l.mt
+            WHERE 1=1 {delay_sig}
         ''').fetchall()
         
         signals = [dict(r) for r in rows]
@@ -813,7 +844,7 @@ def api_futures_signals():
     """获取最近期货信号列表。"""
     limit = request.args.get("limit", 20, type=int)
     hub = _get_hub()
-    signals = hub.get_recent_futures(limit)
+    signals = hub.get_recent_futures(limit, delay=_is_delayed_user())
     return jsonify([dict(s) for s in signals])
 
 
@@ -822,7 +853,7 @@ def api_options_signals():
     """获取最近期权信号列表。"""
     limit = request.args.get("limit", 20, type=int)
     hub = _get_hub()
-    signals = hub.get_recent_options(limit)
+    signals = hub.get_recent_options(limit, delay=_is_delayed_user())
     return jsonify(_enrich_options_signals([dict(s) for s in signals]))
 
 
@@ -837,10 +868,11 @@ def api_iv_status():
 @app.route("/api/summary")
 def api_summary():
     """获取看板汇总概览。"""
+    is_delayed = _is_delayed_user()
     hub = _get_hub()
     iv_recorder = _get_iv_recorder()
-    futures = hub.get_recent_futures(50)
-    options = hub.get_recent_options(50)
+    futures = hub.get_recent_futures(50, delay=is_delayed)
+    options = hub.get_recent_options(50, delay=is_delayed)
     iv_status = iv_recorder.get_all_status()
     return jsonify({
         "futures_count": len(futures),
@@ -852,8 +884,9 @@ def api_summary():
 @app.route("/api/filter-stats")
 def api_filter_stats():
     """获取 SmartFilter 统计汇总。"""
+    is_delayed = _is_delayed_user()
     hub = _get_hub()
-    stats = hub.get_filter_stats()
+    stats = hub.get_filter_stats(delay=is_delayed)
     return jsonify(stats)
 
 
@@ -861,8 +894,9 @@ def api_filter_stats():
 def api_filter_log():
     """获取最近过滤决策日志。"""
     limit = request.args.get("limit", 20, type=int)
+    is_delayed = _is_delayed_user()
     hub = _get_hub()
-    log = hub.get_recent_filter_log(limit)
+    log = hub.get_recent_filter_log(limit, delay=is_delayed)
     return jsonify(log)
 
 
@@ -1572,6 +1606,32 @@ def _is_registered_user() -> bool:
 def _is_delayed_user() -> bool:
     """返回 True 表示当前用户是免费层，需要数据延迟。"""
     return not _is_registered_user()
+
+
+def _delay_filter(field: str, field_type: str = "text", minutes: int = 15) -> str:
+    """生成 SQL 延迟过滤条件。
+
+    Args:
+        field: 时间戳字段名。
+        field_type: 'text' (ISO datetime) 或 'int' (Unix timestamp)。
+        minutes: 延迟分钟数，默认 15。
+
+    Returns:
+        SQL 片段，如 "AND created_at <= datetime('now', '-15 minutes')"。
+        空串表示不延迟。
+    """
+    if not _is_delayed_user():
+        return ""
+    if field_type == "int":
+        return f"AND {field} <= strftime('%s', 'now') - {minutes * 60}"
+    return f"AND {field} <= datetime('now', '-{minutes} minutes')"
+
+
+def _render_delayed_warning() -> str:
+    """为模板渲染生成延迟提示文案（空串 = 不显示）。"""
+    if _is_delayed_user():
+        return "⏱️ 免费用户数据延迟约 15 分钟 · 注册/登录可查看实时数据"
+    return ""
 
 
 def _ensure_user_table() -> None:

@@ -305,19 +305,22 @@ class SignalHub:
 
     # ── 查询 ──────────────────────────────────────────────────
 
-    def get_recent_futures(self, limit: int = 50) -> list:
+    def get_recent_futures(self, limit: int = 50, delay: bool = False) -> list:
         """获取最近期货信号。
 
         Args:
             limit: 返回条数上限，默认 50。
+            delay: True 则只返回至少 15 分钟前的信号（用于免费层延迟）。
 
         Returns:
             期货信号字典列表（按 created_at 降序）。
         """
         conn = self.db.get_conn()
         try:
+            delay_clause = "AND created_at <= datetime('now', '-15 minutes')" if delay else ""
             rows = conn.execute(
-                """SELECT * FROM futures_signals
+                f"""SELECT * FROM futures_signals
+                   WHERE 1=1 {delay_clause}
                    ORDER BY created_at DESC LIMIT ?""",
                 (limit,),
             ).fetchall()
@@ -325,19 +328,22 @@ class SignalHub:
         finally:
             pass  # 连接由 Database 管理生命周期
 
-    def get_recent_options(self, limit: int = 50) -> list:
+    def get_recent_options(self, limit: int = 50, delay: bool = False) -> list:
         """获取最近期权信号。
 
         Args:
             limit: 返回条数上限，默认 50。
+            delay: True 则只返回至少 15 分钟前的信号（用于免费层延迟）。
 
         Returns:
             期权信号字典列表（按 created_at 降序）。
         """
         conn = self.db.get_conn()
         try:
+            delay_clause = "AND created_at <= datetime('now', '-15 minutes')" if delay else ""
             rows = conn.execute(
-                """SELECT * FROM options_signals
+                f"""SELECT * FROM options_signals
+                   WHERE 1=1 {delay_clause}
                    ORDER BY unified_score DESC, created_at DESC LIMIT ?""",
                 (limit,),
             ).fetchall()
@@ -415,20 +421,24 @@ class SignalHub:
         finally:
             pass  # 连接由 Database 管理生命周期
 
-    def get_filter_stats(self) -> dict:
+    def get_filter_stats(self, delay: bool = False) -> dict:
         """获取 SmartFilter 统计汇总。
+
+        Args:
+            delay: True 则只统计至少 15 分钟前的记录。
 
         Returns:
             dict: 总评估数/推送数/抑制数/各等级分布。
         """
         conn = self.db.get_conn()
         try:
+            delay_clause = "AND created_at <= datetime('now', '-15 minutes')" if delay else ""
             total = conn.execute(
-                "SELECT COUNT(*) as c FROM filter_decision_log"
+                f"SELECT COUNT(*) as c FROM filter_decision_log WHERE 1=1 {delay_clause}"
             ).fetchone()["c"]
 
             pushed = conn.execute(
-                "SELECT COUNT(*) as c FROM filter_decision_log WHERE should_push=1"
+                f"SELECT COUNT(*) as c FROM filter_decision_log WHERE should_push=1 {delay_clause}"
             ).fetchone()["c"]
 
             suppressed = conn.execute(
@@ -436,8 +446,9 @@ class SignalHub:
             ).fetchone()["c"]
 
             levels = conn.execute(
-                """SELECT push_level, COUNT(*) as c
+                f"""SELECT push_level, COUNT(*) as c
                    FROM filter_decision_log
+                   WHERE 1=1 {delay_clause}
                    GROUP BY push_level
                    ORDER BY c DESC"""
             ).fetchall()
@@ -451,19 +462,22 @@ class SignalHub:
         finally:
             pass  # 连接由 Database 管理生命周期
 
-    def get_recent_filter_log(self, limit: int = 20) -> list:
+    def get_recent_filter_log(self, limit: int = 20, delay: bool = False) -> list:
         """获取最近的过滤决策日志。
 
         Args:
             limit: 返回条数上限。
+            delay: True 则只返回至少 15 分钟前的记录。
 
         Returns:
             过滤决策日志列表（按 created_at 降序）。
         """
         conn = self.db.get_conn()
         try:
+            delay_clause = "AND created_at <= datetime('now', '-15 minutes')" if delay else ""
             rows = conn.execute(
-                """SELECT * FROM filter_decision_log
+                f"""SELECT * FROM filter_decision_log
+                   WHERE 1=1 {delay_clause}
                    ORDER BY created_at DESC LIMIT ?""",
                 (limit,),
             ).fetchall()

@@ -620,8 +620,8 @@ body {
 .kline-popup {
   position: fixed;
   z-index: 9999;
-  min-width: 300px;
-  max-width: 380px;
+  min-width: 380px;
+  max-width: 520px;
   background: rgba(7, 10, 18, .94);
   border: 1px solid var(--border-light);
   border-radius: 10px;

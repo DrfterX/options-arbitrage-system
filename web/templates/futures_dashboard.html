@@ -830,7 +830,7 @@
       <div class="sk-candle up" style="height:62%"><div class="sk-wick-top" style="height:5px"></div><div class="sk-body" style="height:32px"></div><div class="sk-wick-bottom" style="height:4px"></div></div>
       <div class="sk-candle down" style="height:48%"><div class="sk-wick-top" style="height:3px"></div><div class="sk-body" style="height:26px"></div><div class="sk-wick-bottom" style="height:5px"></div></div>
     </div>
-    <canvas id="kpCanvas" height="160"></canvas>
+    <canvas id="kpCanvas" height="340"></canvas>
   </div>
   <div class="kp-info"><span id="kpPrice"></span><span id="kpTime" style="flex:1;text-align:right"></span></div>
   <div id="kpError" class="kp-error" style="display:none">⚠️ 加载失败</div>
@@ -1124,30 +1124,102 @@ var canvas = document.getElementById('kpCanvas');
 var ctx = canvas.getContext('2d');
 var _klineRefresh = null;  // 60s auto-refresh interval for K-line popup
 
+// ── EMA helper for MACD calculation ──
+function calcEMA(data, period) {
+    var k = 2 / (period + 1);
+    var result = new Array(data.length).fill(null);
+    var startIdx = -1;
+    // Find first valid data point
+    for (var i = 0; i < data.length; i++) {
+        if (data[i] != null && !isNaN(data[i])) { startIdx = i; break; }
+    }
+    if (startIdx < 0) return result;
+    // First EMA = SMA
+    var sum = 0, count = 0;
+    for (var i = startIdx; i < startIdx + period && i < data.length; i++) {
+        if (data[i] != null && !isNaN(data[i])) { sum += data[i]; count++; }
+    }
+    if (count === 0) return result;
+    var ema = sum / count;
+    result[startIdx + count - 1] = ema;
+    // Recursive EMA
+    for (var i = startIdx + count; i < data.length; i++) {
+        if (data[i] != null && !isNaN(data[i])) {
+            ema = data[i] * k + ema * (1 - k);
+            result[i] = ema;
+        }
+    }
+    return result;
+}
+
 function drawKline(bars, nA, nB, nC, nDir, nAt, nBt, nCt) {
     var dpr = window.devicePixelRatio || 1;
     var rect = canvas.getBoundingClientRect();
-    canvas.width = rect.width * dpr; canvas.height = 160 * dpr;
+    // Total canvas height 340px: 220 K-line + 120 MACD
+    canvas.width = rect.width * dpr; canvas.height = 340 * dpr;
     ctx.scale(dpr, dpr);
-    var W = rect.width, H = 160;
-    ctx.clearRect(0, 0, W, H);
+    var W = rect.width, H_MAIN = 220, H_MACD = 100, H_TOTAL = 340;
+    var MACD_TOP = H_MAIN + 20; // 20px gap between charts
+    ctx.clearRect(0, 0, W, H_TOTAL);
     if (!bars.length) return;
+
+    // ── MACD Calculation (default: 12/26/9) ──
+    var closes = bars.map(function(b) { return b.c; });
+    var ema12 = calcEMA(closes, 12);
+    var ema26 = calcEMA(closes, 26);
+    var dif = [];  // DIF = EMA12 - EMA26
+    var dea = [];  // DEA = 9-day EMA of DIF
+    var macdBar = []; // 2*(DIF - DEA)
+    for (var i = 0; i < closes.length; i++) {
+        dif.push(ema12[i] - ema26[i]);
+    }
+    var difValid = dif.filter(function(v) { return v != null && !isNaN(v); });
+    dea = calcEMA(difValid, 9);
+    // Align DEA to original index
+    var deaAligned = new Array(closes.length).fill(null);
+    var deaOffset = dif.length - difValid.length;
+    for (var i = 0; i < dea.length; i++) {
+        deaAligned[deaOffset + i] = dea[i];
+    }
+    for (var i = 0; i < closes.length; i++) {
+        if (dif[i] != null && deaAligned[i] != null) {
+            macdBar.push(2 * (dif[i] - deaAligned[i]));
+        } else {
+            macdBar.push(null);
+        }
+    }
+    // MACD range
+    var macdMin = Infinity, macdMax = -Infinity;
+    for (var i = 26; i < dif.length; i++) {
+        if (dif[i] != null) { macdMin = Math.min(macdMin, dif[i]); macdMax = Math.max(macdMax, dif[i]); }
+        if (deaAligned[i] != null) { macdMin = Math.min(macdMin, deaAligned[i]); macdMax = Math.max(macdMax, deaAligned[i]); }
+        if (macdBar[i] != null) { macdMin = Math.min(macdMin, macdBar[i]); macdMax = Math.max(macdMax, macdBar[i]); }
+    }
+    if (macdMin === Infinity) { macdMin = -0.1; macdMax = 0.1; }
+    var macdPad = (macdMax - macdMin) * 0.1 || 0.01;
+    if (macdMin > 0) macdMin = -macdPad; // ensure zero line visible
+    macdMin -= macdPad; macdMax += macdPad;
+    var macdRange = macdMax - macdMin;
+    var macdY = function(v) {
+        return MACD_TOP + 10 + (1 - (v - macdMin) / macdRange) * (H_MACD - 20);
+    };
+
+    // ── K-line chart (main area) ──
     var pmin = Infinity, pmax = -Infinity, vmax = 0;
     bars.forEach(function(b) { pmin = Math.min(pmin, b.l); pmax = Math.max(pmax, b.h); vmax = Math.max(vmax, b.v); });
-    // Extend range if N structure points extend beyond bar range
     var npExtend = 0;
     [nA, nB, nC].forEach(function(p) { if (p != null && !isNaN(p)) { npExtend = Math.max(npExtend, Math.abs(p - (pmin+pmax)/2)); } });
     var pad = (pmax - pmin) * 0.08 + npExtend * 0.04 || 1; pmin -= pad; pmax += pad;
     var prange = pmax - pmin;
     function pricePrecision(r) { if (r < 1) return 3; if (r < 10) return 2; return 1; }
     var prec = pricePrecision(prange);
-    var priceToY = function(p) { return 10 + (1 - (p - pmin) / prange) * (H - 30); };
-    var chartLeft = 40, chartRight = W - 8, chartW = chartRight - chartLeft;
+    var priceToY = function(p) { return 10 + (1 - (p - pmin) / prange) * (H_MAIN - 30); };
+    var chartLeft = 44, chartRight = W - 8, chartW = chartRight - chartLeft;
     var gap = chartW / bars.length;
     var barW = Math.max(3, Math.min(10, chartW / bars.length * 0.7));
     ctx.strokeStyle = 'rgba(90,97,115,0.12)'; ctx.lineWidth = 0.5;
     for (var i = 0; i <= 4; i++) {
-        var y = 10 + i * (H - 30) / 4;
+        var y = 10 + i * (H_MAIN - 30) / 4;
         ctx.beginPath(); ctx.moveTo(chartLeft, y); ctx.lineTo(chartRight, y); ctx.stroke();
         ctx.fillStyle = '#5a6173'; ctx.font = '9px sans-serif'; ctx.textAlign = 'right';
         ctx.fillText((pmax - (i / 4) * prange).toFixed(prec), chartLeft - 4, y + 3);
@@ -1184,7 +1256,7 @@ function drawKline(bars, nA, nB, nC, nDir, nAt, nBt, nCt) {
         if (bar.v > 0 && vmax > 0) {
             var volH = (bar.v / vmax) * 15;
             ctx.fillStyle = bar.up ? 'rgba(240,68,56,0.25)' : 'rgba(34,197,94,0.25)';
-            ctx.fillRect(x - barW/2, H - volH, barW, volH);
+            ctx.fillRect(x - barW/2, H_MAIN - 5 - volH, barW, volH);
         }
     });
     // ── N 型结构 A/B/C 线段标记（按时间戳匹配 K 线位置） ──
@@ -1212,7 +1284,7 @@ function drawKline(bars, nA, nB, nC, nDir, nAt, nBt, nCt) {
         if (pt.idx < 0 || pt.idx >= barXs.length || pt.price == null || isNaN(pt.price)) return;
         var x = barXs[pt.idx];
         var y = priceToY(pt.price);
-        if (y < 8 || y > H - 18) return;
+        if (y < 8 || y > H_MAIN - 18) return;
         var color = pt.cls === 'A' ? 'rgba(234,179,8,0.85)' : pt.cls === 'B' ? 'rgba(99,102,241,0.85)' : 'rgba(236,72,153,0.85)';
         // Draw solid connecting line from previous point to this point
         if (prevPt && prevPt.idx >= 0) {
@@ -1231,7 +1303,7 @@ function drawKline(bars, nA, nB, nC, nDir, nAt, nBt, nCt) {
         if (pt.idx < 0 || pt.idx >= barXs.length || pt.price == null || isNaN(pt.price)) return;
         var x = barXs[pt.idx];
         var y = priceToY(pt.price);
-        if (y < 8 || y > H - 18) return;
+        if (y < 8 || y > H_MAIN - 18) return;
         var color = pt.cls === 'A' ? '#eab308' : pt.cls === 'B' ? '#6366f1' : '#ec4899';
         var bgColor = pt.cls === 'A' ? 'rgba(234,179,8,0.2)' : pt.cls === 'B' ? 'rgba(99,102,241,0.2)' : 'rgba(236,72,153,0.2)';
         // Endpoint dot
@@ -1284,15 +1356,72 @@ function drawKline(bars, nA, nB, nC, nDir, nAt, nBt, nCt) {
             ctx.fill();
         }
     }
+    // K-line baseline
     ctx.strokeStyle = 'rgba(90,97,115,0.08)';
     ctx.lineWidth = 0.5;
-    ctx.beginPath(); ctx.moveTo(chartLeft, H - 16); ctx.lineTo(chartRight, H - 16); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(chartLeft, H_MAIN - 16); ctx.lineTo(chartRight, H_MAIN - 16); ctx.stroke();
     var last = bars[bars.length - 1];
     var lastY = priceToY(last.c);
     ctx.setLineDash([3,3]);
     ctx.strokeStyle = last.up ? 'rgba(240,68,56,0.4)' : 'rgba(34,197,94,0.4)';
     ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(chartLeft, lastY); ctx.lineTo(chartRight, lastY); ctx.stroke();
     ctx.setLineDash([]);
+
+    // ── Divider between K-line and MACD ──
+    ctx.strokeStyle = 'rgba(90,97,115,0.15)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(chartLeft, H_MAIN + 2); ctx.lineTo(chartRight, H_MAIN + 2); ctx.stroke();
+
+    // ── MACD Sub-chart (12/26/9) ──
+    // MACD label
+    ctx.fillStyle = '#8b92a5'; ctx.font = '8px sans-serif'; ctx.textAlign = 'left';
+    ctx.fillText('MACD(12,26,9)', chartLeft, MACD_TOP + 8);
+
+    // Zero line
+    var zeroY = macdY(0);
+    ctx.strokeStyle = 'rgba(90,97,115,0.2)';
+    ctx.lineWidth = 0.5;
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath(); ctx.moveTo(chartLeft, zeroY); ctx.lineTo(chartRight, zeroY); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // MACD histogram (DIF - DEA) * 2
+    for (var i = 26; i < bars.length; i++) {
+        if (macdBar[i] == null) continue;
+        var x = barXs[i];
+        var h = macdY(macdBar[i]) - zeroY;
+        var barH = Math.abs(h);
+        if (barH < 1) barH = 1;
+        var color = h <= 0 ? 'rgba(34,197,94,0.6)' : 'rgba(240,68,56,0.6)';
+        ctx.fillStyle = color;
+        ctx.fillRect(x - 1, h <= 0 ? zeroY : zeroY - barH, 3, barH);
+    }
+
+    // DIF line (white)
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    var started = false;
+    for (var i = 26; i < bars.length; i++) {
+        if (dif[i] == null) continue;
+        var x = barXs[i], y = macdY(dif[i]);
+        if (!started) { ctx.moveTo(x, y); started = true; }
+        else { ctx.lineTo(x, y); }
+    }
+    ctx.stroke();
+
+    // DEA line (yellow)
+    ctx.strokeStyle = '#eab308';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    started = false;
+    for (var i = 26; i < bars.length; i++) {
+        if (deaAligned[i] == null) continue;
+        var x = barXs[i], y = macdY(deaAligned[i]);
+        if (!started) { ctx.moveTo(x, y); started = true; }
+        else { ctx.lineTo(x, y); }
+    }
+    ctx.stroke();
 }
 
 function hidePopup() {
@@ -1309,8 +1438,8 @@ async function showKlinePopup(el) {
     var at = el.dataset.at, bt = el.dataset.bt, ct = el.dataset.ct;
     var rect = el.getBoundingClientRect();
     var left = rect.right + 10, top = rect.top - 20;
-    if (left + 360 > window.innerWidth) left = rect.left - 370;
-    if (top + 280 > window.innerHeight) top = window.innerHeight - 290;
+    if (left + 540 > window.innerWidth) left = rect.left - 550;
+    if (top + 450 > window.innerHeight) top = window.innerHeight - 460;
     if (top < 10) top = 10; if (left < 10) left = 10;
     popup.style.left = left + 'px'; popup.style.top = top + 'px';
     popup.style.bottom = 'auto'; popup.style.transform = 'none';
