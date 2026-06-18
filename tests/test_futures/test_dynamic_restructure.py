@@ -428,8 +428,9 @@ class TestNoNewC:
     ) -> None:
         """LONG: new_B(TROUGH) 后同类型 TROUGH(非 PEAK) → new_C 找不到 → fallback"""
         mock_get_active.return_value = _long_active()
+        # low=85 < A=90 → A 突破触发 migration; close=105 > C=98 → 条件4通过
         mock_get_klines.return_value = [
-            make_kline(T4, close=88, high=100, low=85, open_=95),
+            make_kline(T4, close=105, high=110, low=85),
         ]
         # B(T2) 后 2 个极值点：
         #   TROUGH(100,T3) → new_B 找到了 (T3 > T2)
@@ -465,7 +466,7 @@ class TestNoNewC:
         """SHORT: new_B(PEAK) 后同类型 PEAK(非 TROUGH) → new_C 找不到 → fallback"""
         mock_get_active.return_value = _short_active()
         mock_get_klines.return_value = [
-            make_kline(T4, close=112, high=115, low=108, open_=110),
+            make_kline(T4, close=95, high=115, low=92, open_=110),
         ]
         # B(T2) 后 2 个极值点：
         #   PEAK(105,T3) → new_B 找到了
@@ -966,3 +967,40 @@ class TestRealDBPersistence:
             ).fetchone()
         assert saved is not None
         assert dict(saved)["direction"] == "LONG"
+
+    def test_was_idle_no_reactivation(self, temp_db: Database) -> None:
+        """IDLE 状态且无结构性变动 → 不应被 dynamic_restructure 重激活。
+
+        场景：
+        - SHORT 结构被 detect_and_save 因条件4标记为 IDLE（最新价 >= C）
+        - 价格未突破 A 也未反穿 B（无结构性变动）
+        - no_kline 分支或 A-not-broken 分支应保持 IDLE 状态
+        """
+        now = int(time.time())
+        TA = now - 7200  # A
+        TB = now - 5400  # B
+        TC = now - 3600  # C
+        TK = now - 1800  # K 线
+
+        # 插入 SHORT IDLE 结构
+        # SHORT: A=PEAK(105), B=TROUGH(95), C=PEAK(102)
+        # 条件4：最新收盘价 103 >= C=102 → 不满足 → IDLE
+        self._seed_active(temp_db, {
+            "symbol": "RB", "contract": "rb2510", "timeframe": "1w",
+            "direction": "SHORT", "state": "IDLE",
+            "point_a_time": TA, "point_a_price": 105.0,
+            "point_b_time": TB, "point_b_price": 95.0,
+            "point_c_time": TC, "point_c_price": 102.0,
+        })
+        # K 线：close=103 >= C=102（条件4不满足）；high=104 < A=105（A 未突破）
+        # low=97 > B=95（B 反穿阈值：(97-95)/10=0.2 < 0.5 不触发）
+        self._seed_klines(temp_db, [
+            make_kline(TK, close=103, high=104, low=97, open_=103),
+        ])
+
+        result = dynamic_restructure("RB", "rb2510", "1w", temp_db)
+
+        # 不应重激活 — is_active=False
+        assert result["is_active"] is False, (
+            f"预期 is_active=False，实际={result['is_active']}"
+        )

@@ -141,7 +141,7 @@ class TestPhase1InitialDetection:
         _seed_klines(db, self.SYMBOL, self.CONTRACT, self.TF, [
             make_kline(TS + 1, close=110, low=108, high=112),
             make_kline(TS + 3, close=90, low=88, high=92),
-            make_kline(TS + 5, close=105, low=103, high=107),
+            make_kline(TS + 5, close=100, low=98, high=102),
         ])
         _seed_swings(db, self.SYMBOL, self.CONTRACT, self.TF, [
             make_swing("PEAK", 110, TS + 1),
@@ -155,6 +155,7 @@ class TestPhase1InitialDetection:
         assert result["point_a_price"] == 110.0
         assert result["point_b_price"] == 90.0
         assert result["point_c_price"] == 105.0
+        assert result["point_c_price"] > result["point_b_price"]  # 条件2：C > B
         assert_is_active(result)
 
 
@@ -319,9 +320,11 @@ class TestPhase3BReversal:
         })
 
         # 最新 K 线：跌回但未破 A=90（low=92 > 90），high=98 < B=110
+        # 注意：detect_and_save 需要条件 4（最新价 > C=100），所以加 TS+9 收盘 102
         _seed_klines(db, self.SYMBOL, self.CONTRACT, self.TF, [
             make_kline(TS + 7, close=93, low=92, high=98),
             make_kline(TS + 8, close=94, low=93, high=97),
+            make_kline(TS + 9, close=102, low=100, high=104),  # 条件4：最新价 > C=100
         ])
         _seed_swings(db, self.SYMBOL, self.CONTRACT, self.TF, [
             make_swing("TROUGH", 90, TS + 1),

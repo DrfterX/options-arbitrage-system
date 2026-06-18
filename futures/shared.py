@@ -28,6 +28,7 @@ def _get_active_n_structure(
     symbol: str,
     contract: str,
     timeframe: str,
+    skip_condition4: bool = False,
 ) -> Optional[Dict[str, Any]]:
     """获取未完成的活跃 N 型结构。
 
@@ -35,12 +36,15 @@ def _get_active_n_structure(
       1. 时间新鲜度 — C/B 点时间在 freshness 窗口内
       2. 结构有效性 — C 点不可突破 A 点（LONG: C ≥ A；SHORT: C ≤ A）
       3. 极端止损检查 — 最新 K 线收盘价已突破 A 点则失效
+      4. 第三笔方向确认 — 最新价必须与 C 点保持方向一致性（LONG: 价 > C；SHORT: 价 < C）
 
     Args:
         db: Database 实例。
         symbol: 品种代码。
         contract: 合约代码。
         timeframe: K 线周期。
+        skip_condition4: 是否跳过条件 4（第三笔方向确认）检查。
+            当 True 时跳过，供 dynamic_restructure 使用；API 消费者保持默认 False。
 
     Returns:
         活跃 N 型结构字典，如无活跃结构则返回 None。
@@ -88,6 +92,16 @@ def _get_active_n_structure(
             if ns["direction"] == "SHORT" and last_kline["close"] >= a_price:
                 return None
             if ns["direction"] == "LONG" and last_kline["close"] <= a_price:
+                return None
+
+        # 4. 第三笔方向确认（条件 4）：最新价与 C 点比较
+        # LONG: 最新价必须 > C（确认第三笔向上破位）
+        # SHORT: 最新价必须 < C（确认第三笔向下破位）
+        # 注意：skip_condition4=True 供 dynamic_restructure 使用，避免 A 突破迁移被阻断
+        if not skip_condition4 and last_kline and c_price:
+            if ns["direction"] == "LONG" and last_kline["close"] <= c_price:
+                return None
+            if ns["direction"] == "SHORT" and last_kline["close"] >= c_price:
                 return None
 
         return ns

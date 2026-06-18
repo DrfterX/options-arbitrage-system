@@ -173,12 +173,13 @@ class TestNormalShortN:
     def test_normal_short_leg3(
         self, mock_get_swings: MagicMock, mock_save: MagicMock,
     ) -> None:
-        """PEAK(110,T1) -> TROUGH(90,T2) -> PEAK(85,T3)
-        direction=SHORT, 有效3点交替结构 → LEG3"""
+        """PEAK(110,T1) -> TROUGH(90,T2) -> PEAK(100,T3)
+        direction=SHORT, 有效3点交替结构 → LEG3
+        C=100 > B=90（条件2:B→C第二笔上涨确认✓）and C=100 < A=110（条件3:C不高于A✓）"""
         mock_get_swings.return_value = [
             make_swing("PEAK", 110, T1),
             make_swing("TROUGH", 90, T2),
-            make_swing("PEAK", 85, T3),
+            make_swing("PEAK", 100, T3),
         ]
         result = detect_and_save("RB", "rb2510", "1w", _test_db)
         assert result["direction"] == "SHORT"
@@ -689,6 +690,28 @@ class TestFindNStructureForward:
         assert result["c"]["price"] == 115
         assert result["direction"] == "LONG"
 
+    # ─── 条件 2 显式检查：B→C 方向一致性 ───────────────────────
+
+    def test_long_c_not_below_b_rejected(self) -> None:
+        """条件2：LONG 方向 C >= B → B→C 没有下跌（第二笔确认失败）→ 跳过"""
+        merged = [
+            make_swing("TROUGH", 90, T1),
+            make_swing("PEAK", 100, T2),
+            make_swing("TROUGH", 105, T3),  # C=105 >= B=100 → B→C 无下跌，无效
+        ]
+        result = _find_n_structure_forward(merged)
+        assert result is None
+
+    def test_short_c_not_above_b_rejected(self) -> None:
+        """条件2：SHORT 方向 C <= B → B→C 没有上涨（第二笔确认失败）→ 跳过"""
+        merged = [
+            make_swing("PEAK", 110, T1),
+            make_swing("TROUGH", 100, T2),
+            make_swing("PEAK", 95, T3),  # C=95 <= B=100 → B→C 无上涨，无效
+        ]
+        result = _find_n_structure_forward(merged)
+        assert result is None
+
 
 # ═══════════════════════════════════════════════════════
 # 10. 橡胶 2609 周 K 线真实案例（User Directives 指定）
@@ -867,3 +890,116 @@ class TestCEqualsABoundary:
         ]
         result = detect_and_save("RB", "rb2510", "1w", _test_db)
         assert result["state"] == NState.IDLE.value
+
+
+# ═══════════════════════════════════════════════════════
+# 14. 条件 4 测试（第三笔方向确认）— 通过 detect_and_save()
+# ═══════════════════════════════════════════════════════
+class TestCondition4Detect:
+    """通过 detect_and_save() 测试条件 4（第三笔方向确认）。
+
+    条件 4 要求：
+    - LONG: 最新收盘价必须 > C（确认第三笔向上破位）
+    - SHORT: 最新收盘价必须 < C（确认第三笔向下破位）
+    - 若 _get_klines 抛出异常则跳过条件 4 检查
+
+    测试需要 mock _get_klines 和 _get_swing_points + _save_n_structure。
+    """
+
+    @patch("futures.n_structure._get_klines")
+    @patch("futures.n_structure._save_n_structure")
+    @patch("futures.n_structure._get_swing_points")
+    def test_long_close_below_c_returns_idle(
+        self, mock_get_swings: MagicMock, mock_save: MagicMock,
+        mock_klines: MagicMock,
+    ) -> None:
+        """LONG: 最新收盘价 92 <= C=95 → 条件 4 不满足 → IDLE"""
+        mock_get_swings.return_value = [
+            make_swing("TROUGH", 90, T1),
+            make_swing("PEAK", 110, T2),
+            make_swing("TROUGH", 95, T3),
+        ]
+        mock_klines.return_value = [{"timestamp": T4, "close": 92.0}]
+        result = detect_and_save("RB", "rb2510", "1w", _test_db)
+        assert result["state"] == NState.IDLE.value
+        assert result["is_active"] is False
+        assert "条件4" in result.get("reason", "")
+
+    @patch("futures.n_structure._get_klines")
+    @patch("futures.n_structure._save_n_structure")
+    @patch("futures.n_structure._get_swing_points")
+    def test_short_close_above_c_returns_idle(
+        self, mock_get_swings: MagicMock, mock_save: MagicMock,
+        mock_klines: MagicMock,
+    ) -> None:
+        """SHORT: 最新收盘价 107 >= C=105 → 条件 4 不满足 → IDLE"""
+        mock_get_swings.return_value = [
+            make_swing("PEAK", 110, T1),
+            make_swing("TROUGH", 90, T2),
+            make_swing("PEAK", 105, T3),
+        ]
+        mock_klines.return_value = [{"timestamp": T4, "close": 107.0}]
+        result = detect_and_save("RB", "rb2510", "1w", _test_db)
+        assert result["state"] == NState.IDLE.value
+        assert result["is_active"] is False
+        assert "条件4" in result.get("reason", "")
+
+    @patch("futures.n_structure._get_klines")
+    @patch("futures.n_structure._save_n_structure")
+    @patch("futures.n_structure._get_swing_points")
+    def test_long_close_above_c_remains_active(
+        self, mock_get_swings: MagicMock, mock_save: MagicMock,
+        mock_klines: MagicMock,
+    ) -> None:
+        """LONG: 最新收盘价 105 > C=95 → 条件 4 满足 → LEG3 活跃"""
+        mock_get_swings.return_value = [
+            make_swing("TROUGH", 90, T1),
+            make_swing("PEAK", 110, T2),
+            make_swing("TROUGH", 95, T3),
+        ]
+        mock_klines.return_value = [{"timestamp": T4, "close": 105.0}]
+        result = detect_and_save("RB", "rb2510", "1w", _test_db)
+        assert result["state"] == NState.LEG3.value
+        assert result["is_active"] is True
+        assert result["point_a_price"] == 90
+        assert result["point_b_price"] == 110
+        assert result["point_c_price"] == 95
+
+    @patch("futures.n_structure._get_klines")
+    @patch("futures.n_structure._save_n_structure")
+    @patch("futures.n_structure._get_swing_points")
+    def test_short_close_below_c_remains_active(
+        self, mock_get_swings: MagicMock, mock_save: MagicMock,
+        mock_klines: MagicMock,
+    ) -> None:
+        """SHORT: 最新收盘价 95 < C=105 → 条件 4 满足 → LEG3 活跃"""
+        mock_get_swings.return_value = [
+            make_swing("PEAK", 110, T1),
+            make_swing("TROUGH", 90, T2),
+            make_swing("PEAK", 105, T3),
+        ]
+        mock_klines.return_value = [{"timestamp": T4, "close": 95.0}]
+        result = detect_and_save("RB", "rb2510", "1w", _test_db)
+        assert result["state"] == NState.LEG3.value
+        assert result["is_active"] is True
+        assert result["point_a_price"] == 110
+        assert result["point_b_price"] == 90
+        assert result["point_c_price"] == 105
+
+    @patch("futures.n_structure._get_klines")
+    @patch("futures.n_structure._save_n_structure")
+    @patch("futures.n_structure._get_swing_points")
+    def test_klines_exception_skips_condition4(
+        self, mock_get_swings: MagicMock, mock_save: MagicMock,
+        mock_klines: MagicMock,
+    ) -> None:
+        """_get_klines 抛出异常 → 条件 4 跳过 → 结构仍有效 LEG3"""
+        mock_get_swings.return_value = [
+            make_swing("TROUGH", 90, T1),
+            make_swing("PEAK", 110, T2),
+            make_swing("TROUGH", 95, T3),
+        ]
+        mock_klines.side_effect = Exception("DB table not found")
+        result = detect_and_save("RB", "rb2510", "1w", _test_db)
+        assert result["state"] == NState.LEG3.value
+        assert result["is_active"] is True

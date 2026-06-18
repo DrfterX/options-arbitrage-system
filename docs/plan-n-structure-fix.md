@@ -54,6 +54,16 @@ CEO 决策（`docs/ceo/p0-n-struct-direction-decision.md`）：
 
 **P0 全线完成。** 三项子任务（方向判定修复 / 周期验证 / 动态刷新）均已实现并通过测试验证。
 
+### Cycle #257 — 补丁：条件4重激活修复
+
+**问题**：`dynamic_restructure()` 无条件将 `is_active` 设为 `True`，覆盖 `detect_and_save` 的条件4判定。
+
+**修复**：添加 `was_idle` 标志位 — `dynamic_restructure` 读取结构时记录其 DB 状态（`state == IDLE`），在无结构性变动时保持 IDLE。
+
+**验证**：89 个 N 型结构测试 + 186 个全部期货测试通过。
+
+**✅ P0 全线关闭（2026-06-18）**
+
 ## 建议 Next Action
 
 P0 完成后，项目方向建议：

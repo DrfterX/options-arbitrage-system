@@ -230,6 +230,14 @@ def _find_n_structure_forward(
                 if direction == "SHORT" and c["price"] >= a["price"]:
                     continue
 
+                # 条件 2 显式检查：B→C 方向一致性
+                # LONG: C 必须低于 B（第二笔下跌确认）
+                # SHORT: C 必须高于 B（第二笔上涨确认）
+                if direction == "LONG" and c["price"] >= b["price"]:
+                    continue
+                if direction == "SHORT" and c["price"] <= b["price"]:
+                    continue
+
                 # 有效结构！记录后跳到 C 之后继续扫描
                 structures.append({
                     "direction": direction,
@@ -301,6 +309,30 @@ def detect_and_save(
 
     pa, pb, pc = best["a"], best["b"], best["c"]
     direction = best["direction"]
+
+    # ── 条件 4（第三笔方向确认）：最新价必须与 C 点保持方向一致性 ──
+    # LONG: 最新价 > C（第三笔向上破位）；SHORT: 最新价 < C（第三笔向下破位）
+    try:
+        klines = _get_klines(db, symbol, contract, timeframe, limit=1)
+        if klines:
+            current_close = klines[-1]["close"]
+            if direction == "LONG" and current_close <= pc["price"]:
+                return {
+                    "state": NState.IDLE.value,
+                    "is_active": False,
+                    "reason": f"条件4不满足：最新价{current_close}不高于C点{pc['price']}",
+                }
+            if direction == "SHORT" and current_close >= pc["price"]:
+                return {
+                    "state": NState.IDLE.value,
+                    "is_active": False,
+                    "reason": f"条件4不满足：最新价{current_close}不低于C点{pc['price']}",
+                }
+    except Exception as exc:
+        logger.warning(
+            "[detect_and_save] %s/%s %s: 条件4检查跳过（%s）",
+            symbol, contract, timeframe, exc,
+        )
 
     # 状态判定 — 已有有效3点交替结构 → LEG3（第三段运行中）
     state = NState.LEG3.value
@@ -448,10 +480,15 @@ def dynamic_restructure(
         更新后的 N 型结构字典（含 is_active 标记）。
     """
     # 1. 读取当前活跃结构
-    active = _get_active_n_structure(db, symbol, contract, timeframe)
+    active = _get_active_n_structure(db, symbol, contract, timeframe, skip_condition4=True)
     if not active:
         # 已被收盘价检查淘汰（方向翻转）→ 全量重算
         return detect_and_save(symbol, contract, timeframe, db)
+
+    # 1.5 记录结构在 DB 中的状态 — detect_and_save 可能因条件4将结构标记为
+    # IDLE（如 SHORT 结构最新价 >= C）。如果之后没有结构性变动（A 突破/
+    # B 反穿/C 滑动），应保持 IDLE 状态而非无条件重激活。
+    was_idle = active.get("state") == NState.IDLE.value
 
     # 2. 提取结构关键参数（在 _get_klines 之前，供 since_timestamp 使用）
     direction = active["direction"]
@@ -463,7 +500,7 @@ def dynamic_restructure(
     #    limit=None = 不限制数量，since_timestamp=b_time = 从 B 点至今
     klines = _get_klines(db, symbol, contract, timeframe, limit=None, since_timestamp=b_time)
     if not klines:
-        active['is_active'] = True
+        active['is_active'] = not was_idle
         return active
 
     latest_high = max(k["high"] for k in klines)
@@ -513,7 +550,9 @@ def dynamic_restructure(
             active['is_active'] = True
             return c_updated
 
-        active['is_active'] = True
+        # 无结构性变动（A 未突破、B 未反穿、C 未滑动）→ 保持原状态
+        # 如果 detect_and_save 因条件 4 不满足已标记 IDLE，则不要重激活
+        active['is_active'] = not was_idle
         return active  # 结构仍有效，无需变动
 
     # 4. A 被突破 → 执行结构迁移

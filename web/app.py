@@ -700,6 +700,7 @@ def api_klines():
         delay_klines = _delay_filter("k.timestamp", "int")
 
         # 0. 先刷新极值点，再动态重算该品种的 N 型结构（确保标记线基于最新 swing points）
+        contract = ""
         try:
             from futures.n_structure import restructure_active_for_symbol
             contract = _get_futures_contract(conn, sym)
@@ -770,16 +771,9 @@ def api_klines():
                 "t": b["t"],  # 时间戳，前端用于检测交易断档
             })
         
-        # 1.5. 返回 N 型结构数据（浮窗标注用最新计算值，确保 A/B/C 实时）
-        n_row = conn.execute('''
-            SELECT direction, state,
-                   point_a_price, point_b_price, point_c_price,
-                   point_a_time, point_b_time, point_c_time
-            FROM futures_n_structures
-            WHERE symbol=? AND timeframe=?
-            ORDER BY updated_at DESC LIMIT 1
-        ''', (sym, tf)).fetchone()
-        n_struct = dict(n_row) if n_row else None
+        # 1.5. 返回 N 型结构数据（只返回经条件4验证的活跃结构）
+        from futures.shared import _get_active_n_structure
+        n_struct = _get_active_n_structure(db, sym, contract or "", tf)
 
         resp = {"symbol": sym, "timeframe": tf, "bars": result}
         if n_struct:
