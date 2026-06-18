@@ -16,7 +16,9 @@ Flask Web 看板应用 — 期货期权统一信号平台。
 import logging
 import json
 import os
+import re
 import sqlite3
+import bcrypt
 from datetime import datetime, timedelta, timezone
 from functools import wraps
 from flask import Flask, render_template, jsonify, request
@@ -25,7 +27,8 @@ from core import PositionTracker
 from core.db import Database
 from config.settings import DB_PATH
 from web.stripe_handler import require_premium
-from web.iron_ore_api import _build_bp
+from web.iron_ore_api import _build_bp as _build_iron_bp
+from web.public_api import _build_bp as _build_public_api_bp
 from futures.backtest import run_backtest as _run_backtest
 
 logger = logging.getLogger(__name__)
@@ -37,7 +40,10 @@ db = Database(DB_PATH)
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "autocompany2024")
 
 # 注册铁矿石API Blueprint
-app.register_blueprint(_build_bp(db))
+app.register_blueprint(_build_iron_bp(db))
+
+# 注册公开数据 API v1 Blueprint
+app.register_blueprint(_build_public_api_bp(db))
 
 SYMBOL_NAMES = {
     "CU":"沪铜","AL":"沪铝","ZN":"沪锌","PB":"沪铅","NI":"沪镍","SN":"沪锡",
@@ -104,6 +110,79 @@ def _get_iv_recorder():
 def _get_position_tracker():
     """创建 Paper Trading 持仓追踪器实例。"""
     return PositionTracker(db)
+
+
+@app.route("/robots.txt")
+def robots_txt():
+    """robots.txt — 所有子域公开可抓取。"""
+    return """User-agent: *
+Allow: /
+Sitemap: https://signals.drifter.indevs.in/sitemap.xml
+""", 200, {"Content-Type": "text/plain"}
+
+
+@app.route("/sitemap.xml")
+def sitemap_xml():
+    """sitemap.xml — 从数据库品种列表自动生成站点地图。
+
+    每次请求查询 `futures_klines` 和 `options_signals` 表的最近更新时间，
+    为三个子域（signals / futures / options）生成带最后修改日期的 URL。
+    """
+    conn = db.get_conn()
+    try:
+        fx = conn.execute("SELECT MAX(timestamp) FROM futures_klines").fetchone()
+        ox = conn.execute(
+            "SELECT MAX(created_at) FROM options_signals"
+        ).fetchone()
+        futures_ts = fx[0] if fx[0] else 0
+        options_ts = ox[0] if ox[0] else ""
+
+        def _fmt_date(ts_or_str):
+            """将 Unix 时间戳或 ISO 字符串转为 YYYY-MM-DD。"""
+            if not ts_or_str or ts_or_str == 0:
+                return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            if isinstance(ts_or_str, str):
+                try:
+                    return datetime.fromisoformat(ts_or_str).strftime("%Y-%m-%d")
+                except (ValueError, TypeError):
+                    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            return datetime.fromtimestamp(ts_or_str, tz=timezone.utc).strftime("%Y-%m-%d")
+
+        futures_lastmod = _fmt_date(futures_ts)
+        options_lastmod = _fmt_date(options_ts)
+        portal_lastmod = max(futures_lastmod, options_lastmod)
+
+        xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://signals.drifter.indevs.in/</loc>
+    <lastmod>{portal_lastmod}</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://futures.drifter.indevs.in/</loc>
+    <lastmod>{futures_lastmod}</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://options.drifter.indevs.in/</loc>
+    <lastmod>{options_lastmod}</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+</urlset>"""
+        return xml, 200, {
+            "Content-Type": "application/xml",
+            "Cache-Control": "public, max-age=3600",
+        }
+    except Exception:
+        return (
+            '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"/>',
+            200,
+            {"Content-Type": "application/xml"},
+        )
 
 
 @app.route("/")
@@ -256,6 +335,15 @@ def index() -> str:
                 iv_status=iv_status, iv_json=json.dumps(iv_status, ensure_ascii=False))
     finally:
         pass  # 连接由 Database 管理生命周期
+
+
+# ─── 公开 API 文档页面 ───────────────────────────────────────────────
+
+
+@app.route("/api/docs")
+def api_docs():
+    """公开数据 API v1 文档页面。"""
+    return render_template("api_docs.html")
 
 
 # ── N 型结构动态重算辅助 ───────────────────────────────────────
@@ -588,7 +676,7 @@ def api_klines():
             from futures.n_structure import restructure_active_for_symbol
             contract = _get_futures_contract(conn, sym)
             if contract:
-                restructure_active_for_symbol(sym, contract, db, timeframes=[tf])
+                restructure_active_for_symbol(sym, contract, db, timeframes=[tf], force_full_recalc=True)
         except Exception:
             pass  # 重算失败不阻塞 K 线返回
 
@@ -1382,6 +1470,259 @@ def api_admin_list_subscriptions():
     return jsonify([dict(r) for r in rows])
 
 
+# ─── 用户注册 API ────────────────────────────────────────────────
+
+# 登录限流：{ip: [timestamp, ...]}
+_login_rate_limit: dict[str, list[float]] = {}
+import time as _time_mod
+
+
+def _check_login_rate_limit() -> bool:
+    """检查同一 IP 5 分钟内失败次数是否超过 5 次。
+
+    Returns:
+        True 允许继续，False 触发限流。
+    """
+    ip = request.remote_addr or "unknown"
+    now = _time_mod.time()
+    records = [t for t in _login_rate_limit.get(ip, []) if now - t < 300]
+    if len(records) >= 5:
+        return False  # 限流
+    records.append(now)
+    _login_rate_limit[ip] = records
+    return True
+
+
+def _generate_session_token() -> str:
+    """生成 URL-safe session token（48 bytes → 64 chars base64）。
+
+    使用 secrets.token_urlsafe（CSPRNG），碰撞概率 < 2^-256。
+    """
+    import secrets
+    return secrets.token_urlsafe(48)
+
+
+def _ensure_session_table() -> None:
+    """确保 user_sessions 表存在。"""
+    conn = db.get_conn()
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS user_sessions (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id    INTEGER NOT NULL,
+            token      TEXT NOT NULL UNIQUE,
+            created_at TEXT NOT NULL DEFAULT (datetime('now', '+8 hours')),
+            expires_at TEXT NOT NULL,
+            last_used_at TEXT,
+            is_active  INTEGER NOT NULL DEFAULT 1,
+            FOREIGN KEY (user_id) REFERENCES user_registrations(id) ON DELETE CASCADE
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_user_sessions_token
+        ON user_sessions(token)
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_user_sessions_user_id
+        ON user_sessions(user_id)
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_user_sessions_expires
+        ON user_sessions(expires_at)
+    """)
+
+
+def _is_registered_user() -> bool:
+    """检查当前请求是否来自已登录用户。
+
+    Token 来源（按优先级）：
+    1. Authorization: Bearer <token> Header
+    2. token URL query parameter
+
+    Returns:
+        True 如果 token 有效且未过期。
+    """
+    token = ""
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        token = auth[7:]
+    if not token:
+        token = request.args.get("token", "")
+    if not token:
+        return False
+
+    conn = db.get_conn()
+    row = conn.execute(
+        """SELECT id FROM user_sessions
+           WHERE token = ? AND is_active = 1 AND expires_at > datetime('now', '+8 hours')""",
+        (token,),
+    ).fetchone()
+
+    if row:
+        # 静默更新 last_used_at
+        conn.execute(
+            "UPDATE user_sessions SET last_used_at = datetime('now', '+8 hours') WHERE id = ?",
+            (row["id"],),
+        )
+        conn.commit()
+        return True
+
+    return False
+
+
+def _is_delayed_user() -> bool:
+    """返回 True 表示当前用户是免费层，需要数据延迟。"""
+    return not _is_registered_user()
+
+
+def _ensure_user_table() -> None:
+    """确保 user_registrations 表存在。"""
+    conn = db.get_conn()
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS user_registrations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now', '+8 hours')),
+            last_login TEXT
+        )
+    """)
+    conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_user_registrations_email
+        ON user_registrations(email)
+    """)
+
+
+@app.route("/api/auth/register", methods=["POST"])
+def api_auth_register():
+    """邮箱+密码注册。
+
+    POST JSON body:
+        email (str): 用户邮箱
+        password (str): 密码（最少 6 位）
+
+    Returns:
+        {"ok": true, "email": "..."} 或 {"error": "..."}
+    """
+    _ensure_user_table()
+    data = request.get_json() or {}
+    email = (data.get("email") or "").strip().lower()
+    password = data.get("password") or ""
+
+    # ── 基本校验 ──
+    if not email or not re.match(r"[^@]+@[^@]+\.[^@]+", email):
+        return jsonify({"error": "请输入有效的邮箱地址"}), 400
+    if len(password) < 6:
+        return jsonify({"error": "密码至少需要 6 个字符"}), 400
+
+    # ── 检查重复 ──
+    conn = db.get_conn()
+    existing = conn.execute(
+        "SELECT id FROM user_registrations WHERE email = ?", (email,)
+    ).fetchone()
+    if existing:
+        return jsonify({"error": "该邮箱已注册"}), 409
+
+    # ── bcrypt 哈希 ──
+    pw_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+    # ── 写入数据库 ──
+    try:
+        conn.execute(
+            "INSERT INTO user_registrations (email, password_hash) VALUES (?, ?)",
+            (email, pw_hash),
+        )
+        conn.commit()
+        logger.info("新用户注册成功: email=%s", email)
+        return jsonify({"ok": True, "email": email}), 201
+    except Exception as e:
+        conn.rollback()
+        logger.error("注册失败: email=%s error=%s", email, e)
+        return jsonify({"error": "注册失败，请稍后重试"}), 500
+
+
+# ─── 用户登录 API ────────────────────────────────────────────────
+
+
+@app.route("/api/auth/login", methods=["POST"])
+def api_auth_login():
+    """邮箱+密码登录，返回 session token（30 天有效）。
+
+    POST JSON body:
+        email (str): 用户邮箱
+        password (str): 密码
+
+    Returns:
+        {"ok": true, "token": "...", "email": "...", "expires_at": "..."} 或 {"error": "..."}
+    """
+    data = request.get_json() or {}
+    email = (data.get("email") or "").strip().lower()
+    password = data.get("password") or ""
+
+    # 基本校验
+    if not email or not password:
+        return jsonify({"error": "请提供邮箱和密码"}), 400
+
+    # 限流检查
+    if not _check_login_rate_limit():
+        logger.warning("登录限流触发: ip=%s email=%s", request.remote_addr, email)
+        return jsonify({"error": "登录尝试过于频繁，请稍后再试"}), 429
+
+    conn = db.get_conn()
+
+    # 查找用户
+    user = conn.execute(
+        "SELECT id, password_hash FROM user_registrations WHERE email = ?",
+        (email,),
+    ).fetchone()
+
+    # 统一返回"邮箱或密码错误"（防止用户枚举）
+    if not user:
+        return jsonify({"error": "邮箱或密码错误"}), 401
+
+    # bcrypt 验证
+    try:
+        if not bcrypt.checkpw(password.encode("utf-8"), user["password_hash"].encode("utf-8")):
+            return jsonify({"error": "邮箱或密码错误"}), 401
+    except Exception:
+        return jsonify({"error": "邮箱或密码错误"}), 401
+
+    # 确保 session 表存在
+    _ensure_session_table()
+
+    # 清理该用户的过期 session
+    conn.execute(
+        "UPDATE user_sessions SET is_active = 0 WHERE user_id = ? AND expires_at < datetime('now', '+8 hours')",
+        (user["id"],),
+    )
+    conn.commit()
+
+    # 生成新 token（30 天有效）
+    token = _generate_session_token()
+    expires_at = (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d %H:%M")
+
+    conn.execute(
+        """INSERT INTO user_sessions (user_id, token, expires_at, last_used_at)
+           VALUES (?, ?, ?, datetime('now', '+8 hours'))""",
+        (user["id"], token, expires_at),
+    )
+    conn.commit()
+
+    # 更新 last_login
+    conn.execute(
+        "UPDATE user_registrations SET last_login = datetime('now', '+8 hours') WHERE id = ?",
+        (user["id"],),
+    )
+    conn.commit()
+
+    logger.info("用户登录成功: email=%s", email)
+    return jsonify({
+        "ok": True,
+        "token": token,
+        "email": email,
+        "expires_at": expires_at,
+    })
+
+
 # ─── 免费试用 API ────────────────────────────────────────────────
 
 
@@ -1423,6 +1764,9 @@ def api_request_trial():
         logger.error("生成试用 Token 失败: %s", e)
         return jsonify({"error": str(e)}), 500
 
+
+# 确保 session 表在应用启动时存在（在 gunicorn import 时执行）
+_ensure_session_table()
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5100))
