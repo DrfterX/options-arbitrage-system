@@ -18,6 +18,7 @@ import json
 import os
 import re
 import sqlite3
+import hashlib
 import bcrypt
 from datetime import datetime, timedelta, timezone
 from functools import wraps
@@ -1421,6 +1422,101 @@ def api_premium_token():
     if row and row["token"]:
         return jsonify({"token": row["token"]})
     return jsonify({"token": None}), 404
+
+
+# ─── 分析追踪（轻量自建）───────────────────────────────────────
+
+
+def _transparent_gif() -> bytes:
+    """返回 1x1 透明 GIF 像素数据。"""
+    return (
+        b'\x47\x49\x46\x38\x39\x61\x01\x00\x01\x00\x80\x00\x00'
+        b'\xff\xff\xff\x00\x00\x00\x21\xf9\x04\x00\x00\x00\x00'
+        b'\x00\x2c\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02'
+        b'\x44\x01\x00\x3b'
+    )
+
+
+@app.route("/api/track.gif")
+def api_track():
+    """Tracking pixel — 1x1 透明 GIF，记录页面访问。
+
+    查询参数:
+        url: 当前页面路径 (默认 referrer)
+        ref: 来源页面 (默认 "")
+    返回 1x1 透明 GIF，不缓存。
+    """
+    url = request.args.get("url", request.referrer or "/")
+    ref = request.args.get("ref", request.referrer or "")
+    ua = request.user_agent.string if request.user_agent else ""
+    ip = request.remote_addr or ""
+
+    # 简单指纹：IP + UA → session_id（不精确但够用）
+    fp = hashlib.md5(f"{ip}|{ua}".encode()).hexdigest()[:16]
+
+    try:
+        conn = db.get_conn()
+        conn.execute(
+            "INSERT INTO page_hits (url, referrer, user_agent, ip, session_id, visited_at) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (url, ref, ua, ip, fp, int(datetime.now().timestamp())),
+        )
+        conn.commit()
+    except Exception as exc:
+        logger.warning("track.gif error: %s", exc)
+
+    return _transparent_gif(), 200, {
+        "Content-Type": "image/gif",
+        "Cache-Control": "no-store, no-cache, must-revalidate",
+    }
+
+
+@app.route("/api/stats/visits")
+def api_stats_visits():
+    """访问统计 JSON — 回答：有人来吗？从哪来？看了什么？"""
+    conn = db.get_conn()
+    now_ts = int(datetime.now().timestamp())
+    today_start = now_ts - (now_ts % 86400)  # 当天 00:00 UTC
+    week_ago = now_ts - 7 * 86400
+
+    total = conn.execute("SELECT COUNT(*) FROM page_hits").fetchone()[0]
+    unique = conn.execute(
+        "SELECT COUNT(DISTINCT session_id) FROM page_hits"
+    ).fetchone()[0]
+    today = conn.execute(
+        "SELECT COUNT(*) FROM page_hits WHERE visited_at >= ?", (today_start,)
+    ).fetchone()[0]
+
+    top_pages = conn.execute("""
+        SELECT url, COUNT(*) as cnt FROM page_hits
+        GROUP BY url ORDER BY cnt DESC LIMIT 10
+    """).fetchall()
+
+    top_refs = conn.execute("""
+        SELECT referrer, COUNT(*) as cnt FROM page_hits
+        WHERE referrer != '' GROUP BY referrer ORDER BY cnt DESC LIMIT 10
+    """).fetchall()
+
+    daily = conn.execute("""
+        SELECT date(visited_at, 'unixepoch') as day, COUNT(*) as cnt
+        FROM page_hits WHERE visited_at >= ?
+        GROUP BY day ORDER BY day DESC LIMIT 30
+    """, (week_ago,)).fetchall()
+
+    return jsonify({
+        "total": total,
+        "unique": unique,
+        "today": today,
+        "top_pages": [dict(r) for r in top_pages],
+        "top_refs": [dict(r) for r in top_refs],
+        "daily": [dict(r) for r in daily],
+    })
+
+
+@app.route("/analytics")
+def analytics_page():
+    """简易分析面板页面。"""
+    return render_template("analytics.html")
 
 
 # ─── Admin 管理面板 API ────────────────────────────────────────

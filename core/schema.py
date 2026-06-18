@@ -277,6 +277,19 @@ ALL_TABLES: dict[str, str] = {
             last_used   TEXT
         )
     """,
+
+    # ── 16. 页面访问统计（分析追踪）───────────────────────────
+    "page_hits": """
+        CREATE TABLE IF NOT EXISTS page_hits (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            url         TEXT    NOT NULL,
+            referrer    TEXT    DEFAULT '',
+            user_agent  TEXT    DEFAULT '',
+            ip          TEXT    DEFAULT '',
+            session_id  TEXT    DEFAULT '',
+            visited_at  INTEGER NOT NULL
+        )
+    """,
 }
 
 # ============================================================
@@ -316,4 +329,7 @@ INDEXES: list[str] = [
     "CREATE INDEX IF NOT EXISTS idx_risk_mgmt_alert ON risk_management(alert_level)",
     "CREATE INDEX IF NOT EXISTS idx_risk_mgmt_next_check ON risk_management(next_check_time)",
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_api_keys_key ON api_keys(api_key)",
+    "CREATE INDEX IF NOT EXISTS idx_page_hits_visited ON page_hits(visited_at)",
+    "CREATE INDEX IF NOT EXISTS idx_page_hits_url ON page_hits(url)",
+    "CREATE INDEX IF NOT EXISTS idx_page_hits_session ON page_hits(session_id)",
 ]

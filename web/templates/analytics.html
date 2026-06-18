@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>访问分析 | 信号矩阵</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 20px; background: #0f1729; color: #e2e8f0; min-height: 100vh; }
+h1 { font-size: 1.5rem; margin-bottom: 1rem; color: #f1f5f9; }
+h2 { font-size: 1.1rem; margin: 1.5rem 0 0.5rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; }
+.stat-cards { display: flex; gap: 1rem; flex-wrap: wrap; }
+.stat-card { background: #1e293b; border-radius: 8px; padding: 1rem 1.5rem; min-width: 140px; border: 1px solid #334155; }
+.stat-card .num { font-size: 2rem; font-weight: 700; color: #38bdf8; }
+.stat-card .label { font-size: 0.8rem; color: #64748b; margin-top: 0.25rem; }
+table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; background: #1e293b; border-radius: 8px; overflow: hidden; }
+th, td { padding: 0.5rem 0.75rem; text-align: left; border-bottom: 1px solid #334155; font-size: 0.9rem; }
+th { background: #0f1729; color: #94a3b8; font-weight: 600; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.05em; }
+td { color: #cbd5e1; }
+td.num { text-align: right; font-variant-numeric: tabular-nums; color: #38bdf8; }
+tr:hover td { background: #334155; }
+.loading { color: #64748b; padding: 2rem; text-align: center; }
+.error { color: #f87171; padding: 1rem; }
+nav { margin-bottom: 1.5rem; }
+nav a { color: #38bdf8; text-decoration: none; font-size: 0.9rem; }
+nav a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<nav><a href="/">← 返回信号矩阵</a></nav>
+<h1>📊 访问分析</h1>
+
+<div id="stats" class="loading">加载中...</div>
+
+<h2>热门页面</h2>
+<div id="top-pages" class="loading">加载中...</div>
+
+<h2>来源渠道</h2>
+<div id="top-refs" class="loading">加载中...</div>
+
+<h2>每日趋势（近 7 天）</h2>
+<div id="daily-chart" class="loading">加载中...</div>
+
+<script>
+(async function(){
+  try {
+    const res = await fetch('/api/stats/visits');
+    const d = await res.json();
+
+    // ── 统计卡片 ──
+    document.getElementById('stats').innerHTML = `
+      <div class="stat-cards">
+        <div class="stat-card"><div class="num">${d.total}</div><div class="label">总访问</div></div>
+        <div class="stat-card"><div class="num">${d.unique}</div><div class="label">独立访客</div></div>
+        <div class="stat-card"><div class="num">${d.today}</div><div class="label">今日</div></div>
+      </div>
+    `;
+
+    // ── 热门页面 ──
+    if (d.top_pages && d.top_pages.length) {
+      document.getElementById('top-pages').innerHTML = `
+        <table><tr><th>页面</th><th>访问</th></tr>
+        ${d.top_pages.map(p => `<tr><td>${p.url}</td><td class="num">${p.cnt}</td></tr>`).join('')}
+        </table>`;
+    } else {
+      document.getElementById('top-pages').innerHTML = '<p style="color:#64748b">暂无数据</p>';
+    }
+
+    // ── 来源 ──
+    if (d.top_refs && d.top_refs.length) {
+      document.getElementById('top-refs').innerHTML = `
+        <table><tr><th>来源</th><th>访问</th></tr>
+        ${d.top_refs.map(r => `<tr><td>${r.referrer || '(直接访问)'}</td><td class="num">${r.cnt}</td></tr>`).join('')}
+        </table>`;
+    } else {
+      document.getElementById('top-refs').innerHTML = '<p style="color:#64748b">暂无数据</p>';
+    }
+
+    // ── 每日趋势 ──
+    if (d.daily && d.daily.length) {
+      const maxCnt = Math.max(...d.daily.map(r => r.cnt), 1);
+      document.getElementById('daily-chart').innerHTML = `
+        <div style="display:flex;gap:4px;align-items:end;height:120px;padding:1rem 0;">
+          ${d.daily.reverse().map(r => `
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;">
+              <div style="font-size:0.7rem;color:#64748b;margin-bottom:2px;">${r.cnt}</div>
+              <div style="width:100%;background:linear-gradient(to top,#38bdf8,#0284c7);border-radius:4px 4px 0 0;height:${(r.cnt/maxCnt*100)}px;min-height:${r.cnt>0?'4':'0'}px;"></div>
+              <div style="font-size:0.65rem;color:#475569;margin-top:4px;transform:rotate(-45deg);white-space:nowrap;">${r.day.slice(5)}</div>
+            </div>
+          `).join('')}
+        </div>`;
+    } else {
+      document.getElementById('daily-chart').innerHTML = '<p style="color:#64748b">暂无数据</p>';
+    }
+  } catch(e) {
+    document.querySelectorAll('.loading').forEach(el => el.innerHTML = '<div class="error">加载失败: ' + e.message + '</div>');
+  }
+})();
+</script>
+</body>
+</html>
