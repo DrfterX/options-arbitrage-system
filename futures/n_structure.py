@@ -211,6 +211,14 @@ def _find_n_structure_forward(
             b = merged[b_idx]
             direction = _determine_direction(a["price"], b["price"])
 
+            # ── 方向-点类型一致性校验 ────────────────────────────
+            # User Directives 要求：LONG→A=TROUGH, SHORT→A=PEAK
+            # 如果方向与 A 的类型不匹配（如 TROUGH→SHORT 或 PEAK→LONG），
+            # 说明当前 A 不适合做该方向起点，尝试下一个 B（不同 B 可能产生不同方向）。
+            if (direction == "LONG" and a["point_type"] != "TROUGH") or \
+               (direction == "SHORT" and a["point_type"] != "PEAK"):
+                continue
+
             for c_idx in range(b_idx + 1, merged_len):
                 if merged[c_idx]["point_type"] != a["point_type"]:
                     continue  # 不是与 A 同类型，不是 C

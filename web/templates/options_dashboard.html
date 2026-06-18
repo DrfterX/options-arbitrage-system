@@ -115,7 +115,7 @@
 #ivChart {
   width: 100%;
   flex: 1;
-  min-height: 200px;
+  min-height: 280px;
 }
 
 /* Two-column layout (IV section moved above) */
@@ -1077,7 +1077,7 @@ var IV_DATA = JSON.parse('{{ iv_json|safe }}');
   var chart = echarts.init(el, null, { renderer: 'canvas' });
   chart.setOption({
     backgroundColor: 'transparent',
-    grid: { top: 25, right: 24, bottom: 40, left: 48 },
+    grid: { top: 16, right: 20, bottom: 36, left: 46 },
     xAxis: {
       type: 'category',
       data: IV_DATA.map(function(d){ return (d.symbol||'').toUpperCase(); }),

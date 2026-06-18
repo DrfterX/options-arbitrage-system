@@ -640,6 +640,28 @@ class TestFindNStructureForward:
         assert result["a"]["price"] == 90
         assert result["direction"] == "LONG"
 
+    def test_continuous_downtrend_not_n_structure(self) -> None:
+        """持续下跌：TROUGH(100)→PEAK(95)→TROUGH(90)
+        方向 SHORT 但 A=TROUGH → 类型-方向矛盾 → 应返回 None"""
+        merged = [
+            make_swing("TROUGH", 100, T1),
+            make_swing("PEAK", 95, T2),
+            make_swing("TROUGH", 90, T3),
+        ]
+        result = _find_n_structure_forward(merged)
+        assert result is None, "持续下跌趋势不应构成有效 N 型"
+
+    def test_continuous_uptrend_not_n_structure(self) -> None:
+        """持续上涨：PEAK(100)→TROUGH(105)→PEAK(110)
+        方向 LONG 但 A=PEAK → 类型-方向矛盾 → 应返回 None"""
+        merged = [
+            make_swing("PEAK", 100, T1),
+            make_swing("TROUGH", 105, T2),
+            make_swing("PEAK", 110, T3),
+        ]
+        result = _find_n_structure_forward(merged)
+        assert result is None, "持续上涨趋势不应构成有效 N 型"
+
     def test_non_overlapping_two_valid(self) -> None:
         """非重叠扫描：两个独立的有效 N 型结构。
 
