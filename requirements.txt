@@ -23,5 +23,8 @@ pytest>=8.0.0
 # 支付（Signals Premium 付费订阅）
 stripe>=11.0.0
 
+# 用户认证密码哈希
+bcrypt>=4.0.0
+
 # 时区（Windows 需额外安装）
 tzdata; platform_system == "Windows"
