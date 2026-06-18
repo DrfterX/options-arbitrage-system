@@ -115,7 +115,7 @@
 #ivChart {
   width: 100%;
   flex: 1;
-  min-height: 280px;
+  min-height: 380px;
 }
 
 /* Two-column layout (IV section moved above) */
@@ -565,7 +565,7 @@
   margin-bottom: 14px;
 }
 .initial-skeleton .is-iv-chart {
-  height: 220px;
+  height: 320px;
   border-radius: var(--radius-sm);
   background: linear-gradient(90deg, rgba(79,91,128,0.06) 25%, rgba(79,91,128,0.16) 50%, rgba(79,91,128,0.06) 75%);
   background-size: 200% 100%;
@@ -1077,7 +1077,7 @@ var IV_DATA = JSON.parse('{{ iv_json|safe }}');
   var chart = echarts.init(el, null, { renderer: 'canvas' });
   chart.setOption({
     backgroundColor: 'transparent',
-    grid: { top: 16, right: 20, bottom: 36, left: 46 },
+    grid: { top: 20, right: 24, bottom: 42, left: 52 },
     xAxis: {
       type: 'category',
       data: IV_DATA.map(function(d){ return (d.symbol||'').toUpperCase(); }),
