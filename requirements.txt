@@ -9,6 +9,8 @@ pandas>=2.2.0
 # Web 看板 + 生产服务器
 flask>=3.0.0
 gunicorn>=23.0.0
+flask-cors>=5.0.0
+flask-limiter>=4.0.0
 
 # 交易日历
 # 主数据源：AKShare Sina 日历（交易所公告汇总，已由 akshare 依赖覆盖）

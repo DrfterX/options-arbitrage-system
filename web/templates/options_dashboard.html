@@ -80,8 +80,7 @@
 /* ── IV Section: full-width top half ── */
 .iv-section {
   margin-bottom: 10px;
-  min-height: 45vh;
-  max-height: 55vh;
+  min-height: 50vh;
 }
 
 .iv-panel {
@@ -1066,20 +1065,18 @@ var IV_DATA = JSON.parse('{{ iv_json|safe }}');
   var chart = echarts.init(el, null, { renderer: 'canvas' });
   chart.setOption({
     backgroundColor: 'transparent',
-    grid: { top: 20, right: 24, bottom: 280, left: 48 },
+    grid: { top: 20, right: 24, bottom: 80, left: 48 },
     xAxis: {
       type: 'category',
       data: IV_DATA.map(function(d){ return (d.symbol||'').toUpperCase(); }),
       axisLabel: {
-        color: '#8b92a5', fontSize: 8, interval: 0, rotate: 35,
-        lineHeight: 14, margin: 4,
-        // 格式: "AG 白银" — 合约名在 tooltip 中显示，x 轴不重复展示
+        color: '#8b92a5', fontSize: 8, interval: 0, rotate: 30,
+        lineHeight: 12, margin: 3,
+        // X 轴只显示品种代码；中文名放 tooltip 中
         formatter: function(val, idx) {
           var d = IV_DATA[idx];
           if (!d) return val;
-          var sym = (d.symbol || '').toUpperCase();
-          var cname = (d.name && d.name !== d.symbol) ? d.name : sym;
-          return sym + '\n' + cname;
+          return (d.symbol || '').toUpperCase();
         },
       },
       axisLine: { lineStyle: { color: 'rgba(26,32,64,.5)' } },

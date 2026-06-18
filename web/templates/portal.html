@@ -3,9 +3,33 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>信号矩阵 · 期货 × 期权 交易仪表盘</title>
+<meta name="description" content="信号矩阵是一款专业的期货期权交易信号仪表盘，提供 N 型结构多周期共振扫描、IV 百分位监控、期权策略评分等交易决策工具。">
+<meta property="og:title" content="信号矩阵 | 期货 N型结构共振 × 期权 IV百分位监控 — 专业交易仪表盘">
+<meta property="og:description" content="信号矩阵是一款专业的期货期权交易信号仪表盘，提供 N 型结构多周期共振扫描、IV 百分位监控、期权策略评分等交易决策工具。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://signals.drifter.indevs.in">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="信号矩阵 | 期货 N型结构共振 × 期权 IV百分位监控 — 专业交易仪表盘">
+<meta name="twitter:description" content="信号矩阵是一款专业的期货期权交易信号仪表盘，提供 N 型结构多周期共振扫描、IV 百分位监控、期权策略评分等交易决策工具。">
+<title>信号矩阵 | 期货 N型结构共振 × 期权 IV百分位监控 — 专业交易仪表盘</title>
 <link rel="stylesheet" href="/static/style.css">
 <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "信号矩阵",
+  "description": "信号矩阵是一款专业的期货期权交易信号仪表盘，提供 N 型结构多周期共振扫描、IV 百分位监控、期权策略评分等交易决策工具。",
+  "applicationCategory": "FinanceApplication",
+  "operatingSystem": "Any",
+  "browserRequirements": "Requires JavaScript",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  }
+}
+</script>
 <style>
 /* ═══════════════════════════════════════════════════════════════
    Portal Entry — signals.drifter.indevs.in
@@ -53,6 +77,171 @@
   color: var(--text2);
   border-color: var(--border);
   background: rgba(30, 38, 50, .3);
+}
+
+/* ── register button in topbar ── */
+.reg-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  font-size: .62rem;
+  font-weight: 600;
+  font-family: var(--font-ui);
+  letter-spacing: .04em;
+  color: var(--short);
+  background: rgba(34, 197, 94, .08);
+  border: 1px solid rgba(34, 197, 94, .2);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all .2s var(--ease-out);
+}
+.reg-btn:hover {
+  background: rgba(34, 197, 94, .15);
+  border-color: rgba(34, 197, 94, .35);
+  box-shadow: 0 0 12px rgba(34, 197, 94, .08);
+}
+.reg-btn:active { transform: scale(.96); }
+
+/* ── register modal ── */
+.reg-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  background: rgba(6, 8, 14, .85);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: wo-fadein .35s var(--ease-out);
+}
+.reg-modal {
+  max-width: 380px;
+  width: 100%;
+  background: var(--card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  padding: 28px 24px 22px;
+  position: relative;
+  animation: wo-slidein .3s var(--ease-out);
+}
+.reg-modal::before {
+  content: '';
+  position: absolute;
+  top: -50px;
+  right: -30px;
+  width: 140px;
+  height: 140px;
+  background: radial-gradient(circle, rgba(34, 197, 94, .06) 0%, transparent 70%);
+  pointer-events: none;
+}
+.reg-title {
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: .06em;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.reg-title .accent { color: var(--short); }
+.reg-sub {
+  font-size: .65rem;
+  color: var(--text3);
+  margin-bottom: 18px;
+  line-height: 1.5;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+.reg-field {
+  margin-bottom: 14px;
+}
+.reg-field label {
+  display: block;
+  font-size: .6rem;
+  color: var(--text2);
+  margin-bottom: 5px;
+  letter-spacing: .04em;
+  font-weight: 500;
+}
+.reg-field input {
+  width: 100%;
+  padding: 9px 12px;
+  font-size: .7rem;
+  font-family: var(--font-mono);
+  color: var(--text);
+  background: rgba(8, 11, 16, .5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  outline: none;
+  transition: border-color .2s var(--ease-out), box-shadow .2s var(--ease-out);
+  box-sizing: border-box;
+}
+.reg-field input:focus {
+  border-color: rgba(34, 197, 94, .3);
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, .06);
+}
+.reg-field input::placeholder { color: var(--text3); opacity: .4; }
+.reg-btn-submit {
+  width: 100%;
+  padding: 10px 0;
+  font-size: .72rem;
+  font-weight: 700;
+  font-family: var(--font-ui);
+  letter-spacing: .05em;
+  color: #000;
+  background: var(--short);
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all .2s var(--ease-out);
+  margin-top: 4px;
+}
+.reg-btn-submit:hover {
+  box-shadow: 0 2px 16px rgba(34, 197, 94, .2);
+  filter: brightness(1.1);
+}
+.reg-btn-submit:active { transform: scale(.97); }
+.reg-btn-submit.loading {
+  opacity: .6;
+  pointer-events: none;
+}
+.reg-error {
+  font-size: .6rem;
+  color: var(--long);
+  margin-top: 8px;
+  text-align: center;
+  display: none;
+}
+.reg-success {
+  font-size: .62rem;
+  color: var(--short);
+  margin-top: 8px;
+  text-align: center;
+  display: none;
+}
+.reg-close {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  font-size: .7rem;
+  color: var(--text3);
+  cursor: pointer;
+  transition: color .15s;
+  background: none;
+  border: none;
+  font-family: var(--font-ui);
+  padding: 4px;
+}
+.reg-close:hover { color: var(--text); }
+.reg-note {
+  margin-top: 14px;
+  font-size: .55rem;
+  color: var(--text3);
+  text-align: center;
+  line-height: 1.5;
+  opacity: .6;
 }
 .nav-tab-icon { font-size: .7rem; opacity: .7; }
 
@@ -913,10 +1102,176 @@
   color: var(--brand);
 }
 
+/* ── First-visit Welcome Guide ── */
+.welcome-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  background: rgba(6, 8, 14, .85);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: wo-fadein .4s var(--ease-out);
+}
+@keyframes wo-fadein {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.welcome-modal {
+  max-width: 420px;
+  width: 100%;
+  background: var(--card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  padding: 28px 24px 22px;
+  position: relative;
+  animation: wo-slidein .35s var(--ease-out);
+}
+@keyframes wo-slidein {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.welcome-modal::before {
+  content: '';
+  position: absolute;
+  top: -50px;
+  right: -30px;
+  width: 140px;
+  height: 140px;
+  background: radial-gradient(circle, rgba(240, 180, 41, .06) 0%, transparent 70%);
+  pointer-events: none;
+}
+.wm-title {
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: .06em;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.wm-title .accent { color: var(--brand); }
+.wm-sub {
+  font-size: .65rem;
+  color: var(--text3);
+  margin-bottom: 20px;
+  line-height: 1.5;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.wm-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.wm-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  background: rgba(14, 17, 24, .35);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  transition: border-color .2s var(--ease-out);
+}
+.wm-step:hover {
+  border-color: var(--border-light);
+}
+.wm-step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--brand-bg);
+  border: 1px solid rgba(240, 180, 41, .2);
+  color: var(--brand);
+  font-size: .6rem;
+  font-weight: 700;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.wm-step-body {
+  flex: 1;
+  min-width: 0;
+}
+.wm-step-title {
+  font-size: .68rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+.wm-step-desc {
+  font-size: .58rem;
+  color: var(--text3);
+  line-height: 1.4;
+}
+.wm-dismiss {
+  display: flex;
+  justify-content: center;
+}
+.wm-dismiss-btn {
+  padding: 8px 28px;
+  background: var(--brand-bg);
+  border: 1px solid rgba(240, 180, 41, .25);
+  border-radius: var(--radius-md);
+  color: var(--brand);
+  font-size: .7rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all .2s var(--ease-out);
+  font-family: var(--font-ui);
+  letter-spacing: .04em;
+  width: 100%;
+}
+.wm-dismiss-btn:hover {
+  background: var(--brand);
+  color: #000;
+  box-shadow: 0 2px 16px rgba(240, 180, 41, .15);
+}
+
 </style>
 </head>
 <body>
 <div class="app">
+
+<!-- ─── First-visit Welcome Guide ─── -->
+<div class="welcome-overlay" id="welcomeOverlay" style="display:none;">
+  <div class="welcome-modal">
+    <div class="wm-title"><span class="accent">▣</span> 欢迎来到信号矩阵</div>
+    <div class="wm-sub">期货 × 期权 专业交易仪表盘 · 首次使用？3 步快速上手</div>
+    <div class="wm-steps">
+      <div class="wm-step">
+        <span class="wm-step-num">1</span>
+        <div class="wm-step-body">
+          <div class="wm-step-title">📈 总览 — 市场全貌</div>
+          <div class="wm-step-desc">查看期货板块偏多/偏空分布、期权 IV 百分位概览，快速了解当前市场结构</div>
+        </div>
+      </div>
+      <div class="wm-step">
+        <span class="wm-step-num">2</span>
+        <div class="wm-step-body">
+          <div class="wm-step-title">🔍 期货 — 多周期信号矩阵</div>
+          <div class="wm-step-desc">N 型结构 15 分钟到周线全周期共振扫描，一键筛选多空方向最强品种</div>
+        </div>
+      </div>
+      <div class="wm-step">
+        <span class="wm-step-num">3</span>
+        <div class="wm-step-body">
+          <div class="wm-step-title">⚡ 期权 — IV 状态与策略评分</div>
+          <div class="wm-step-desc">隐含波动率百分位监控、7 维度策略评分排序，捕捉高胜率期权机会</div>
+        </div>
+      </div>
+    </div>
+    <div class="wm-dismiss">
+      <button class="wm-dismiss-btn" onclick="dismissWelcome()">开始使用 →</button>
+    </div>
+  </div>
+</div>
 
 <!-- ─── TOPBAR ─── -->
 <div class="topbar">
@@ -928,6 +1283,7 @@
       <a href="https://options.drifter.indevs.in" class="nav-tab"><span class="nav-tab-icon">📉</span> 期权</a>
       <span class="nav-tab premium-tab" data-tab="premium"><span class="nav-tab-icon">✦</span> Premium</span>
     </div>
+    <button class="reg-btn" id="regBtn" onclick="showRegisterModal()"><span>注册</span></button>
     <span class="data-badge" id="totalBadge"><span class="skeleton" style="width:72px;height:.7em">&nbsp;</span></span>
     <span class="topbar-time">{{ now }}</span>
   </div>
@@ -1138,6 +1494,27 @@
   <span class="topbar-time">{{ now }}</span>
 </div>
 
+<!-- ─── 注册弹窗 ─── -->
+<div class="reg-overlay" id="regOverlay" style="display:none;">
+  <div class="reg-modal">
+    <button class="reg-close" onclick="closeRegisterModal()">✕</button>
+    <div class="reg-title"><span class="accent">▣</span> 注册信号矩阵</div>
+    <div class="reg-sub">创建账号，开启专业交易信号之旅</div>
+    <div class="reg-field">
+      <label for="regEmail">邮箱</label>
+      <input type="email" id="regEmail" placeholder="your@email.com" autocomplete="email" autocapitalize="off">
+    </div>
+    <div class="reg-field">
+      <label for="regPassword">密码</label>
+      <input type="password" id="regPassword" placeholder="至少 6 个字符" autocomplete="new-password">
+    </div>
+    <button class="reg-btn-submit" id="regSubmitBtn" onclick="handleRegister()">注册 →</button>
+    <div class="reg-error" id="regError"></div>
+    <div class="reg-success" id="regSuccess"></div>
+    <div class="reg-note">注册即表示同意我们的服务条款。我们不会向您发送垃圾邮件。</div>
+  </div>
+</div>
+
 </div><!-- /.app -->
 
 <script>
@@ -1283,6 +1660,17 @@ function loadSummary() {
     })
     .catch(function(e) { /* silent */ });
 }
+
+// ── First-visit Welcome Guide ──
+function dismissWelcome() {
+  localStorage.setItem('welcome_dismissed', '1');
+  document.getElementById('welcomeOverlay').style.display = 'none';
+}
+(function() {
+  if (!localStorage.getItem('welcome_dismissed')) {
+    document.getElementById('welcomeOverlay').style.display = '';
+  }
+})();
 
 // ── Initial load ──
 loadFuturesData();
@@ -1631,6 +2019,98 @@ function verifyManualToken() {
     resultEl.textContent = '网络错误，请重试';
   });
 }
+
+// ── Register — Show/Hide Modal ──
+function showRegisterModal() {
+  document.getElementById('regOverlay').style.display = '';
+  document.getElementById('regError').style.display = 'none';
+  document.getElementById('regSuccess').style.display = 'none';
+  document.getElementById('regEmail').value = '';
+  document.getElementById('regPassword').value = '';
+  document.getElementById('regEmail').focus();
+}
+
+function closeRegisterModal() {
+  document.getElementById('regOverlay').style.display = 'none';
+}
+
+// ── Register — Handle Form Submit ──
+function handleRegister() {
+  var email = document.getElementById('regEmail').value.trim();
+  var password = document.getElementById('regPassword').value;
+  var btn = document.getElementById('regSubmitBtn');
+  var errorEl = document.getElementById('regError');
+  var successEl = document.getElementById('regSuccess');
+
+  errorEl.style.display = 'none';
+  successEl.style.display = 'none';
+
+  if (!email || !/^[^@]+@[^@]+\.[^@]+$/.test(email)) {
+    errorEl.textContent = '请输入有效的邮箱地址';
+    errorEl.style.display = '';
+    return;
+  }
+  if (password.length < 6) {
+    errorEl.textContent = '密码至少需要 6 个字符';
+    errorEl.style.display = '';
+    return;
+  }
+
+  btn.textContent = '⏳ 注册中…';
+  btn.classList.add('loading');
+
+  fetch('/api/auth/register', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({email: email, password: password})
+  })
+  .then(function(r) { return r.json().then(function(d) { d._status = r.status; return d; }); })
+  .then(function(d) {
+    btn.classList.remove('loading');
+    if (d.ok) {
+      btn.textContent = '✅ 注册成功!';
+      successEl.textContent = '🎉 注册成功！即将跳转到信号面板…';
+      successEl.style.display = '';
+      setTimeout(function() {
+        window.location.href = 'https://futures.drifter.indevs.in';
+      }, 1500);
+    } else {
+      btn.textContent = '注册 →';
+      errorEl.textContent = d.error || '注册失败';
+      errorEl.style.display = '';
+    }
+  })
+  .catch(function(e) {
+    btn.classList.remove('loading');
+    btn.textContent = '注册 →';
+    errorEl.textContent = '网络错误，请稍后重试';
+    errorEl.style.display = '';
+  });
+}
+
+// ── Close modal on overlay click ──
+document.addEventListener('click', function(e) {
+  var overlay = document.getElementById('regOverlay');
+  if (overlay && e.target === overlay) {
+    closeRegisterModal();
+  }
+});
+
+// ── Enter key triggers ──
+document.addEventListener('DOMContentLoaded', function() {
+  var pwInput = document.getElementById('regPassword');
+  if (pwInput) {
+    pwInput.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') { e.preventDefault(); handleRegister(); }
+    });
+  }
+  var emailInput = document.getElementById('regEmail');
+  if (emailInput) {
+    emailInput.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') { e.preventDefault(); document.getElementById('regPassword').focus(); }
+    });
+  }
+});
 
 </script>
 </body>

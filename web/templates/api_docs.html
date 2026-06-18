@@ -1,0 +1,1121 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="description" content="StatusHub 公开数据 API — 程序化访问期货信号、N 型结构热力图、期权 IV 百分位等交易数据的 REST API 文档。">
+<title>StatusHub API 文档 | 信号矩阵</title>
+<link rel="stylesheet" href="/static/style.css">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   API Docs — Developer portal
+   Aesthetic: terminal-luxe, developer-centric, dark gold
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── layout ── */
+.docs-layout {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 28px;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px 24px 40px;
+}
+
+/* ── sidebar nav ── */
+.docs-sidebar {
+  position: sticky;
+  top: 70px;
+  height: calc(100vh - 90px);
+  overflow-y: auto;
+  padding-right: 8px;
+}
+.docs-sidebar::-webkit-scrollbar { width: 3px; }
+.docs-sidebar::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 2px; }
+
+.docs-nav-section { margin-bottom: 18px; }
+.docs-nav-title {
+  font-size: .6rem;
+  font-weight: 600;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  padding: 0 8px 6px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+.docs-nav-item {
+  display: block;
+  font-size: .7rem;
+  color: var(--text2);
+  padding: 5px 8px;
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  transition: all .15s var(--ease-out);
+  cursor: pointer;
+  border-left: 2px solid transparent;
+}
+.docs-nav-item:hover {
+  color: var(--text);
+  background: rgba(255,255,255,.03);
+  border-left-color: var(--brand);
+}
+.docs-nav-item.active {
+  color: var(--brand);
+  background: var(--brand-bg);
+  border-left-color: var(--brand);
+}
+.docs-nav-item .method {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: .55rem;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 2px;
+  margin-right: 5px;
+  letter-spacing: .04em;
+}
+.docs-nav-item .method.get { color: #22c55e; background: rgba(34,197,94,.10); }
+.docs-nav-item .method.post { color: #60a5fa; background: rgba(96,165,250,.10); }
+
+/* ── main content ── */
+.docs-main { min-width: 0; }
+
+.docs-header {
+  margin-bottom: 28px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.docs-header h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -.02em;
+  margin: 0 0 4px;
+}
+.docs-header h1 .accent { color: var(--brand); }
+.docs-header .sub {
+  font-size: .78rem;
+  color: var(--text2);
+  max-width: 560px;
+  line-height: 1.5;
+}
+.docs-header .badge-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+.docs-badge {
+  font-size: .6rem;
+  font-family: var(--font-mono);
+  color: var(--text2);
+  background: rgba(90,97,115,.12);
+  padding: 3px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+}
+
+/* ── section ── */
+.docs-section {
+  margin-bottom: 32px;
+  scroll-margin-top: 70px;
+}
+.docs-section h2 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin: 0 0 12px;
+  letter-spacing: -.01em;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.docs-section h2 .anchor {
+  color: var(--text3);
+  font-size: .8rem;
+  opacity: 0;
+  transition: opacity .15s;
+  text-decoration: none;
+}
+.docs-section h2:hover .anchor { opacity: 1; }
+.docs-section h2 .accent-line {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, var(--border), transparent);
+}
+.docs-section p, .docs-section li {
+  font-size: .78rem;
+  color: var(--text2);
+  line-height: 1.7;
+}
+.docs-section p { margin: 0 0 10px; }
+
+/* ── endpoint card ── */
+.endpoint-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  margin-bottom: 20px;
+  overflow: hidden;
+  transition: border-color .2s var(--ease-out);
+}
+.endpoint-card:hover { border-color: var(--border-light); }
+
+.endpoint-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: rgba(14,17,24,.5);
+  border-bottom: 1px solid var(--border);
+}
+.endpoint-method {
+  font-family: var(--font-mono);
+  font-size: .7rem;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 4px;
+  letter-spacing: .04em;
+}
+.endpoint-method.get { color: #22c55e; background: rgba(34,197,94,.10); }
+.endpoint-path {
+  font-family: var(--font-mono);
+  font-size: .8rem;
+  font-weight: 500;
+  color: var(--text);
+  letter-spacing: -.01em;
+}
+.endpoint-desc {
+  font-size: .7rem;
+  color: var(--text3);
+  margin-left: auto;
+}
+.endpoint-body {
+  padding: 16px;
+}
+
+/* ── param tables ── */
+.param-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .72rem;
+  margin-bottom: 14px;
+}
+.param-table thead th {
+  font-size: .62rem;
+  font-weight: 600;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  padding: 6px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  background: rgba(14,17,24,.3);
+}
+.param-table tbody td {
+  padding: 6px 10px;
+  border-bottom: 1px solid rgba(30,38,50,.3);
+  vertical-align: top;
+  line-height: 1.5;
+}
+.param-table tbody tr:last-child td { border-bottom: none; }
+.param-table .p-name {
+  font-family: var(--font-mono);
+  font-size: .7rem;
+  font-weight: 500;
+  color: var(--brand);
+  white-space: nowrap;
+}
+.param-table .p-type {
+  font-family: var(--font-mono);
+  font-size: .62rem;
+  color: var(--text3);
+  white-space: nowrap;
+}
+.param-table .p-req {
+  font-size: .6rem;
+  padding: 1px 6px;
+  border-radius: 2px;
+  white-space: nowrap;
+}
+.param-table .p-req.required { color: var(--long); background: rgba(240,68,56,.10); }
+.param-table .p-req.optional { color: var(--text3); background: rgba(90,97,115,.10); }
+.param-table .p-desc { color: var(--text2); }
+.param-table .p-default {
+  font-family: var(--font-mono);
+  font-size: .62rem;
+  color: var(--text3);
+  white-space: nowrap;
+}
+
+/* ── code block ── */
+.code-block {
+  position: relative;
+  background: #06080e;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin-bottom: 14px;
+  overflow: hidden;
+}
+.code-block .code-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px 12px;
+  background: rgba(14,17,24,.6);
+  border-bottom: 1px solid var(--border);
+  font-size: .6rem;
+  color: var(--text3);
+  font-family: var(--font-mono);
+}
+.code-block .copy-btn {
+  font-size: .6rem;
+  color: var(--text3);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 2px 10px;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  transition: all .15s var(--ease-out);
+}
+.code-block .copy-btn:hover {
+  color: var(--brand);
+  border-color: var(--brand);
+  background: var(--brand-bg);
+}
+.code-block .copy-btn.copied {
+  color: #22c55e;
+  border-color: #22c55e;
+  background: rgba(34,197,94,.10);
+}
+.code-block pre {
+  margin: 0;
+  padding: 12px 14px;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: .7rem;
+  line-height: 1.6;
+  color: var(--text2);
+  tab-size: 2;
+}
+.code-block pre .cmt { color: var(--text4); font-style: italic; }
+.code-block pre .key { color: #e2e6ed; }
+.code-block pre .str { color: #22c55e; }
+.code-block pre .num { color: #60a5fa; }
+.code-block pre .bool { color: #c084fc; }
+.code-block pre .null { color: var(--text4); }
+
+/* ── response structure ── */
+.resp-struct {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 14px;
+  font-size: .72rem;
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  background: rgba(14,17,24,.3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+}
+.resp-struct .rs-field {
+  font-family: var(--font-mono);
+  color: var(--text);
+  font-weight: 500;
+}
+.resp-struct .rs-field.opt { color: var(--text3); }
+.resp-struct .rs-type {
+  font-family: var(--font-mono);
+  color: var(--text3);
+  font-size: .65rem;
+}
+.resp-struct .rs-desc {
+  grid-column: 2;
+  color: var(--text2);
+  font-size: .7rem;
+  margin-bottom: 4px;
+}
+
+/* ── rate limit table ── */
+.rate-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.rate-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  text-align: center;
+  transition: border-color .15s var(--ease-out);
+}
+.rate-card:hover { border-color: var(--border-light); }
+.rate-card .rc-endpoint {
+  font-family: var(--font-mono);
+  font-size: .62rem;
+  color: var(--brand);
+  margin-bottom: 4px;
+  word-break: break-all;
+}
+.rate-card .rc-limit {
+  font-size: 1.1rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--text);
+}
+.rate-card .rc-window {
+  font-size: .6rem;
+  color: var(--text3);
+}
+
+/* ── api key box ── */
+.key-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--brand-bg);
+  border: 1px solid rgba(240,180,41,.2);
+  border-radius: var(--radius-sm);
+  margin-bottom: 14px;
+}
+.key-box .kb-label {
+  font-size: .65rem;
+  color: var(--brand);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.key-box .kb-value {
+  font-family: var(--font-mono);
+  font-size: .7rem;
+  color: var(--text);
+  flex: 1;
+}
+.key-box .kb-note {
+  font-size: .6rem;
+  color: var(--text3);
+}
+
+/* ── info callout ── */
+.callout {
+  display: flex;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  margin-bottom: 14px;
+  font-size: .72rem;
+  line-height: 1.6;
+}
+.callout.info {
+  background: rgba(59,130,246,.06);
+  border: 1px solid rgba(59,130,246,.15);
+  color: var(--text2);
+}
+.callout.info .co-icon { color: #60a5fa; }
+.callout.warn {
+  background: rgba(240,180,41,.06);
+  border: 1px solid rgba(240,180,41,.15);
+  color: var(--text2);
+}
+.callout.warn .co-icon { color: var(--brand); }
+
+/* ── error table ── */
+.error-table { margin-bottom: 14px; }
+.error-table td:first-child {
+  font-family: var(--font-mono);
+  font-size: .7rem;
+  color: var(--long);
+  font-weight: 500;
+  padding: 4px 14px 4px 0;
+  white-space: nowrap;
+}
+.error-table td:last-child {
+  font-size: .72rem;
+  color: var(--text2);
+  padding: 4px 0;
+}
+
+/* ── end-to-end example ── */
+.e2e-steps {
+  counter-reset: step;
+  margin-bottom: 14px;
+}
+.e2e-step {
+  counter-increment: step;
+  margin-bottom: 10px;
+  padding-left: 28px;
+  position: relative;
+}
+.e2e-step::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--brand-bg);
+  border: 1px solid rgba(240,180,41,.2);
+  color: var(--brand);
+  font-family: var(--font-mono);
+  font-size: .65rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.e2e-step .e2e-label {
+  font-size: .75rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.e2e-step .e2e-desc {
+  font-size: .72rem;
+  color: var(--text2);
+  line-height: 1.5;
+}
+
+/* ── responsive ── */
+@media (max-width: 860px) {
+  .docs-layout { grid-template-columns: 1fr; }
+  .docs-sidebar {
+    position: static;
+    height: auto;
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    padding: 0;
+    margin-bottom: 16px;
+    overflow: visible;
+  }
+  .docs-nav-section { margin-bottom: 0; }
+  .docs-nav-title { display: none; }
+  .docs-nav-item { font-size: .65rem; padding: 4px 8px; }
+}
+
+/* ── topbar integration ── */
+.api-docs-link {
+  text-decoration: none;
+  color: var(--text3);
+  font-size: .7rem;
+  transition: color .15s;
+}
+.api-docs-link:hover { color: var(--brand); }
+</style>
+</head>
+<body>
+
+<!-- ═══ Topbar ═══ -->
+<div class="topbar">
+  <div class="topbar-inner">
+    <h1><span class="accent">Status</span>Hub <span class="thin">| API 文档</span></h1>
+    <div class="nav-tabs" style="margin-left:auto">
+      <a href="/" class="nav-tab"><span class="nav-tab-icon">◈</span> 信号矩阵</a>
+      <a href="/api/docs" class="nav-tab active"><span class="nav-tab-icon">⎔</span> API 文档</a>
+    </div>
+    <span class="topbar-time">v1 &mdash; REST</span>
+  </div>
+</div>
+
+<div class="docs-layout">
+
+<!-- ═══ Sidebar ═══ -->
+<nav class="docs-sidebar">
+  <div class="docs-nav-section">
+    <div class="docs-nav-title">开始使用</div>
+    <a href="#overview" class="docs-nav-item">📋 概述</a>
+    <a href="#auth" class="docs-nav-item">🔑 认证</a>
+    <a href="#rate-limits" class="docs-nav-item">⚡ 速率限制</a>
+    <a href="#errors" class="docs-nav-item">⚠️ 错误处理</a>
+  </div>
+  <div class="docs-nav-section">
+    <div class="docs-nav-title">端点</div>
+    <a href="#endpoint-heatmap" class="docs-nav-item"><span class="method get">GET</span>/market/heatmap</a>
+    <a href="#endpoint-signals" class="docs-nav-item"><span class="method get">GET</span>/signals/top</a>
+    <a href="#endpoint-iv" class="docs-nav-item"><span class="method get">GET</span>/options/iv-summary</a>
+  </div>
+  <div class="docs-nav-section">
+    <div class="docs-nav-title">示例</div>
+    <a href="#quickstart" class="docs-nav-item">🚀 快速开始</a>
+    <a href="#e2e" class="docs-nav-item">🔁 完整工作流</a>
+  </div>
+</nav>
+
+<!-- ═══ Main ═══ -->
+<main class="docs-main">
+
+  <!-- ── Overview ── -->
+  <section id="overview" class="docs-section docs-header">
+    <h1><span class="accent">StatusHub</span> 公开数据 API</h1>
+    <p class="sub">程序化访问期货 N 型结构热力图、高评分信号排行、期权 IV 百分位快照。所有端点返回 JSON，支持 CORS 跨域。</p>
+    <div class="badge-row">
+      <span class="docs-badge">v1.0</span>
+      <span class="docs-badge">REST</span>
+      <span class="docs-badge">JSON</span>
+      <span class="docs-badge">CORS ✓</span>
+      <span class="docs-badge">API Key</span>
+    </div>
+    <div class="key-box" style="margin-top:12px">
+      <span class="kb-label">🌐 基础 URL</span>
+      <code class="kb-value">https://signals.drifter.indevs.in/api/v1</code>
+    </div>
+  </section>
+
+  <!-- ── Authentication ── -->
+  <section id="auth" class="docs-section">
+    <h2>
+      <span>🔑 认证</span>
+      <span class="accent-line"></span>
+    </h2>
+    <p>所有端点都需要通过 <code>X-API-Key</code> HTTP Header 传入 API Key。未提供或无效的 Key 将返回 <code>401 Unauthorized</code>。</p>
+    <div class="code-block">
+      <div class="code-header"><span># Header 格式</span></div>
+      <pre>X-API-Key: sk_sh_&lt;your_32_hex_key&gt;</pre>
+    </div>
+    <div class="key-box">
+      <span class="kb-label">💡 获取 API Key</span>
+      <span class="kb-value">通过 <code>POST /api/public/request-trial</code> 免费获取 7 天试用 Key</span>
+      <span class="kb-note">或联系管理员开通</span>
+    </div>
+    <div class="code-block">
+      <div class="code-header"><span>curl</span></div>
+      <pre>curl -H "X-API-Key: sk_sh_your_key_here" \
+  https://signals.drifter.indevs.in/api/v1/market/heatmap</pre>
+    </div>
+  </section>
+
+  <!-- ── Rate Limits ── -->
+  <section id="rate-limits" class="docs-section">
+    <h2>
+      <span>⚡ 速率限制</span>
+      <span class="accent-line"></span>
+    </h2>
+    <p>基于滑动窗口实现，每个 API Key 独立计数。超限返回 <code>429 Too Many Requests</code>，响应中包含 <code>retry_after_seconds</code> 字段。</p>
+    <div class="rate-grid">
+      <div class="rate-card">
+        <div class="rc-endpoint">/market/heatmap</div>
+        <div class="rc-limit">10</div>
+        <div class="rc-window">次 / 60 秒</div>
+      </div>
+      <div class="rate-card">
+        <div class="rc-endpoint">/signals/top</div>
+        <div class="rc-limit">30</div>
+        <div class="rc-window">次 / 60 秒</div>
+      </div>
+      <div class="rate-card">
+        <div class="rc-endpoint">/options/iv-summary</div>
+        <div class="rc-limit">30</div>
+        <div class="rc-window">次 / 60 秒</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Error Handling ── -->
+  <section id="errors" class="docs-section">
+    <h2>
+      <span>⚠️ 错误处理</span>
+      <span class="accent-line"></span>
+    </h2>
+    <p>所有错误响应使用统一格式：<code>{ error: { code, message }, meta: { requested_at } }</code></p>
+    <table class="error-table">
+      <tr><td>UNAUTHORIZED</td><td>缺少或无效的 API Key — 检查 X-API-Key Header</td></tr>
+      <tr><td>RATE_LIMITED</td><td>请求频率超限 — 等待 retry_after_seconds 秒后重试</td></tr>
+      <tr><td>INVALID_PARAMS</td><td>请求参数不合法 — 查看 error.message 了解详情</td></tr>
+      <tr><td>NOT_FOUND</td><td>请求的资源不存在</td></tr>
+      <tr><td>INTERNAL_ERROR</td><td>服务器内部错误 — 请稍后重试或联系管理员</td></tr>
+    </table>
+    <div class="code-block">
+      <div class="code-header"><span># 错误响应示例 (401)</span></div>
+      <pre>{
+  <span class="key">"error"</span>: {
+    <span class="key">"code"</span>: <span class="str">"UNAUTHORIZED"</span>,
+    <span class="key">"message"</span>: <span class="str">"缺少 API Key，请在 X-API-Key Header 中传入"</span>
+  },
+  <span class="key">"meta"</span>: {
+    <span class="key">"requested_at"</span>: <span class="str">"2026-06-18T07:58:00Z"</span>
+  }
+}</pre>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       ENDPOINTS
+       ═══════════════════════════════════════════════════════════════ -->
+
+  <!-- ── Endpoint: Heatmap ── -->
+  <section id="endpoint-heatmap" class="docs-section">
+    <h2>
+      <span><span style="color:#22c55e;font-family:var(--font-mono);font-size:.85rem">GET</span> /api/v1/market/heatmap</span>
+      <span class="accent-line"></span>
+    </h2>
+    <p>返回按板块分类的期货信号热力图矩阵，包含每个品种的多周期 N 型结构方向、评分、级别通过情况。是信号矩阵门户页的核心数据源。</p>
+
+    <h3 style="font-size:.8rem;font-weight:600;color:var(--text2);margin:0 0 8px">Query 参数</h3>
+    <table class="param-table">
+      <thead>
+        <tr><th>参数</th><th>类型</th><th>必填</th><th>说明</th><th>默认值</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="p-name">sector</td>
+          <td class="p-type">string</td>
+          <td><span class="p-req optional">可选</span></td>
+          <td class="p-desc">按板块筛选，可选：有色、贵金属、黑色、能源化工、农产品、新能源</td>
+          <td class="p-default">—</td>
+        </tr>
+        <tr>
+          <td class="p-name">sort_by</td>
+          <td class="p-type">string</td>
+          <td><span class="p-req optional">可选</span></td>
+          <td class="p-desc">排序字段：<code>score</code>（评分降序）或 <code>symbol</code>（品种代码升序）</td>
+          <td class="p-default">score</td>
+        </tr>
+        <tr>
+          <td class="p-name">limit</td>
+          <td class="p-type">int</td>
+          <td><span class="p-req optional">可选</span></td>
+          <td class="p-desc">最大返回条数（1-100）</td>
+          <td class="p-default">50</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3 style="font-size:.8rem;font-weight:600;color:var(--text2);margin:0 0 8px">响应结构</h3>
+    <div class="resp-struct">
+      <span class="rs-field">data.signals[].symbol</span>
+      <span class="rs-type">string</span>
+      <span class="rs-desc">品种代码，如 <code>"AG"</code></span>
+
+      <span class="rs-field">data.signals[].name</span>
+      <span class="rs-type">string</span>
+      <span class="rs-desc">品种中文名，如 <code>"白银"</code></span>
+
+      <span class="rs-field">data.signals[].contract</span>
+      <span class="rs-type">string</span>
+      <span class="rs-desc">主力合约代码</span>
+
+      <span class="rs-field">data.signals[].sector</span>
+      <span class="rs-type">string</span>
+      <span class="rs-desc">所属板块</span>
+
+      <span class="rs-field">data.signals[].direction</span>
+      <span class="rs-type">string|null</span>
+      <span class="rs-desc">方向：<code>"LONG"</code> | <code>"SHORT"</code></span>
+
+      <span class="rs-field">data.signals[].score</span>
+      <span class="rs-type">float</span>
+      <span class="rs-desc">综合评分 (0-300+)</span>
+
+      <span class="rs-field">data.signals[].levels</span>
+      <span class="rs-type">object</span>
+      <span class="rs-desc">级别通过：<code>{ l1: bool, l2: bool, l3: bool }</code></span>
+
+      <span class="rs-field data">data.signals[].n_structure</span>
+      <span class="rs-type">object|null</span>
+      <span class="rs-desc">N 型结构详情（按 timeframe 索引），含 ABC 三点价格/时间</span>
+
+      <span class="rs-field">data.summary</span>
+      <span class="rs-type">object</span>
+      <span class="rs-desc">汇总统计：total, long_count, short_count, sectors[]</span>
+    </div>
+
+    <h3 style="font-size:.8rem;font-weight:600;color:var(--text2);margin:0 0 8px">请求示例</h3>
+    <div class="code-block">
+      <div class="code-header"><span>curl — 获取贵金属板块热力图</span></div>
+      <pre>curl -s -H "X-API-Key: sk_sh_your_key" \
+  "https://signals.drifter.indevs.in/api/v1/market/heatmap?sector=%E8%B4%B5%E9%87%91%E5%B1%9E&limit=10" \
+  | jq '.data.signals[] | {symbol, name, direction, score}'</pre>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header"><span>响应示例</span></div>
+      <pre>{
+  <span class="key">"data"</span>: {
+    <span class="key">"signals"</span>: [
+      {
+        <span class="key">"symbol"</span>: <span class="str">"AU"</span>,
+        <span class="key">"name"</span>: <span class="str">"黄金"</span>,
+        <span class="key">"direction"</span>: <span class="str">"LONG"</span>,
+        <span class="key">"score"</span>: <span class="num">285.7</span>,
+        <span class="key">"levels"</span>: { <span class="key">"l1"</span>: <span class="bool">true</span>, <span class="key">"l2"</span>: <span class="bool">true</span>, <span class="key">"l3"</span>: <span class="bool">false</span> }
+      }
+    ],
+    <span class="key">"summary"</span>: {
+      <span class="key">"total"</span>: <span class="num">2</span>,
+      <span class="key">"long_count"</span>: <span class="num">1</span>,
+      <span class="key">"short_count"</span>: <span class="num">1</span>
+    }
+  },
+  <span class="key">"meta"</span>: { <span class="key">"requested_at"</span>: <span class="str">"2026-06-18T07:58:00Z"</span> }
+}</pre>
+    </div>
+  </section>
+
+  <!-- ── Endpoint: Signals Top ── -->
+  <section id="endpoint-signals" class="docs-section">
+    <h2>
+      <span><span style="color:#22c55e;font-family:var(--font-mono);font-size:.85rem">GET</span> /api/v1/signals/top</span>
+      <span class="accent-line"></span>
+    </h2>
+    <p>返回评分最高的期货信号排行，支持按方向筛选和最低评分过滤。每个品种仅返回最新信号。</p>
+
+    <h3 style="font-size:.8rem;font-weight:600;color:var(--text2);margin:0 0 8px">Query 参数</h3>
+    <table class="param-table">
+      <thead>
+        <tr><th>参数</th><th>类型</th><th>必填</th><th>说明</th><th>默认值</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="p-name">direction</td>
+          <td class="p-type">string</td>
+          <td><span class="p-req optional">可选</span></td>
+          <td class="p-desc">方向筛选：<code>"LONG"</code>（多头）或 <code>"SHORT"</code>（空头）</td>
+          <td class="p-default">—</td>
+        </tr>
+        <tr>
+          <td class="p-name">min_score</td>
+          <td class="p-type">float</td>
+          <td><span class="p-req optional">可选</span></td>
+          <td class="p-desc">最低评分阈值（≥0）</td>
+          <td class="p-default">0</td>
+        </tr>
+        <tr>
+          <td class="p-name">limit</td>
+          <td class="p-type">int</td>
+          <td><span class="p-req optional">可选</span></td>
+          <td class="p-desc">最大返回条数（1-100）</td>
+          <td class="p-default">50</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3 style="font-size:.8rem;font-weight:600;color:var(--text2);margin:0 0 8px">响应结构</h3>
+    <div class="resp-struct">
+      <span class="rs-field">data.signals[].symbol</span>
+      <span class="rs-type">string</span>
+      <span class="rs-desc">品种代码</span>
+
+      <span class="rs-field">data.signals[].name</span>
+      <span class="rs-type">string</span>
+      <span class="rs-desc">品种中文名</span>
+
+      <span class="rs-field">data.signals[].contract</span>
+      <span class="rs-type">string</span>
+      <span class="rs-desc">主力合约，如 <code>"ag2607"</code></span>
+
+      <span class="rs-field">data.signals[].direction</span>
+      <span class="rs-type">string</span>
+      <span class="rs-desc"><code>"LONG"</code> | <code>"SHORT"</code></span>
+
+      <span class="rs-field">data.signals[].signal_type</span>
+      <span class="rs-type">string</span>
+      <span class="rs-desc">信号类型，如 <code>"N型突破"</code></span>
+
+      <span class="rs-field">data.signals[].score</span>
+      <span class="rs-type">float</span>
+      <span class="rs-desc">综合评分</span>
+
+      <span class="rs-field">data.signals[].entry_price</span>
+      <span class="rs-type">float|null</span>
+      <span class="rs-desc">入场价格</span>
+
+      <span class="rs-field">data.signals[].stop_loss</span>
+      <span class="rs-type">float|null</span>
+      <span class="rs-desc">止损价格</span>
+
+      <span class="rs-field">data.signals[].take_profit</span>
+      <span class="rs-type">float|null</span>
+      <span class="rs-desc">止盈价格</span>
+
+      <span class="rs-field">data.signals[].detail</span>
+      <span class="rs-type">string</span>
+      <span class="rs-desc">信号详细说明</span>
+
+      <span class="rs-field">data.signals[].created_at</span>
+      <span class="rs-type">string</span>
+      <span class="rs-desc">信号生成时间</span>
+    </div>
+
+    <h3 style="font-size:.8rem;font-weight:600;color:var(--text2);margin:0 0 8px">请求示例</h3>
+    <div class="code-block">
+      <div class="code-header"><span>curl — 获取评分 260+ 的多头信号</span></div>
+      <pre>curl -s -H "X-API-Key: sk_sh_your_key" \
+  "https://signals.drifter.indevs.in/api/v1/signals/top?direction=LONG&min_score=260&limit=5" \
+  | jq '.data.signals[] | {name, contract, score, entry_price, stop_loss}'</pre>
+    </div>
+  </section>
+
+  <!-- ── Endpoint: IV Summary ── -->
+  <section id="endpoint-iv" class="docs-section">
+    <h2>
+      <span><span style="color:#22c55e;font-family:var(--font-mono);font-size:.85rem">GET</span> /api/v1/options/iv-summary</span>
+      <span class="accent-line"></span>
+    </h2>
+    <p>返回所有期权品种的最新隐含波动率 (IV) 百分位快照、等级分类和四分位范围。用于识别 IV 处于极端高/低水平的品种。</p>
+
+    <h3 style="font-size:.8rem;font-weight:600;color:var(--text2);margin:0 0 8px">Query 参数</h3>
+    <table class="param-table">
+      <thead>
+        <tr><th>参数</th><th>类型</th><th>必填</th><th>说明</th><th>默认值</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="p-name">days</td>
+          <td class="p-type">int</td>
+          <td><span class="p-req optional">可选</span></td>
+          <td class="p-desc">回溯天数计算百分位（1-365）</td>
+          <td class="p-default">30</td>
+        </tr>
+        <tr>
+          <td class="p-name">sort_by</td>
+          <td class="p-type">string</td>
+          <td><span class="p-req optional">可选</span></td>
+          <td class="p-desc">排序：<code>"percentile"</code>（百分位降序）或 <code>"current_iv"</code>（IV 值降序）</td>
+          <td class="p-default">percentile</td>
+        </tr>
+        <tr>
+          <td class="p-name">limit</td>
+          <td class="p-type">int</td>
+          <td><span class="p-req optional">可选</span></td>
+          <td class="p-desc">最大返回条数（1-100）</td>
+          <td class="p-default">50</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3 style="font-size:.8rem;font-weight:600;color:var(--text2);margin:0 0 8px">响应结构</h3>
+    <div class="resp-struct">
+      <span class="rs-field">data.iv_data[].symbol</span>
+      <span class="rs-type">string</span>
+      <span class="rs-desc">品种代码</span>
+
+      <span class="rs-field">data.iv_data[].name</span>
+      <span class="rs-type">string</span>
+      <span class="rs-desc">品种中文名</span>
+
+      <span class="rs-field">data.iv_data[].current_iv</span>
+      <span class="rs-type">float</span>
+      <span class="rs-desc">当前 IV 值（%）</span>
+
+      <span class="rs-field">data.iv_data[].percentile</span>
+      <span class="rs-type">float|null</span>
+      <span class="rs-desc">历史百分位 (0-1)</span>
+
+      <span class="rs-field">data.iv_data[].level</span>
+      <span class="rs-type">string</span>
+      <span class="rs-desc">IV 等级：极端高 / 偏高 / 正常 / 偏低 / 极端低</span>
+
+      <span class="rs-field">data.iv_data[].range</span>
+      <span class="rs-type">object</span>
+      <span class="rs-desc">IV 四分位范围：{ min, p25, p50, p75, max }</span>
+
+      <span class="rs-field">data.iv_data[].samples</span>
+      <span class="rs-type">int</span>
+      <span class="rs-desc">回溯期内的样本数量</span>
+
+      <span class="rs-field">data.level_summary</span>
+      <span class="rs-type">object</span>
+      <span class="rs-desc">各等级的品种计数</span>
+    </div>
+
+    <h3 style="font-size:.8rem;font-weight:600;color:var(--text2);margin:0 0 8px">请求示例</h3>
+    <div class="code-block">
+      <div class="code-header"><span>curl — 获取 180 天 IV 百分位排序</span></div>
+      <pre>curl -s -H "X-API-Key: sk_sh_your_key" \
+  "https://signals.drifter.indevs.in/api/v1/options/iv-summary?days=180&sort_by=percentile&limit=10" \
+  | jq '.data.iv_data[] | {name, current_iv, percentile, level}'</pre>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header"><span>响应示例</span></div>
+      <pre>{
+  <span class="key">"data"</span>: {
+    <span class="key">"total"</span>: <span class="num">10</span>,
+    <span class="key">"days"</span>: <span class="num">180</span>,
+    <span class="key">"level_summary"</span>: {
+      <span class="key">"偏高"</span>: <span class="num">3</span>,
+      <span class="key">"正常"</span>: <span class="num">4</span>,
+      <span class="key">"偏低"</span>: <span class="num">2</span>,
+      <span class="key">"极端低"</span>: <span class="num">1</span>
+    },
+    <span class="key">"iv_data"</span>: [
+      {
+        <span class="key">"symbol"</span>: <span class="str">"AG"</span>,
+        <span class="key">"name"</span>: <span class="str">"白银"</span>,
+        <span class="key">"current_iv"</span>: <span class="num">32.5</span>,
+        <span class="key">"percentile"</span>: <span class="num">0.88</span>,
+        <span class="key">"level"</span>: <span class="str">"偏高"</span>,
+        <span class="key">"range"</span>: {
+          <span class="key">"min"</span>: <span class="num">18.2</span>,
+          <span class="key">"p25"</span>: <span class="num">22.1</span>,
+          <span class="key">"p50"</span>: <span class="num">25.8</span>,
+          <span class="key">"p75"</span>: <span class="num">29.4</span>,
+          <span class="key">"max"</span>: <span class="num">38.7</span>
+        }
+      }
+    ]
+  },
+  <span class="key">"meta"</span>: { <span class="key">"requested_at"</span>: <span class="str">"2026-06-18T07:58:00Z"</span> }
+}</pre>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       EXAMPLES
+       ═══════════════════════════════════════════════════════════════ -->
+
+  <!-- ── Quickstart ── -->
+  <section id="quickstart" class="docs-section">
+    <h2>
+      <span>🚀 快速开始</span>
+      <span class="accent-line"></span>
+    </h2>
+
+    <div class="e2e-steps">
+      <div class="e2e-step">
+        <div class="e2e-label">获取 API Key</div>
+        <div class="e2e-desc">发送 POST 请求获取免费试用 Key（7 天有效期）</div>
+      </div>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header"><span>bash — 申请试用 API Key</span></div>
+      <pre><span class="cmt"># 获取免费试用 Key（无需认证）</span>
+API_KEY=$(curl -s -X POST \
+  https://signals.drifter.indevs.in/api/public/request-trial \
+  -H "Content-Type: application/json" \
+  -d '{"email": "dev@example.com"}' \
+  | jq -r '.token')
+echo "Key: $API_KEY"</pre>
+    </div>
+
+    <div class="e2e-steps">
+      <div class="e2e-step" style="counter-increment:step 1">
+        <div class="e2e-label">查询市场热力图</div>
+        <div class="e2e-desc">查看各板块品种的多周期信号矩阵</div>
+      </div>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header"><span>bash — 获取热力图</span></div>
+      <pre><span class="cmt"># 获取能源化工板块热力图</span>
+curl -s -H "X-API-Key: $API_KEY" \
+  "https://signals.drifter.indevs.in/api/v1/market/heatmap?sector=%E8%83%BD%E6%BA%90%E5%8C%96%E5%B7%A5&sort_by=score" \
+  | jq '.data.signals[:5] | .[] | {name, direction, score}'</pre>
+    </div>
+
+    <div class="e2e-steps">
+      <div class="e2e-step" style="counter-increment:step 1">
+        <div class="e2e-label">筛选高分信号</div>
+        <div class="e2e-desc">获取评分最高的多头信号，含入场/止损/止盈</div>
+      </div>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header"><span>bash — 高评分信号</span></div>
+      <pre><span class="cmt"># 评分 250+ 的多头信号</span>
+curl -s -H "X-API-Key: $API_KEY" \
+  "https://signals.drifter.indevs.in/api/v1/signals/top?direction=LONG&min_score=250" \
+  | jq '.data.signals[] | {name, score, entry: .entry_price, sl: .stop_loss, tp: .take_profit}'</pre>
+    </div>
+
+    <div class="e2e-steps">
+      <div class="e2e-step" style="counter-increment:step 1">
+        <div class="e2e-label">监控 IV 异常</div>
+        <div class="e2e-desc">查询 IV 百分位最高的品种，识别极端波动机会</div>
+      </div>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header"><span>bash — IV 异常监控</span></div>
+      <pre><span class="cmt"># 90 天 IV 百分位降序，取前 5</span>
+curl -s -H "X-API-Key: $API_KEY" \
+  "https://signals.drifter.indevs.in/api/v1/options/iv-summary?days=90&limit=5" \
+  | jq '.data.iv_data[] | {name, iv: .current_iv, pct: .percentile, level}'</pre>
+    </div>
+  </section>
+
+  <!-- ── End-to-end workflow ── -->
+  <section id="e2e" class="docs-section">
+    <h2>
+      <span>🔁 完整 Python 示例</span>
+      <span class="accent-line"></span>
+    </h2>
+    <p>使用 Python 将 API 数据整合为一个完整的交易决策简报：</p>
+
+    <div class="code-block">
+      <div class="code-header"><span>Python — 交易决策简报</span></div>
+      <pre><span class="cmt">import requests, json</span>
+
+API_BASE = "https://signals.drifter.indevs.in/api/v1"
+API_KEY = "sk_sh_YOUR_KEY_HERE"
+HEADERS = {"X-API-Key": API_KEY}
+
+<span class="cmt"># 1. 获取热力图摘要</span>
+heatmap = requests.get(f"{API_BASE}/market/heatmap?limit=5", headers=HEADERS).json()
+summary = heatmap["data"]["summary"]
+print(f"📊 信号总览: {summary['total']} 品种 | 多头 {summary['long_count']} | 空头 {summary['short_count']}")
+
+<span class="cmt"># 2. 获取最高评分信号</span>
+top = requests.get(f"{API_BASE}/signals/top?direction=LONG&min_score=280&limit=3", headers=HEADERS).json()
+for s in top["data"]["signals"]:
+    print(f"  🟢 {s['name']} ({s['contract']}) | 评分 {s['score']} | 入场 {s['entry_price']}")
+
+<span class="cmt"># 3. 检查 IV 异常</span>
+iv = requests.get(f"{API_BASE}/options/iv-summary?days=180&limit=3", headers=HEADERS).json()
+for i in iv["data"]["iv_data"]:
+    pct = round(i['percentile']*100, 1) if i['percentile'] else 'N/A'
+    print(f"  📈 {i['name']} IV {i['current_iv']}% | 百分位 {pct}% | {i['level']}")</pre>
+    </div>
+
+    <div class="callout warn">
+      <span class="co-icon">⚠️</span>
+      <span>API Key 有速率限制，不建议在循环中高频轮询。建议使用 <code>limit</code> 参数控制单次返回量，降低请求频率。</span>
+    </div>
+  </section>
+
+  <!-- ── Footer ── -->
+  <div class="footer" style="margin-top:20px">
+    StatusHub v1 API &mdash; 信号矩阵 &mdash; <a href="https://github.com/DrfterX/options-arbitrage-system" style="color:var(--text3);text-decoration:none">GitHub</a>
+  </div>
+
+</main>
+</div>
+
+<script>
+// ── Copy button logic ──
+document.querySelectorAll('.copy-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const pre = btn.closest('.code-block').querySelector('pre');
+    const text = pre.textContent.replace(/^\s+|\s+$/g, '');
+    navigator.clipboard.writeText(text).then(() => {
+      btn.textContent = '✓ 已复制';
+      btn.classList.add('copied');
+      setTimeout(() => {
+        btn.textContent = '复制';
+        btn.classList.remove('copied');
+      }, 2000);
+    });
+  });
+});
+
+// ── Smooth scroll + active highlight ──
+const navItems = document.querySelectorAll('.docs-nav-item');
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      navItems.forEach(item => item.classList.remove('active'));
+      const id = entry.target.id;
+      document.querySelector(`.docs-nav-item[href="#${id}"]`)?.classList.add('active');
+    }
+  });
+}, { rootMargin: '-80px 0px -50% 0px' });
+
+document.querySelectorAll('.docs-section[id]').forEach(section => observer.observe(section));
+</script>
+
+</body>
+</html>

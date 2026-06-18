@@ -263,6 +263,20 @@ ALL_TABLES: dict[str, str] = {
             FOREIGN KEY (position_id) REFERENCES positions(id) ON DELETE CASCADE
         )
     """,
+
+    # ── 15. 公开 API Keys ───────────────────────────────────────
+    "api_keys": """
+        CREATE TABLE IF NOT EXISTS api_keys (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            api_key     TEXT    NOT NULL UNIQUE,
+            name        TEXT    NOT NULL,
+            email       TEXT,
+            tier        TEXT    NOT NULL DEFAULT 'free',
+            is_active   INTEGER NOT NULL DEFAULT 1,
+            created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+            last_used   TEXT
+        )
+    """,
 }
 
 # ============================================================
@@ -301,4 +315,5 @@ INDEXES: list[str] = [
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_risk_mgmt_position ON risk_management(position_id)",
     "CREATE INDEX IF NOT EXISTS idx_risk_mgmt_alert ON risk_management(alert_level)",
     "CREATE INDEX IF NOT EXISTS idx_risk_mgmt_next_check ON risk_management(next_check_time)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_api_keys_key ON api_keys(api_key)",
 ]

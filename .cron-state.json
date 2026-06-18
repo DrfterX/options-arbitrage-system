@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "meta": {
+    "note": "Session-only cron jobs that must be re-registered after each agent session restart.",
+    "last_update": "2026-06-18 (Cycle #88 — Phase 2 Step 4: signals/top + iv-summary endpoints)",
+    "restore_count": 0
+  },
+  "cron_jobs": [
+    {
+      "id": "68fa7c38",
+      "name": "PH 提交",
+      "description": "在 Product Hunt 提交 StatusHub listing",
+      "cron_expression": "1 15 16 6 2",
+      "recurring": false,
+      "fire_time": "2026-06-16 15:01 CST",
+      "enabled": false,
+      "note": "错过触发窗口（Session 重启导致 cron 丢失），15:01 窗口未执行"
+    }
+  ]
+}

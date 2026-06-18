@@ -1213,17 +1213,16 @@ function drawKline(bars, nA, nB, nC, nDir, nAt, nBt, nCt) {
         var x = barXs[pt.idx];
         var y = priceToY(pt.price);
         if (y < 8 || y > H - 18) return;
-        var color = pt.cls === 'A' ? 'rgba(234,179,8,0.7)' : pt.cls === 'B' ? 'rgba(99,102,241,0.7)' : 'rgba(236,72,153,0.7)';
-        // Draw line from previous point to this point
+        var color = pt.cls === 'A' ? 'rgba(234,179,8,0.85)' : pt.cls === 'B' ? 'rgba(99,102,241,0.85)' : 'rgba(236,72,153,0.85)';
+        // Draw solid connecting line from previous point to this point
         if (prevPt && prevPt.idx >= 0) {
-            ctx.setLineDash([4, 4]);
-            ctx.lineWidth = 1.5;
+            ctx.lineWidth = 2;
             ctx.strokeStyle = color;
+            ctx.setLineDash([]); // solid line
             ctx.beginPath();
             ctx.moveTo(barXs[prevPt.idx], priceToY(prevPt.price));
             ctx.lineTo(x, y);
             ctx.stroke();
-            ctx.setLineDash([]);
         }
         prevPt = pt;
     });
@@ -1258,7 +1257,7 @@ function drawKline(bars, nA, nB, nC, nDir, nAt, nBt, nCt) {
         ctx.fillStyle = color;
         ctx.fillText(label, lx + 4, ly + 12);
     });
-    // ── C 点到最新价：第三笔方向提示（虚线箭头） ──
+    // ── C 点到最新价：第三笔方向提示（实线+箭头） ──
     var lastBar = bars[bars.length - 1];
     if (lastBar && nIdxs[2].idx >= 0 && nIdxs[2].idx < barXs.length) {
         var cIdx = nIdxs[2].idx;
@@ -1267,17 +1266,16 @@ function drawKline(bars, nA, nB, nC, nDir, nAt, nBt, nCt) {
         var lastX = barXs[barXs.length - 1];
         var lastCloseY = priceToY(lastBar.c);
         if (lastX > cX) {
-            ctx.setLineDash([6, 4]);
-            ctx.strokeStyle = nDir === 'LONG' ? 'rgba(240,68,56,0.35)' : 'rgba(34,197,94,0.35)';
-            ctx.lineWidth = 1.5;
+            ctx.setLineDash([]);
+            ctx.strokeStyle = nDir === 'LONG' ? 'rgba(240,68,56,0.5)' : 'rgba(34,197,94,0.5)';
+            ctx.lineWidth = 2;
             ctx.beginPath();
             ctx.moveTo(cX, cY);
             ctx.lineTo(lastX, lastCloseY);
             ctx.stroke();
-            ctx.setLineDash([]);
             // Arrowhead at the end
             var angle = Math.atan2(lastCloseY - cY, lastX - cX);
-            ctx.fillStyle = nDir === 'LONG' ? 'rgba(240,68,56,0.5)' : 'rgba(34,197,94,0.5)';
+            ctx.fillStyle = nDir === 'LONG' ? 'rgba(240,68,56,0.6)' : 'rgba(34,197,94,0.6)';
             ctx.beginPath();
             ctx.moveTo(lastX, lastCloseY);
             ctx.lineTo(lastX - 8 * Math.cos(angle - 0.4), lastCloseY - 8 * Math.sin(angle - 0.4));
@@ -1360,6 +1358,8 @@ async function showKlinePopup(el) {
             var lastC = data.bars[data.bars.length-1].c;
             var leg3Dir = parseFloat(lastC) > parseFloat(c_val) ? '↑第三笔偏多' : '↓第三笔偏空';
             priceLine = 'A:'+parseFloat(a).toFixed(2)+' B:'+parseFloat(b).toFixed(2)+' C:'+parseFloat(c_val).toFixed(2)+' | '+leg3Dir;
+        } else {
+            priceLine = 'N 型结构待确认（数据不足以标记ABC）';
         }
         document.getElementById('kpPrice').textContent = priceLine;
         document.getElementById('kpTime').textContent = data.bars.length + '根K线 | 最新:' + data.bars[data.bars.length-1].c;
@@ -1383,6 +1383,8 @@ async function showKlinePopup(el) {
                     var pl2 = '';
                     if (a2 && b2 && c2) {
                         pl2 = 'A:'+parseFloat(a2).toFixed(2)+' B:'+parseFloat(b2).toFixed(2)+' C:'+parseFloat(c2).toFixed(2)+' | '+(parseFloat(lastC2)>parseFloat(c2)?'↑第三笔偏多':'↓第三笔偏空');
+                    } else {
+                        pl2 = 'N 型结构待确认（数据不足以标记ABC）';
                     }
                     document.getElementById('kpPrice').textContent = pl2;
                     document.getElementById('kpTime').textContent = d2.bars.length + '根K线 | 最新:' + lastC2;
@@ -1432,6 +1434,8 @@ document.addEventListener('visibilitychange', function() {
                     var pl2 = '';
                     if (a2 && b2 && c2) {
                         pl2 = 'A:'+parseFloat(a2).toFixed(2)+' B:'+parseFloat(b2).toFixed(2)+' C:'+parseFloat(c2).toFixed(2)+' | '+(parseFloat(lastC2)>parseFloat(c2)?'↑第三笔偏多':'↓第三笔偏空');
+                    } else {
+                        pl2 = 'N 型结构待确认（数据不足以标记ABC）';
                     }
                     document.getElementById('kpPrice').textContent = pl2;
                     document.getElementById('kpTime').textContent = d2.bars.length + '根K线 | 最新:' + lastC2;
