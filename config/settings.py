@@ -134,7 +134,7 @@ COLOR_BLUE = "BLUE"
 SWING_WINDOWS = {
     "3m": 3,
     "15m": 3,
-    "1h": 4,
+    "1h": 3,
     "1d": 5,
     "1w": 2,
 }
