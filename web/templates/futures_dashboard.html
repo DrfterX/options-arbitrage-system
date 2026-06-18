@@ -3,10 +3,34 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>期货信号矩阵 · 多周期 N型 共振</title>
+<meta name="description" content="期货信号矩阵提供多周期 N 型结构共振信号扫描，覆盖 15分钟/1小时/日线/周线四个周期，辅助期货交易决策。">
+<meta property="og:title" content="期货信号矩阵 | 多周期N型结构共振扫描 — 实时期货交易信号">
+<meta property="og:description" content="期货信号矩阵提供多周期 N 型结构共振信号扫描，覆盖 15分钟/1小时/日线/周线四个周期，辅助期货交易决策。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://futures.drifter.indevs.in">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="期货信号矩阵 | 多周期N型结构共振扫描 — 实时期货交易信号">
+<meta name="twitter:description" content="期货信号矩阵提供多周期 N 型结构共振信号扫描，覆盖 15分钟/1小时/日线/周线四个周期，辅助期货交易决策。">
+<title>期货信号矩阵 | 多周期N型结构共振扫描 — 实时期货交易信号</title>
 <link rel="stylesheet" href="/static/style.css">
 <link rel="stylesheet" href="/static/futures.css">
 <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "期货信号矩阵",
+  "description": "期货信号矩阵提供多周期 N 型结构共振信号扫描，覆盖 15分钟/1小时/日线/周线四个周期，辅助期货交易决策。",
+  "applicationCategory": "FinanceApplication",
+  "operatingSystem": "Any",
+  "browserRequirements": "Requires JavaScript",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  }
+}
+</script>
 <style>
 /* ─── Futures-specific overrides ─── */
 .topbar { position: relative; }
@@ -309,9 +333,137 @@
 .skeleton-chart .sk-y-grid .sk-grid-line {
   height: 1px;
   width: 100%;
-  background: rgba(79,91,128,.06);
+  /* ── First-visit Welcome Guide ── */
+.welcome-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  background: rgba(6, 8, 14, .85);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: wo-fadein .4s var(--ease-out);
 }
-
+@keyframes wo-fadein {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.welcome-modal {
+  max-width: 420px;
+  width: 100%;
+  background: var(--card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  padding: 28px 24px 22px;
+  position: relative;
+  animation: wo-slidein .35s var(--ease-out);
+}
+@keyframes wo-slidein {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.welcome-modal::before {
+  content: '';
+  position: absolute;
+  top: -50px;
+  right: -30px;
+  width: 140px;
+  height: 140px;
+  background: radial-gradient(circle, rgba(240, 180, 41, .06) 0%, transparent 70%);
+  pointer-events: none;
+}
+.wm-title {
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: .06em;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.wm-title .accent { color: var(--brand); }
+.wm-sub {
+  font-size: .65rem;
+  color: var(--text3);
+  margin-bottom: 20px;
+  line-height: 1.5;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.wm-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.wm-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  background: rgba(14, 17, 24, .35);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  transition: border-color .2s var(--ease-out);
+}
+.wm-step:hover {
+  border-color: var(--border-light);
+}
+.wm-step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--brand-bg);
+  border: 1px solid rgba(240, 180, 41, .2);
+  color: var(--brand);
+  font-size: .6rem;
+  font-weight: 700;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.wm-step-body {
+  flex: 1;
+  min-width: 0;
+}
+.wm-step-title {
+  font-size: .68rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+.wm-step-desc {
+  font-size: .58rem;
+  color: var(--text3);
+  line-height: 1.4;
+}
+.wm-dismiss {
+  display: flex;
+  justify-content: center;
+}
+.wm-dismiss-btn {
+  padding: 8px 28px;
+  background: var(--brand-bg);
+  border: 1px solid rgba(240, 180, 41, .25);
+  border-radius: var(--radius-md);
+  color: var(--brand);
+  font-size: .7rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all .2s var(--ease-out);
+  font-family: var(--font-ui);
+  letter-spacing: .04em;
+  width: 100%;
+}
+.wm-dismiss-btn:hover {
+  background: var(--brand);
+  color: #000;
+  box-shadow: 0 2px 16px rgba(240, 180, 41, .15);
+}
 </style>
 </head>
 <body>
@@ -389,6 +541,40 @@
 </style>
 
 <div class="app">
+
+<!-- ─── First-visit Welcome Guide ─── -->
+<div class="welcome-overlay" id="welcomeOverlay" style="display:none;">
+  <div class="welcome-modal">
+    <div class="wm-title"><span class="accent">▣</span> 欢迎来到期货信号矩阵</div>
+    <div class="wm-sub">多周期 N 型结构共振扫描 · 首次使用？3 步快速上手</div>
+    <div class="wm-steps">
+      <div class="wm-step">
+        <span class="wm-step-num">1</span>
+        <div class="wm-step-body">
+          <div class="wm-step-title">🔥 多周期信号矩阵</div>
+          <div class="wm-step-desc">4 周期（15分钟/1小时/日线/周线）N 型结构共振网格，点击色块查看 K 线 + ABC 标注</div>
+        </div>
+      </div>
+      <div class="wm-step">
+        <span class="wm-step-num">2</span>
+        <div class="wm-step-body">
+          <div class="wm-step-title">📡 N 型结构实时信号</div>
+          <div class="wm-step-desc">活跃 N 型结构卡片列表，显示方向/评分/ABC 三点的持有周期</div>
+        </div>
+      </div>
+      <div class="wm-step">
+        <span class="wm-step-num">3</span>
+        <div class="wm-step-body">
+          <div class="wm-step-title">🛡️ SmartFilter 防火墙</div>
+          <div class="wm-step-desc">智能信号过滤系统，自动抑制低质量信号，查看通过率与抑制原因</div>
+        </div>
+      </div>
+    </div>
+    <div class="wm-dismiss">
+      <button class="wm-dismiss-btn" onclick="dismissWelcome()">开始使用 →</button>
+    </div>
+  </div>
+</div>
 
 <!-- ─── TOPBAR ─── -->
 <div class="topbar">
@@ -1613,6 +1799,18 @@ document.addEventListener('visibilitychange', function() {
 })();
 </script>
 <script>
+/* ── 首次访问引导 ── */
+function dismissWelcome() {
+  localStorage.setItem('futures_onboarded', '1');
+  document.getElementById('welcomeOverlay').style.display = 'none';
+}
+(function() {
+  if (!localStorage.getItem('futures_onboarded')) {
+    var el = document.getElementById('welcomeOverlay');
+    if (el) el.style.display = '';
+  }
+})();
+
 /* ── 密度切换 ── */
 (function(){var b=document.getElementById('densityBtn'),d=localStorage.getItem('density');if(d){document.body.setAttribute('data-density',d);if(b)b.textContent='▣ '+(d==='compact'?'紧凑':'舒适')}window.toggleDensity=function(){var c=document.body.getAttribute('data-density'),n=c==='compact'?'comfortable':'compact';document.body.setAttribute('data-density',n);localStorage.setItem('density',n);if(b)b.textContent='▣ '+(n==='compact'?'紧凑':'舒适')}})();
 </script>

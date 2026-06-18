@@ -3,10 +3,34 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>期权信号仪表盘 · IV 状态监控</title>
+<meta name="description" content="期权信号仪表盘提供 IV 百分位柱状图、期权策略评分排序、Theta/Delta 等希腊值分析，监控期权交易机会。">
+<meta property="og:title" content="期权信号仪表盘 | IV百分位与策略评分 — 期权交易信号监控">
+<meta property="og:description" content="期权信号仪表盘提供 IV 百分位柱状图、期权策略评分排序、Theta/Delta 等希腊值分析，监控期权交易机会。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://options.drifter.indevs.in">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="期权信号仪表盘 | IV百分位与策略评分 — 期权交易信号监控">
+<meta name="twitter:description" content="期权信号仪表盘提供 IV 百分位柱状图、期权策略评分排序、Theta/Delta 等希腊值分析，监控期权交易机会。">
+<title>期权信号仪表盘 | IV百分位与策略评分 — 期权交易信号监控</title>
 <link rel="stylesheet" href="/static/style.css">
 <link rel="stylesheet" href="/static/options.css">
 <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "期权信号仪表盘",
+  "description": "期权信号仪表盘提供 IV 百分位柱状图、期权策略评分排序、Theta/Delta 等希腊值分析，监控期权交易机会。",
+  "applicationCategory": "FinanceApplication",
+  "operatingSystem": "Any",
+  "browserRequirements": "Requires JavaScript",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  }
+}
+</script>
 <style>
 /* ─── Options-specific overrides ─── */
 .topbar::after {
@@ -607,6 +631,138 @@
   animation: skeleton-shimmer 1.5s ease-in-out infinite;
   animation-delay: .4s;
 }
+
+/* ── First-visit Welcome Guide ── */
+.welcome-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  background: rgba(6, 8, 14, .85);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: wo-fadein .4s var(--ease-out);
+}
+@keyframes wo-fadein {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.welcome-modal {
+  max-width: 420px;
+  width: 100%;
+  background: var(--card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  padding: 28px 24px 22px;
+  position: relative;
+  animation: wo-slidein .35s var(--ease-out);
+}
+@keyframes wo-slidein {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.welcome-modal::before {
+  content: '';
+  position: absolute;
+  top: -50px;
+  right: -30px;
+  width: 140px;
+  height: 140px;
+  background: radial-gradient(circle, rgba(240, 180, 41, .06) 0%, transparent 70%);
+  pointer-events: none;
+}
+.wm-title {
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: .06em;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.wm-title .accent { color: var(--brand); }
+.wm-sub {
+  font-size: .65rem;
+  color: var(--text3);
+  margin-bottom: 20px;
+  line-height: 1.5;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.wm-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.wm-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  background: rgba(14, 17, 24, .35);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  transition: border-color .2s var(--ease-out);
+}
+.wm-step:hover {
+  border-color: var(--border-light);
+}
+.wm-step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--brand-bg);
+  border: 1px solid rgba(240, 180, 41, .2);
+  color: var(--brand);
+  font-size: .6rem;
+  font-weight: 700;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.wm-step-body {
+  flex: 1;
+  min-width: 0;
+}
+.wm-step-title {
+  font-size: .68rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+.wm-step-desc {
+  font-size: .58rem;
+  color: var(--text3);
+  line-height: 1.4;
+}
+.wm-dismiss {
+  display: flex;
+  justify-content: center;
+}
+.wm-dismiss-btn {
+  padding: 8px 28px;
+  background: var(--brand-bg);
+  border: 1px solid rgba(240, 180, 41, .25);
+  border-radius: var(--radius-md);
+  color: var(--brand);
+  font-size: .7rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all .2s var(--ease-out);
+  font-family: var(--font-ui);
+  letter-spacing: .04em;
+  width: 100%;
+}
+.wm-dismiss-btn:hover {
+  background: var(--brand);
+  color: #000;
+  box-shadow: 0 2px 16px rgba(240, 180, 41, .15);
+}
 </style>
 </head>
 <body>
@@ -647,6 +803,40 @@
 </div>
 
 <div class="app">
+
+<!-- ─── First-visit Welcome Guide ─── -->
+<div class="welcome-overlay" id="welcomeOverlay" style="display:none;">
+  <div class="welcome-modal">
+    <div class="wm-title"><span class="accent">▣</span> 欢迎来到期权信号仪表盘</div>
+    <div class="wm-sub">IV 百分位 × 策略评分 · 首次使用？3 步快速上手</div>
+    <div class="wm-steps">
+      <div class="wm-step">
+        <span class="wm-step-num">1</span>
+        <div class="wm-step-body">
+          <div class="wm-step-title">📈 IV 百分位柱状图</div>
+          <div class="wm-step-desc">180 天隐含波动率百分位监控，品种代码 + 中文名显示，快速识别 IV 极端高/低机会</div>
+        </div>
+      </div>
+      <div class="wm-step">
+        <span class="wm-step-num">2</span>
+        <div class="wm-step-body">
+          <div class="wm-step-title">🟡 期权策略信号表</div>
+          <div class="wm-step-desc">7 维度评分排序（Θ/V/胜率/区间/效率/Δ/IV），点击详情图标查看完整评分分解</div>
+        </div>
+      </div>
+      <div class="wm-step">
+        <span class="wm-step-num">3</span>
+        <div class="wm-step-body">
+          <div class="wm-step-title">📊 策略卡片</div>
+          <div class="wm-step-desc">策略视觉卡片，快速浏览评分、Delta、Theta，筛选高胜率期权机会</div>
+        </div>
+      </div>
+    </div>
+    <div class="wm-dismiss">
+      <button class="wm-dismiss-btn" onclick="dismissWelcome()">开始使用 →</button>
+    </div>
+  </div>
+</div>
 
 <!-- ─── TOPBAR ─── -->
 <div class="topbar">
@@ -1468,6 +1658,18 @@ setInterval(function() {
 }, 300000); // 5 minutes
 </script>
 <script>
+/* ── 首次访问引导 ── */
+function dismissWelcome() {
+  localStorage.setItem('options_onboarded', '1');
+  document.getElementById('welcomeOverlay').style.display = 'none';
+}
+(function() {
+  if (!localStorage.getItem('options_onboarded')) {
+    var el = document.getElementById('welcomeOverlay');
+    if (el) el.style.display = '';
+  }
+})();
+
 /* ── 密度切换 ── */
 (function(){var b=document.getElementById('densityBtn'),d=localStorage.getItem('density');if(d){document.body.setAttribute('data-density',d);if(b)b.textContent='▣ '+(d==='compact'?'紧凑':'舒适')}window.toggleDensity=function(){var c=document.body.getAttribute('data-density'),n=c==='compact'?'comfortable':'compact';document.body.setAttribute('data-density',n);localStorage.setItem('density',n);if(b)b.textContent='▣ '+(n==='compact'?'紧凑':'舒适')}})();
 </script>
