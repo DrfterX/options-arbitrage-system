@@ -1339,6 +1339,12 @@ body {
   --space-md: 6px;
   --space-lg: 10px;
   --space-xl: 16px;
+  --space-1: 2px;
+  --space-2: 4px;
+  --space-3: 8px;
+  --space-4: 12px;
+  --space-5: 18px;
+  --space-6: 24px;
 }
 [data-density="comfortable"] {
   --card-pad: 16px;
@@ -1347,6 +1353,12 @@ body {
   --space-md: 12px;
   --space-lg: 20px;
   --space-xl: 32px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
 }
 
 /* ── 密度切换按钮 ── */
@@ -1490,3 +1502,247 @@ table tbody tr {
   color: #000;
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   B.4.3 — 微交互打磨：Stagger Reveal / Hover 增强 / 数字过渡
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── 1. Stagger reveal: 卡片入场渐显淡入 ── */
+@keyframes card-enter {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* 通用入场动画：所有卡片型元素首次渲染时渐显 */
+.card,
+.pos-card,
+.option-card,
+.sector-card,
+.health-card,
+.ht-card,
+.stat-item,
+.fs-card,
+.ps-card,
+.pc-card,
+.ns-card,
+.bt-stat,
+.admin-card,
+.portal-card,
+.pricing-card,
+.stat-card {
+  animation: card-enter .35s var(--ease-out) both;
+}
+
+/* ── Stagger delays: 信号卡片网格 (40ms 阶梯) ── */
+.cards-section .grid > .card:nth-child(1)  { animation-delay: 0s; }
+.cards-section .grid > .card:nth-child(2)  { animation-delay: .04s; }
+.cards-section .grid > .card:nth-child(3)  { animation-delay: .08s; }
+.cards-section .grid > .card:nth-child(4)  { animation-delay: .12s; }
+.cards-section .grid > .card:nth-child(5)  { animation-delay: .16s; }
+.cards-section .grid > .card:nth-child(6)  { animation-delay: .20s; }
+.cards-section .grid > .card:nth-child(7)  { animation-delay: .24s; }
+.cards-section .grid > .card:nth-child(8)  { animation-delay: .28s; }
+.cards-section .grid > .card:nth-child(9)  { animation-delay: .32s; }
+.cards-section .grid > .card:nth-child(10) { animation-delay: .36s; }
+.cards-section .grid > .card:nth-child(11) { animation-delay: .40s; }
+.cards-section .grid > .card:nth-child(12) { animation-delay: .44s; }
+.cards-section .grid > .card:nth-child(13) { animation-delay: .48s; }
+.cards-section .grid > .card:nth-child(14) { animation-delay: .52s; }
+.cards-section .grid > .card:nth-child(15) { animation-delay: .56s; }
+.cards-section .grid > .card:nth-child(16) { animation-delay: .60s; }
+.cards-section .grid > .card:nth-child(17) { animation-delay: .64s; }
+.cards-section .grid > .card:nth-child(18) { animation-delay: .68s; }
+.cards-section .grid > .card:nth-child(19) { animation-delay: .72s; }
+.cards-section .grid > .card:nth-child(20) { animation-delay: .76s; }
+
+/* ── Stagger delays: 持仓卡片网格 ── */
+.pos-open-grid > .pos-card:nth-child(1)  { animation-delay: 0s; }
+.pos-open-grid > .pos-card:nth-child(2)  { animation-delay: .06s; }
+.pos-open-grid > .pos-card:nth-child(3)  { animation-delay: .12s; }
+.pos-open-grid > .pos-card:nth-child(4)  { animation-delay: .18s; }
+.pos-open-grid > .pos-card:nth-child(5)  { animation-delay: .24s; }
+.pos-open-grid > .pos-card:nth-child(6)  { animation-delay: .30s; }
+.pos-open-grid > .pos-card:nth-child(7)  { animation-delay: .36s; }
+.pos-open-grid > .pos-card:nth-child(8)  { animation-delay: .42s; }
+.pos-open-grid > .pos-card:nth-child(9)  { animation-delay: .48s; }
+.pos-open-grid > .pos-card:nth-child(10) { animation-delay: .54s; }
+.pos-open-grid > .pos-card:nth-child(11) { animation-delay: .60s; }
+.pos-open-grid > .pos-card:nth-child(12) { animation-delay: .66s; }
+
+/* ── Stagger delays: 健康检查网格 ── */
+.health-grid > .health-card:nth-child(1)  { animation-delay: 0s; }
+.health-grid > .health-card:nth-child(2)  { animation-delay: .04s; }
+.health-grid > .health-card:nth-child(3)  { animation-delay: .08s; }
+.health-grid > .health-card:nth-child(4)  { animation-delay: .12s; }
+.health-grid > .health-card:nth-child(5)  { animation-delay: .16s; }
+.health-grid > .health-card:nth-child(6)  { animation-delay: .20s; }
+.health-grid > .health-card:nth-child(7)  { animation-delay: .24s; }
+.health-grid > .health-card:nth-child(8)  { animation-delay: .28s; }
+.health-grid > .health-card:nth-child(9)  { animation-delay: .32s; }
+.health-grid > .health-card:nth-child(10) { animation-delay: .36s; }
+
+/* ── Stagger delays: 统计卡片行 ── */
+.stats-bar > .stat-item:nth-child(1)  { animation-delay: 0s; }
+.stats-bar > .stat-item:nth-child(2)  { animation-delay: .04s; }
+.stats-bar > .stat-item:nth-child(3)  { animation-delay: .08s; }
+.stats-bar > .stat-item:nth-child(4)  { animation-delay: .12s; }
+.stats-bar > .stat-item:nth-child(5)  { animation-delay: .16s; }
+.stats-bar > .stat-item:nth-child(6)  { animation-delay: .20s; }
+.stats-bar > .stat-item:nth-child(7)  { animation-delay: .24s; }
+.stats-bar > .stat-item:nth-child(8)  { animation-delay: .28s; }
+
+/* ── Stagger delays: 持仓统计卡片 ── */
+.pos-stats > .ps-card:nth-child(1)  { animation-delay: 0s; }
+.pos-stats > .ps-card:nth-child(2)  { animation-delay: .04s; }
+.pos-stats > .ps-card:nth-child(3)  { animation-delay: .08s; }
+.pos-stats > .ps-card:nth-child(4)  { animation-delay: .12s; }
+.pos-stats > .ps-card:nth-child(5)  { animation-delay: .16s; }
+.pos-stats > .ps-card:nth-child(6)  { animation-delay: .20s; }
+
+/* ── Stagger delays: 选项卡片 ── */
+.options-section > .option-card:nth-child(1) { animation-delay: 0s; }
+.options-section > .option-card:nth-child(2) { animation-delay: .05s; }
+.options-section > .option-card:nth-child(3) { animation-delay: .10s; }
+.options-section > .option-card:nth-child(4) { animation-delay: .15s; }
+.options-section > .option-card:nth-child(5) { animation-delay: .20s; }
+
+/* ── Stagger delays: 板块卡片 ── */
+.sector-stats > .sector-card:nth-child(1)  { animation-delay: 0s; }
+.sector-stats > .sector-card:nth-child(2)  { animation-delay: .04s; }
+.sector-stats > .sector-card:nth-child(3)  { animation-delay: .08s; }
+.sector-stats > .sector-card:nth-child(4)  { animation-delay: .12s; }
+.sector-stats > .sector-card:nth-child(5)  { animation-delay: .16s; }
+.sector-stats > .sector-card:nth-child(6)  { animation-delay: .20s; }
+.sector-stats > .sector-card:nth-child(7)  { animation-delay: .24s; }
+.sector-stats > .sector-card:nth-child(8)  { animation-delay: .28s; }
+.sector-stats > .sector-card:nth-child(9)  { animation-delay: .32s; }
+.sector-stats > .sector-card:nth-child(10) { animation-delay: .36s; }
+
+/* ── Stagger delays: 健康表格卡片 ── */
+.ht-grid > .ht-card:nth-child(1)  { animation-delay: 0s; }
+.ht-grid > .ht-card:nth-child(2)  { animation-delay: .03s; }
+.ht-grid > .ht-card:nth-child(3)  { animation-delay: .06s; }
+.ht-grid > .ht-card:nth-child(4)  { animation-delay: .09s; }
+.ht-grid > .ht-card:nth-child(5)  { animation-delay: .12s; }
+.ht-grid > .ht-card:nth-child(6)  { animation-delay: .15s; }
+.ht-grid > .ht-card:nth-child(7)  { animation-delay: .18s; }
+.ht-grid > .ht-card:nth-child(8)  { animation-delay: .21s; }
+.ht-grid > .ht-card:nth-child(9)  { animation-delay: .24s; }
+.ht-grid > .ht-card:nth-child(10) { animation-delay: .27s; }
+.ht-grid > .ht-card:nth-child(11) { animation-delay: .30s; }
+.ht-grid > .ht-card:nth-child(12) { animation-delay: .33s; }
+
+/* ── Stagger delays: 筛选统计 ── */
+.filter-stats > .fs-card:nth-child(1) { animation-delay: 0s; }
+.filter-stats > .fs-card:nth-child(2) { animation-delay: .04s; }
+.filter-stats > .fs-card:nth-child(3) { animation-delay: .08s; }
+.filter-stats > .fs-card:nth-child(4) { animation-delay: .12s; }
+.filter-stats > .fs-card:nth-child(5) { animation-delay: .16s; }
+.filter-stats > .fs-card:nth-child(6) { animation-delay: .20s; }
+
+/* ── 避免 skeleton loading 状态下入场动画闪烁 ── */
+.skeleton {
+  animation: none !important;
+}
+
+/* ── Stagger delays: premium 卡片 ── */
+.pc-grid > .pc-card:nth-child(1) { animation-delay: 0s; }
+.pc-grid > .pc-card:nth-child(2) { animation-delay: .06s; }
+.pc-grid > .pc-card:nth-child(3) { animation-delay: .12s; }
+.pc-grid > .pc-card:nth-child(4) { animation-delay: .18s; }
+.pc-grid > .pc-card:nth-child(5) { animation-delay: .24s; }
+.pc-grid > .pc-card:nth-child(6) { animation-delay: .30s; }
+
+/* ── prefers-reduced-motion: 禁用入场动画 ── */
+@media (prefers-reduced-motion: reduce) {
+  .card, .pos-card, .option-card, .sector-card,
+  .health-card, .ht-card, .stat-item, .fs-card,
+  .ps-card, .pc-card, .ns-card, .bt-stat,
+  .admin-card, .portal-card, .pricing-card, .stat-card {
+    animation: none !important;
+  }
+}
+
+/* ── 2. 数字动态过渡 — CSS 数值动画框架 ── */
+
+/* 当 JS 更新数值时提供平滑 opacity 过渡 */
+.stat-item .value,
+.ps-card .ps-value,
+.fs-card .fs-value,
+.health-card .h-value,
+.bt-val,
+.scv,
+.res-val {
+  transition: opacity var(--transition-base);
+}
+
+/* ── @property 数值动画框架 ── */
+@supports (--css: @property) {
+  @property --num-to {
+    syntax: "<integer>";
+    initial-value: 0;
+    inherits: false;
+  }
+  @property --num-from {
+    syntax: "<integer>";
+    initial-value: 0;
+    inherits: false;
+  }
+
+  @keyframes num-count-up {
+    from { --num-to: var(--num-from, 0); }
+    to   { --num-to: var(--num-target, 100); }
+  }
+
+  .num-animate {
+    animation: num-count-up .6s var(--ease-out) forwards;
+    counter-reset: num var(--num-to);
+  }
+  .num-animate::before {
+    content: counter(num);
+  }
+
+  @keyframes num-count-down {
+    from { --num-to: var(--num-from, 100); }
+    to   { --num-to: var(--num-target, 0); }
+  }
+  .num-animate.down {
+    animation-name: num-count-down;
+  }
+}
+
+/* ── 3. Hover 增强：统一阴影 + 微动 ── */
+
+/* 所有卡片 hover 时增加统一阴影和轻微 lift */
+.card:hover,
+.pos-card:hover,
+.sector-card:hover,
+.health-card:hover,
+.ht-card:hover,
+.option-card:hover,
+.stat-item:hover,
+.fs-card:hover,
+.ps-card:hover,
+.pc-card:hover,
+.bt-stat:hover,
+.filter-section:hover,
+.matrix-section:hover,
+.iv-section:hover,
+.cards-section:hover {
+  box-shadow: var(--hover-shadow);
+}
+
+.card:hover,
+.pos-card:hover,
+.sector-card:hover,
+.health-card:hover,
+.ht-card:hover,
+.option-card:hover,
+.ps-card:hover,
+.pc-card:hover {
+  transform: var(--hover-lift);
+}
+
+/* signal-cell hover 已经够强，只微调阴影 */
+.signal-cell:hover {
+  box-shadow: 0 4px 16px rgba(0,0,0,.5);
+}

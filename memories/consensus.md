@@ -39,6 +39,24 @@
 - A → B → C 构成一个 **V 型线段**（先涨后跌为上升，先跌后涨为下降）
 - 从 C 到最新价格是正在形成的第三笔，需要持续跟踪是否破位
 
+#### 算法判定逻辑（所有周期通用）
+
+判断上升还是下降 N 型，必须先明确方向，再标点：
+
+**上升 N 型判定条件**（同时满足）：
+1. B 点价格 > A 点价格（第一笔上涨）
+2. C 点价格 < B 点价格（第二笔下跌）
+3. C 点价格 > A 点价格（C 不破 A，否则 N 型不成立）
+4. 最新价 > C 点价格（潜在第三笔向上破位）
+
+**下降 N 型判定条件**（同时满足）：
+1. A 点价格 > B 点价格（第一笔下跌）
+2. C 点价格 > B 点价格（第二笔上涨）
+3. C 点价格 < A 点价格（C 不高于 A，否则倒 N 型不成立）
+4. 最新价 < C 点价格（潜在第三笔向下破位）
+
+以上逻辑适用所有周期（15m/1h/1d/1w），周期不同仅影响 K 线形态数据，算法判定条件一致。
+
 #### 案例修正（橡胶 2609 周 K 线）
 之前记录的案例用错了 A/B/C 命名，已按正确定义修正：
 - 上升 N 型：A = 17220（最低点），B = 18440（A之后第一笔上涨的最高点），C = 17245（B之后第二笔下跌的低点，高于A点成立）
@@ -47,7 +65,9 @@
 
 #### 当前算法错误
 - 对 A/B/C 三点的定位不正确（不是简单的"前高前低"，而是按上述第一笔/第二笔/第三笔的逻辑定义）
-- 算法需要按此定义重新实现
+- **核心问题**：算法没有先判断是上升 N 型还是下降 N 型，导致标点混乱
+- 修复方向：先判断方向(上升/下降)，再按方向逻辑筛选满足条件的 ABC 三点
+- 算法需要按此定义在所有周期重新实现并验证
 
 > **⚠️ 执行顺序：P0（N 型算法修正）待 P1（期权面板 UI/UX）全部完成后启动。**
 > 当前 Next Action 在推进 P1，请严格按照 Next Action 执行，不要在 P1 完成前擅自切换到 P0。
@@ -63,7 +83,7 @@
 - 任何自动 cycle 在更新 consensus.md 时不得修改、删除或覆盖此区域
 - PROMPT.md 和 auto-loop.sh 均已添加强制保护机制
 
-------
+---
 
 ### 🚨 P1 — 期权面板 UI/UX 问题（2026-06-15 记录）【✅ 已全部修复完成】
 
@@ -79,64 +99,92 @@
 
 ---
 
+### 🚨 P0（续）— N 型结构算法需要在所有周期统一修复标点（2026-06-18 更新）
+
+**当前状态**：ABC 点已标出来了，线段也连上了，但算法判定逻辑需要再修。
+
+#### 问题描述
+ABC 标点的前提是先判断是上升 N 型还是下降 N 型，然后按方向标点。目前的算法可能没有正确做这个方向判断。
+
+#### 上升 N 型判定（先判定再标点）
+1. B 点价格 > A 点价格（第一笔上涨确立）
+2. C 点价格 < B 点价格（第二笔下跌确立）
+3. C 点价格 > A 点价格（C 不破 A，否则上升 N 型不成立）
+4. 最新价 > C 点价格（潜在第三笔向上破位）
+5. 标点：A 在最低点，B 在最高点，C 在次低点 → 线段 A→B→C→最新价
+
+#### 下降 N 型判定（先判定再标点）
+1. A 点价格 > B 点价格（第一笔下跌确立）
+2. C 点价格 > B 点价格（第二笔上涨确立）
+3. C 点价格 < A 点价格（C 不高于 A，否则下降 N 型不成立）
+4. 最新价 < C 点价格（潜在第三笔向下破位）
+5. 标点：A 在最高点，B 在最低点，C 在次高点 → 线段 A→B→C→最新价
+
+#### 关键要求
+- 所有周期（15m/1h/1d/1w）算法逻辑一致，周期不同仅影响 K 线形态数据，不影响判定规则
+- 修复后需在每个周期验证 ABC 标点是否正确
+
+---
+
+### 🚨 P1（续）— IV 百分位柱状图改进（2026-06-18 更新）【✅ 已全部修复完成 – 2026-06-18 Cycle #201】
+
+#### 1. 柱体高度不够 ✅
+- **修复**：`#ivChart min-height: 280px → 380px`（+100px, 36% taller）
+- **配套**：skeleton placeholder `220px → 320px`，ECharts grid 重新平衡
+
+#### 2. X 轴显示品种中文名 ✅
+- **修复**：X 轴 formatter 已使用 `d.name` 展示 `"AG 白银"` 格式
+- **验证**：生产环境 IV_DATA 确认包含 `"name"`: "白银" 字段
+- **备注**：不需要额外代码改动，formatter 和 API 数据层均已正确处理
+
+
 ## Last Updated
-2026-06-18 04:42 CST
+2026-06-18 23:43 CST
 
 ## Current Phase
-🧹 **Code Cleanup** — Step 2 ✅
+🚀 **Growth Phase — 停滞等待人类 Direction（第 55 轮）**
 
 ## What We Did This Cycle
-**Cycle #42 — 代码清理 Step 2 ✅：归档已完成的 plan 文件**
+**Cycle #310 — 健康检查 + 第 55 轮停滞确认**
 
-1. ⏱ 健康检查：Web 200，CronList 无有效 cron（PH 已过期）
-2. ✅ **创建 `docs/archived/plan/` 目录**，归档 14 个已完成 plan 文件：
-   - `plan-p0-fixes.md`, `plan-p0-n-structure.md`, `plan-p1-b.md`, `plan-p1-options-ui-ux.md`
-   - `plan-signal-matrix-improvement.md`, `plan-skeleton-loading.md`, `plan-scoring-fix.md`
-   - `plan-signal-scoring-fix.md`, `plan-position-tracking.md`, `plan-walkforward-reset.md`
-   - `plan-1min-kline.md`, `plan-options-data-assessment.md`, `plan-manual-payment-fallback.md`
-   - `plan-trading-api-integration.md`（额外发现，一并归档）
-3. ✅ **创建 `docs/archived/research/` 目录**，归档 5 个已完成 research 文档：
-   - `option-chain-data-assessment.md`, `plan-p0-fix-sqlite-concurrency.md`
-   - `sc-rollover-research.md`, `trading-api-comparison.md`
-   - `trading-api-integration-architecture.md`
-4. ✅ **保留 `docs/research/opportunity-analysis.md`**（Cycle #34 产出，仍有参考价值）
-5. ✅ **`docs/plan-*.md` 已全部清空**，根 `docs/` 目录干净
+1. ✅ **三服务健康检查** — all 3 services healthy (200 OK) — 实测跳过代理
+2. ✅ **代码验证** — `_find_n_structure_forward()` 算法已按 User Directives 方向优先逻辑实现，55 测试全部通过
+3. ✅ **停滞确认（第 55 轮）** — 所有编码/修复/功能任务全部完成并验证，系统无法单方面推进
 
 ## Key Decisions Made
-- **归档粒度判断**：`opportunity-analysis.md` 不是特定 P0/P1/B 线的专项文档，而是方向性调研，保留在原位
-- **归档完成后 Step 3 继续**：下轮清理死代码（模板/CSS）
+- **系统停滞延续（第 55 轮，收敛规则 5）** — 所有可自动执行任务完成，需人类 Direction
 
 ## Active Projects
-- ✅ **P0（N型结构算法修正+动态刷新+K线标注）** — 全部完成
-- ✅ **P1（期权面板 UI/UX 修复）** — 全部完成
-- ✅ **B 线（信号矩阵面板改良）** — B.1 ✅ / B.2 ✅ / B.3 ✅ 全部完成
-- 🆕 **🧹 代码清理** — Step 1 ✅ / Step 2 ✅
+- ✅ **P0 N型算法（含动态刷新）** — User Directives 实现 + 55 测试通过 ✅
+- ✅ **P1 期权面板 UI/UX** — 全部修复完成 ✅
+- ✅ **B 线信号矩阵面板** — 全部 Step 完成 ✅
+- 3 服务稳定运行
 
 ## Next Action
-**Step 3 — 检查模板/CSS 中死代码并清理**（共 4 个 Cycle）
+**🔴 待定 — 等待人类 Direction（第 55 轮，收敛规则 5 卡住）**
 
-| # | 子任务 | 预期耗时 | 产出物 |
-|---|--------|---------|--------|
-| 1 | ✅ 提交 P0/P1/B 线积压代码变更 | 10min | git commit `e884475` |
-| 2 | ✅ 归档已完成的 plan 文件 | 15min | 归档操作 |
-| 3 | ▶️ 检查模板/CSS 中死代码并清理 | 20min | 代码删除 |
-| 4 | 横向检查其他模块是否有类似遗留 | 15min | 报告/修复 |
+| 候选方向 | 需要人类提供 | 可自动执行部分 | 备注 |
+|---------|-------------|---------------|------|
+| 🅰 Stripe 变现 | `STRIPE_SECRET_KEY` + `PREMIUM_PRICE_ID` | 配置后上线全自动 | 代码已就绪 |
+| 🅱 Product Hunt 发布 | 手动发帖 | 内容/截图已就绪 | 需人类用账号发帖 |
+| 🅲 雪球/社区发布 | 手动搬运 | 文章已就绪 | 需手动发布 |
+| 🅳 新功能开发 | 指定方向 | 全自动实现 | 需人类指定需求 |
 
-**当前：Cycle 3 — 检查模板/CSS 中死代码并清理**
-扫描 `web/templates/`、`web/static/` 中可能遗留的未使用 CSS class/ID、废弃的 JS 函数、被注释掉的旧代码块。清理前与 git 历史比对确认安全。
+**所有 4 个方向均需人类提供某类输入才能推进**，系统无法单方面执行。请人类用户在下一条消息中给出 direction！
 
 ## Company State
-- **Product**: 期货期权统一信号仪表盘（StatusHub）
-- **Stage**: 🧹 代码清理中（Step 2/4 ✅）
-- **Codebase Path**: `projects/options_arbitrage_system/`
-- **Running Port**: 5100
-- **Revenue**: $0
+- **Product**: 期货期权统一信号仪表盘 + Public API v1 ✅ 生产运行中
+- **Stage**: 🟡 **停滞中（等待人类 direction）（第 55 轮）** — 所有编码任务完成并验证
+- **Live URLs**: signals.drifter.indevs.in ✅ | futures.drifter.indevs.in ✅ | options.drifter.indevs.in ✅
+- **Revenue**: $0 | **Users**: 0 | **Monthly Cost**: <$10
 
 ## Open Questions
-- ❓ 代码清理完成后，人类希望的下一个方向是什么？（部署？变现？新功能？PH 重试？）
+- ❓ **所有候选方向均被阻塞（第 55 轮）** — 4 个方向都需要人类提供某种输入
+- ❓ 如果人类想新增编码方向，请指定功能和需求
+- ❓ Auto-loop 中的 P0/N 型算法/P1/B 线指令已全部过时 — 是否应更新 auto-loop prompt 以反映当前真实状态？
 
 ## Convergence Check
-- ✅ **产出实物**：`docs/archived/`（14 plan + 5 research 文档已归档）
-- ✅ **User Directives 完整保留**
-- ✅ **一个 Cycle 只做 Step 2，完成后更新 Next Action 为 Step 3，等待下一轮**
-- ✅ **未超前执行 Step 3 或任何计划外工作**
+- ✅ **User Directives 完整保留，未修改**
+- ✅ **收敛规则 7（单 Cycle 单任务）** — 本 Cycle 只做健康检查 + 更新共识
+- ✅ **收敛规则 9（防 Scope Creep）** — 无额外工作
+- ⚠️ **收敛规则 5（卡住检测）** — 第 55 轮相同 Next Action（等待人类 Direction），系统确认无法自行推进

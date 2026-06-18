@@ -1077,6 +1077,116 @@ def api_health():
         return jsonify({"status": "error", "error": str(e)}), 500
 
 
+# ─── 数据采集 API ─────────────────────────────────────────────
+
+
+@app.route("/api/refresh", methods=["POST"])
+def api_refresh():
+    """触发全品种期货K线数据采集（AKShare）。
+
+    受管理员密码保护，用于 Railway cron job 定期触发。
+    采集所有活跃品种的 15m/1h/1d K线数据，完成后自动触发 N 型结构重算。
+
+    注意：全品种采集约需 90~150 秒（60 品种 × 3 周期 × 0.5s 间隔），
+    Railway cron 任务超时通常为 60s，因此本端点**不完全同步等待采集完成**。
+    - 第一阶段：立即返回 HTTP 202（已接受），
+      第二阶段：后台线程继续采集，完成后写入 DB。
+
+    对于非 Railway cron（手动触发），提供 `?sync=true` 参数，
+    将同步等待采集完成并返回完整统计。
+
+    POST JSON body:
+        password (str): 管理员密码。
+
+    Query params:
+        sync (bool): 是否同步等待（默认 false 异步返回）。
+        period (str): 周期，可选 '15m' / '1h' / '1d' / 'all'，默认 'all'。
+
+    Returns (同步):
+        {"status": "ok", "stats": {...}}
+    Returns (异步):
+        {"status": "accepted", "message": "采集任务已启动"}
+    """
+    import threading
+    import time as _time
+
+    data = request.get_json() or {}
+    password = data.get("password", request.args.get("password", ""))
+    sync = request.args.get("sync", "").lower() in ("true", "1", "yes")
+
+    if password != ADMIN_PASSWORD:
+        return jsonify({"error": "密码错误"}), 403
+
+    # 周期选择
+    period_arg = request.args.get("period", "all")
+    period_map = {"15m": "15", "1h": "60", "1d": "D"}
+    if period_arg != "all":
+        if period_arg not in period_map:
+            return jsonify({"error": f"无效周期: {period_arg}，可选: 15m/1h/1d/all"}), 400
+        period_map = {period_arg: period_map[period_arg]}
+
+    def _do_collect() -> dict:
+        """执行采集并返回统计。"""
+        from data.futures_collector import FuturesCollector
+        from config.contracts import ContractRegistry
+
+        start_ts = _time.time()
+        registry = ContractRegistry(str(DB_PATH))
+        collector = FuturesCollector(db, registry)
+        stats = collector.collect_all(
+            period_map=period_map,
+            trigger_restructure=True,
+        )
+        elapsed = _time.time() - start_ts
+
+        total_fetched = sum(
+            tf_stats.get("fetched", 0)
+            for sym_stats in stats.values()
+            for tf_stats in sym_stats.values()
+        )
+        total_saved = sum(
+            tf_stats.get("saved", 0)
+            for sym_stats in stats.values()
+            for tf_stats in sym_stats.values()
+        )
+
+        logger.info(
+            "数据采集完成: %d 品种, %d 获取, %d 新增保存, 耗时 %.0fs",
+            len(stats), total_fetched, total_saved, elapsed,
+        )
+
+        return {
+            "status": "ok",
+            "symbols_collected": len(stats),
+            "total_fetched": total_fetched,
+            "total_saved": total_saved,
+            "elapsed_seconds": round(elapsed, 1),
+            "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        }
+
+    if sync:
+        # 同步模式：等待采集完成
+        try:
+            result = _do_collect()
+            return jsonify(result)
+        except Exception as e:
+            logger.error("数据采集异常(同步): %s", e)
+            return jsonify({"error": str(e)}), 500
+    else:
+        # 异步模式：后台线程采集，立即返回 202
+        try:
+            t = threading.Thread(target=_do_collect, daemon=True)
+            t.start()
+            return jsonify({
+                "status": "accepted",
+                "message": "采集任务已启动，后台线程执行中",
+                "periods": list(period_map.keys()),
+            }), 202
+        except Exception as e:
+            logger.error("数据采集启动异常: %s", e)
+            return jsonify({"error": str(e)}), 500
+
+
 # ─── 回测 API ─────────────────────────────────────────────
 
 
