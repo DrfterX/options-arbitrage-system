@@ -1548,7 +1548,13 @@ function loadFuturesData() {
       });
       if (secHtml) document.getElementById('fs-sectors').innerHTML = secHtml;
     })
-    .catch(function(e) { /* silent */ });
+    .catch(function(e) {
+      // Loading failure — show dashes in stats
+      document.getElementById('fs-maxScore').textContent = '—';
+      document.getElementById('fs-long').textContent = '—';
+      document.getElementById('fs-short').textContent = '—';
+      document.getElementById('fs-total').textContent = '—';
+    });
 }
 
 // ── Options IV mini chart + top strats ──
@@ -1588,7 +1594,11 @@ function initIVMini() {
       // Resize with container
       window.addEventListener('resize', function() { chart.resize(); });
     })
-    .catch(function(e) { /* silent */ });
+    .catch(function(e) {
+      // Loading failure — show empty state in IV mini chart
+      var el = document.getElementById('ivMiniChart');
+      if (el) el.innerHTML = '<div style="text-align:center;padding:20px;font-size:.55rem;color:var(--text3);opacity:.5">IV 数据暂不可用</div>';
+    });
 }
 
 function loadOptionsStrats() {
@@ -1625,7 +1635,11 @@ function loadOptionsStrats() {
       });
       list.innerHTML = html;
     })
-    .catch(function(e) { /* silent */ });
+    .catch(function(e) {
+      // Loading failure — show error state in options strats list
+      var list = document.getElementById('optionsStrats');
+      if (list) list.innerHTML = '<div class="portal-empty"><div class="icon">⚠️</div><div>期权信号加载失败</div></div>';
+    });
 }
 
 // ── Health + summary ──
@@ -1647,7 +1661,13 @@ function loadHealth() {
         if (dotEl) dotEl.style.background = '#f04438';
       }
     })
-    .catch(function(e) { /* silent */ });
+    .catch(function(e) {
+      // Loading failure — show degraded health state
+      var statusEl = document.getElementById('healthStatus');
+      var dotEl = document.getElementById('healthDot');
+      if (statusEl) statusEl.textContent = '⚠️ 状态检测失败';
+      if (dotEl) dotEl.style.background = '#5a6173';
+    });
 }
 
 function loadSummary() {
@@ -1660,7 +1680,13 @@ function loadSummary() {
       if (badge) badge.textContent = cnt + ' 期货品种';
       if (footer) footer.textContent = cnt + ' 期货品种 · IV 监控中';
     })
-    .catch(function(e) { /* silent */ });
+    .catch(function(e) {
+      // Loading failure — show fallback text in badges
+      var badge = document.getElementById('totalBadge');
+      var footer = document.getElementById('footerBadge');
+      if (badge) badge.textContent = '数据暂不可用';
+      if (footer) footer.textContent = '数据暂不可用';
+    });
 }
 
 // ── First-visit Welcome Guide ──
