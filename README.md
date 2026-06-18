@@ -99,12 +99,11 @@
 
 ## Screenshots
 
-<!-- Screenshots to be added -->
 | Dashboard | Preview |
 |-----------|---------|
-| **Signal Matrix** | *🖼️ Screenshot coming soon* |
-| **Futures K-line** | *🖼️ Screenshot coming soon* |
-| **Options Dashboard** | *🖼️ Screenshot coming soon* |
+| **📊 Signal Matrix** | <img src="web/static/images/signals-dashboard.png" alt="Signal Matrix" width="360"/> |
+| **📈 Futures K-line** | <img src="web/static/images/futures-kline.png" alt="Futures K-line" width="360"/> |
+| **📉 Options Analytics** | <img src="web/static/images/options-analytics.png" alt="Options Analytics" width="360"/> |
 
 ---
 
