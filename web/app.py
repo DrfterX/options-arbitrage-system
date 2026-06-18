@@ -2066,6 +2066,15 @@ def api_request_trial():
 # 确保 session 表在应用启动时存在（在 gunicorn import 时执行）
 _ensure_session_table()
 
+# ─── 后台数据采集调度器 ─────────────────────────────
+# 作为 daemon 线程与 gunicorn worker 并行运行。
+# DB 级锁保证多 worker 下仅执行一次采集。
+from web.scheduler import start_scheduler
+try:
+    start_scheduler(db)
+except Exception as e:
+    logger.warning("调度器启动失败（非致命）: %s", e)
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5100))
     app.run(host="0.0.0.0", port=port, debug=False)
