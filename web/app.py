@@ -37,6 +37,13 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 db = Database(DB_PATH)
 
+# 自动初始化数据库表结构（幂等，container 首次启动时创建所有表）
+try:
+    db.init_all_tables()
+    logger.info("✅ 数据库表结构已就绪")
+except Exception as e:
+    logger.warning("数据库表初始化异常（非致命）: %s", e)
+
 # 管理员密码（从环境变量读取，默认值让人类可以立即使用）
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "autocompany2024")
 
@@ -1110,7 +1117,11 @@ def api_refresh():
     import threading
     import time as _time
 
-    data = request.get_json() or {}
+    # 兼容无 Content-Type 的 POST 请求（如 curl 测试）
+    try:
+        data = request.get_json(force=True) or {}
+    except Exception:
+        data = {}
     password = data.get("password", request.args.get("password", ""))
     sync = request.args.get("sync", "").lower() in ("true", "1", "yes")
 
