@@ -1408,9 +1408,24 @@
 }
 
 </style>
+
+<style id="design-tokens">
+/* ── Shared design tokens (spacing / shadow / transition / radius) ── */
+:root {
+  --space-1: 4px;  --space-2: 8px;  --space-3: 12px;
+  --space-4: 16px; --space-5: 24px; --space-6: 32px;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,.3);
+  --shadow-md: 0 4px 12px rgba(0,0,0,.35);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,.4);
+  --transition-fast: 150ms ease;
+  --transition-normal: 250ms ease;
+  --radius-xl: 14px;
+}
+</style>
+
 </head>
 <body>
-<div class="app">
+<div class="app portal-theme">
 
 <!-- ─── First-visit Welcome Guide ─── -->
 <div class="welcome-overlay" id="welcomeOverlay" style="display:none;">
@@ -1454,11 +1469,13 @@
       <span class="nav-tab active" data-tab="overview"><span class="nav-tab-icon">◈</span> 总览</span>
       <a href="https://futures.drifter.indevs.in" class="nav-tab"><span class="nav-tab-icon">📈</span> 期货</a>
       <a href="https://options.drifter.indevs.in" class="nav-tab"><span class="nav-tab-icon">📉</span> 期权</a>
+      <a href="/api/docs" class="nav-tab"><span class="nav-tab-icon">⎔</span> API</a>
       <span class="nav-tab premium-tab" data-tab="premium"><span class="nav-tab-icon">✦</span> Premium</span>
     </div>
     <button class="reg-btn" id="regBtn" onclick="showRegisterModal()"><span>注册</span></button>
     <span class="data-badge" id="totalBadge"><span class="skeleton" style="width:72px;height:.7em">&nbsp;</span></span>
     <span class="topbar-time">{{ now }}</span>
+    <button class="density-btn" onclick="toggleDensity()" title="切换显示密度" id="densityBtn">▣ 舒适</button>
   </div>
 </div>
 
@@ -2460,6 +2477,9 @@ function handleLogin() {
     .catch(function() { /* network error — keep token, try next time */ });
   }
 })();
+
+/* ── Density toggle (compact / comfortable) ── */
+(function(){var b=document.getElementById('densityBtn'),d=localStorage.getItem('density');if(d){document.body.setAttribute('data-density',d);if(b)b.textContent='▣ '+(d==='compact'?'紧凑':'舒适')}window.toggleDensity=function(){var c=document.body.getAttribute('data-density'),n=c==='compact'?'comfortable':'compact';document.body.setAttribute('data-density',n);localStorage.setItem('density',n);if(b)b.textContent='▣ '+(n==='compact'?'紧凑':'舒适')}})();
 </script>
 </body>
 </html>

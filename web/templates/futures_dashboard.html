@@ -637,7 +637,30 @@
   font-weight: 600;
 }
 .lm-toggle a:hover { text-decoration: underline; }
+
+/* Position panel error state — skeleton + light red hint */
+.pos-error {
+  outline: 1px solid rgba(240,100,100,.35);
+  background: rgba(240,100,100,.04);
+  border-radius: var(--radius-sm);
+  transition: outline .25s, background .25s;
+}
 </style>
+
+<style id="design-tokens">
+/* ── Shared design tokens (spacing / shadow / transition / radius) ── */
+:root {
+  --space-1: 4px;  --space-2: 8px;  --space-3: 12px;
+  --space-4: 16px; --space-5: 24px; --space-6: 32px;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,.3);
+  --shadow-md: 0 4px 12px rgba(0,0,0,.35);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,.4);
+  --transition-fast: 150ms ease;
+  --transition-normal: 250ms ease;
+  --radius-xl: 14px;
+}
+</style>
+
 </head>
 <body>
 
@@ -713,7 +736,7 @@
 .initial-skeleton .is-matrix-row:nth-child(8) { --i: 7; }
 </style>
 
-<div class="app">
+<div class="app futures-theme">
 
 <!-- ─── First-visit Welcome Guide ─── -->
 <div class="welcome-overlay" id="welcomeOverlay" style="display:none;">
@@ -757,6 +780,7 @@
       <a href="https://signals.drifter.indevs.in" class="nav-tab"><span class="nav-tab-icon">◈</span> 总览</a>
       <span class="nav-tab active"><span class="nav-tab-icon">📈</span> 期货</span>
       <a href="https://options.drifter.indevs.in" class="nav-tab"><span class="nav-tab-icon">📉</span> 期权</a>
+	      <a href="https://signals.drifter.indevs.in/api/docs" class="nav-tab"><span class="nav-tab-icon">⎔</span> API</a>
     </div>
     <span class="data-badge" id="symbolCount">{{ total_signals }} 品种</span>
     <span class="topbar-time">{{ now }}</span>
@@ -1240,6 +1264,8 @@ function loadFilterStats() {
   fetch('/api/filter-stats', { cache: 'no-cache' })
     .then(function(r) { return r.json(); })
     .then(function(stats) {
+      var fsStatsEl = document.getElementById('filterStats');
+      if (fsStatsEl) fsStatsEl.classList.remove('pos-error');
       var totalEl = document.getElementById('fs-total');
       var pushedEl = document.getElementById('fs-pushed');
       var suppressedEl = document.getElementById('fs-suppressed');
@@ -1256,13 +1282,18 @@ function loadFilterStats() {
         if (stats.total > 0) statusEl.style.color = 'var(--short)';
       }
     })
-    .catch(function(e) { /* silent */ });
+    .catch(function(e) {
+      var fsStatsEl = document.getElementById('filterStats');
+      if (fsStatsEl) fsStatsEl.classList.add('pos-error');
+    });
 }
 
 function loadFilterLog() {
   fetch('/api/filter-log?limit=15', { cache: 'no-cache' })
     .then(function(r) { return r.json(); })
     .then(function(log) {
+      var fsLogEl = document.getElementById('filterLog');
+      if (fsLogEl) fsLogEl.classList.remove('pos-error');
       var tbody = document.getElementById('fs-body');
       if (!tbody) return;
       if (!log || !log.length) {
@@ -1287,7 +1318,10 @@ function loadFilterLog() {
       });
       tbody.innerHTML = html;
     })
-    .catch(function(e) { /* silent */ });
+    .catch(function(e) {
+      var fsLogEl = document.getElementById('filterLog');
+      if (fsLogEl) fsLogEl.classList.add('pos-error');
+    });
 }
 
 loadFilterStats();
@@ -1699,7 +1733,13 @@ async function showKlinePopup(el) {
                     document.getElementById('kpPrice').textContent = pl2;
                     document.getElementById('kpTime').textContent = d2.bars.length + '根K线 | 最新:' + lastC2;
                     requestAnimationFrame(function() { drawKline(d2.bars, parseFloat(a2), parseFloat(b2), parseFloat(c2), dir2, parseFloat(at2), parseFloat(bt2), parseFloat(ct2)); });
-                }).catch(function() {});
+                    // Clear any previous failure flag on success
+                    var ktEl = document.getElementById('kpTime');
+                    if (ktEl && ktEl.dataset.fail) { ktEl.dataset.fail = ''; ktEl.textContent = ktEl.textContent.replace(' ⚠️',''); }
+                }).catch(function() {
+                    var ktEl = document.getElementById('kpTime');
+                    if (ktEl && !ktEl.dataset.fail) { ktEl.dataset.fail = '1'; ktEl.textContent += ' ⚠️'; }
+                });
         }, 60000);
     } catch(err) {
         console.error('Kline popup error:', err);
@@ -1750,7 +1790,13 @@ document.addEventListener('visibilitychange', function() {
                     document.getElementById('kpPrice').textContent = pl2;
                     document.getElementById('kpTime').textContent = d2.bars.length + '根K线 | 最新:' + lastC2;
                     requestAnimationFrame(function() { drawKline(d2.bars, parseFloat(a2), parseFloat(b2), parseFloat(c2), dir2, parseFloat(at2), parseFloat(bt2), parseFloat(ct2)); });
-                }).catch(function() {});
+                    // Clear any previous failure flag on success
+                    var ktEl = document.getElementById('kpTime');
+                    if (ktEl && ktEl.dataset.fail) { ktEl.dataset.fail = ''; ktEl.textContent = ktEl.textContent.replace(' ⚠️',''); }
+                }).catch(function() {
+                    var ktEl = document.getElementById('kpTime');
+                    if (ktEl && !ktEl.dataset.fail) { ktEl.dataset.fail = '1'; ktEl.textContent += ' ⚠️'; }
+                });
         }, 60000);
     }
 });
@@ -1932,16 +1978,35 @@ document.addEventListener('visibilitychange', function() {
           badge.textContent = (s.open_positions || 0) + ' 持仓 / ' + (s.closed_positions || 0) + ' 已平';
           badge.style.color = 'var(--brand)';
         }
+        var statsEl = document.getElementById('posStats');
+        if (statsEl) statsEl.classList.remove('pos-error');
       })
-      .catch(function(e) { /* silent */ });
+      .catch(function(e) {
+        var statsEl = document.getElementById('posStats');
+        if (statsEl) statsEl.classList.add('pos-error');
+      });
     fetch('/api/positions', { cache: 'no-cache' })
       .then(function(r) { return r.json(); })
-      .then(renderPositions)
-      .catch(function(e) { /* silent */ });
+      .then(function(p) {
+        renderPositions(p);
+        var gridEl = document.getElementById('posOpenGrid');
+        if (gridEl) gridEl.classList.remove('pos-error');
+      })
+      .catch(function(e) {
+        var gridEl = document.getElementById('posOpenGrid');
+        if (gridEl) gridEl.classList.add('pos-error');
+      });
     fetch('/api/positions/history?limit=20', { cache: 'no-cache' })
       .then(function(r) { return r.json(); })
-      .then(renderHistory)
-      .catch(function(e) { /* silent */ });
+      .then(function(h) {
+        renderHistory(h);
+        var wrapEl = document.querySelector('.pos-history-wrap');
+        if (wrapEl) wrapEl.classList.remove('pos-error');
+      })
+      .catch(function(e) {
+        var wrapEl = document.querySelector('.pos-history-wrap');
+        if (wrapEl) wrapEl.classList.add('pos-error');
+      });
   }
   refresh();
   setInterval(function() {
