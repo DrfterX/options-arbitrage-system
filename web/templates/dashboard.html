@@ -47,6 +47,15 @@
 
 <div class="main">
 
+<!-- ─── FREE-TIER DELAY BANNER ─── -->
+{% if delayed_warning %}
+<div class="delay-bar" id="delayBar">
+  <span class="dl-icon">⏱️</span>
+  <span class="dl-text">{{ delayed_warning }}</span>
+  <span class="dl-close" onclick="document.getElementById('delayBar').classList.add('hidden')">✕</span>
+</div>
+{% endif %}
+
 <div class="stats-bar">
   <div class="stat-item brand"><div class="label">最高评分</div><div class="value">{{ "%.1f"|format(max_score) }}</div><div class="stat-glow"></div></div>
   <div class="stat-item long"><div class="label">做多</div><div class="value">{{ long_count }}</div><div class="stat-glow"></div></div>

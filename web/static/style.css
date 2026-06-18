@@ -1443,3 +1443,32 @@ table tbody tr {
   background: rgba(240,180,41,.04);
 }
 
+/* ── Delay warning bar (free-tier, all dashboards) ── */
+.delay-bar {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 16px;
+  background: rgba(240, 180, 41, .07);
+  border-bottom: 1px solid rgba(240, 180, 41, .12);
+  font-size: .6rem;
+  color: var(--brand);
+  line-height: 1.4;
+  animation: dl-slidein .3s ease-out both;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+@keyframes dl-slidein {
+  from { transform: translateY(-100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.delay-bar.hidden { display: none; }
+.dl-icon { flex-shrink: 0; font-size: .65rem; }
+.dl-text { flex: 1; }
+.dl-close {
+  flex-shrink: 0; font-size: .55rem;
+  color: var(--text3); cursor: pointer;
+  padding: 2px 6px; border-radius: 3px;
+  transition: all .15s;
+}
+.dl-close:hover { background: rgba(255,255,255,.06); color: var(--text); }
+

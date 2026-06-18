@@ -1783,6 +1783,44 @@ def api_auth_login():
     })
 
 
+@app.route("/api/auth/verify", methods=["POST"])
+def api_auth_verify():
+    """验证 auth token 是否有效。
+
+    前端每个页面加载时调用，用于判断是否显示延迟数据。
+    返回 200 + JSON，不返回 401（简化前端错误处理）。
+
+    POST JSON body:
+        token (str): 存储的 auth token。
+
+    Returns:
+        {"valid": true, "email": "..."} 或 {"valid": false}。
+    """
+    data = request.get_json() or {}
+    token = data.get("token", "")
+    if not token:
+        return jsonify({"valid": False})
+
+    conn = db.get_conn()
+    row = conn.execute(
+        """SELECT u.email FROM user_sessions s
+           JOIN user_registrations u ON s.user_id = u.id
+           WHERE s.token = ? AND s.is_active = 1 AND s.expires_at > datetime('now', '+8 hours')""",
+        (token,),
+    ).fetchone()
+
+    if row:
+        # 静默更新 last_used_at
+        conn.execute(
+            "UPDATE user_sessions SET last_used_at = datetime('now', '+8 hours') WHERE token = ?",
+            (token,),
+        )
+        conn.commit()
+        return jsonify({"valid": True, "email": row["email"]})
+
+    return jsonify({"valid": False})
+
+
 # ─── 免费试用 API ────────────────────────────────────────────────
 
 

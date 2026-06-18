@@ -854,6 +854,15 @@
 
 <div class="main">
 
+<!-- ─── FREE-TIER DELAY BANNER ─── -->
+{% if delayed_warning %}
+<div class="delay-bar" id="delayBar">
+  <span class="dl-icon">⏱️</span>
+  <span class="dl-text">{{ delayed_warning }}</span>
+  <span class="dl-close" onclick="document.getElementById('delayBar').classList.add('hidden')">✕</span>
+</div>
+{% endif %}
+
 <!-- ─── STATS BAR ─── -->
 <div class="stats-bar">
   <div class="stat-item brand"><div class="label">IV 品种</div><div class="value" id="iv-total">{{ iv_status|length }}</div><div class="stat-glow"></div></div>
