@@ -661,6 +661,25 @@ class Orchestrator:
 
         logger.info("期货扫描完成: %d 条推送, %d 条被过滤抑制", pushed_count, suppressed_count)
 
+        # ── Telegram 广播：ENTRY 信号汇总推送至所有订阅用户 ──────────
+        if self._enable_telegram:
+            try:
+                from signals.telegram_notifier import broadcast as tg_broadcast
+                entry_results = [
+                    (r.symbol, r.contract, getattr(r, "direction", ""), r.overall_score)
+                    for r in results
+                    if getattr(r, "signal_type", "NONE") == "ENTRY"
+                ]
+                if entry_results:
+                    lines = ["🚀 *期货 ENTRY 信号汇总*\n"]
+                    for sym, con, direction, score in entry_results:
+                        dir_icon = "🟢" if direction == "LONG" else "🔴"
+                        lines.append(f"{dir_icon} {sym}({con}) {direction} 评分={score:.1f}")
+                    lines.append(f"\n共 {len(entry_results)} 条 ENTRY 信号")
+                    tg_broadcast("\n".join(lines))
+            except Exception as e:
+                logger.warning("ENTRY 广播异常(已跳过): %s", e)
+
         # ── Phase 1 废弃条件检查 ──────────────────────────────
         try:
             self._check_and_handle_phase1_abort()
@@ -1197,6 +1216,15 @@ class Orchestrator:
             daily_msg = daily_msg + "\n\n" + iv_rank_msg
 
         dispatch(daily_msg, level="DAILY", mode=self._push_mode)
+
+        # ── Telegram 广播：日报推送至所有订阅用户 ────────────────────
+        if self._enable_telegram:
+            try:
+                from signals.telegram_notifier import broadcast as tg_broadcast
+                tg_broadcast(daily_msg)
+            except Exception as e:
+                logger.warning("日报广播异常(已跳过): %s", e)
+
         return daily_msg
 
 
