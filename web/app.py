@@ -359,6 +359,12 @@ def index() -> str:
 # ─── 公开 API 文档页面 ───────────────────────────────────────────────
 
 
+@app.route("/subscribe")
+def subscribe_page():
+    """Bot 订阅着落页 — 引导用户通过 Telegram 订阅信号推送服务。"""
+    return render_template("subscribe.html")
+
+
 @app.route("/api/docs")
 def api_docs():
     """公开数据 API v1 文档页面。"""
