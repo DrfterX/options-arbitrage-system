@@ -2032,6 +2032,151 @@ def api_auth_verify():
     return jsonify({"valid": False})
 
 
+# ─── Bot 订阅管理 API ──────────────────────────────────────────
+
+
+def _require_api_key(f):
+    """API Key 认证装饰器（查 api_keys 表）。"""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        api_key = request.headers.get("X-API-Key") or request.headers.get("x-api-key")
+        if not api_key:
+            return jsonify({"ok": False, "error": "缺少 API Key，请在 X-API-Key Header 中传入"}), 401
+        conn = db.get_conn()
+        try:
+            row = conn.execute(
+                "SELECT id, tier FROM api_keys WHERE api_key=? AND is_active=1",
+                (api_key,),
+            ).fetchone()
+            if not row:
+                return jsonify({"ok": False, "error": "API Key 无效或已停用"}), 401
+            conn.execute("UPDATE api_keys SET last_used=datetime('now') WHERE id=?", (row["id"],))
+            conn.commit()
+        except Exception:
+            return jsonify({"ok": False, "error": "认证服务异常"}), 500
+        return f(*args, **kwargs)
+    return decorated
+
+
+@app.route("/api/subscribe", methods=["POST"])
+@_require_api_key
+def api_subscribe():
+    """Bot 订阅 — 注册 Telegram 推送订阅。
+
+    POST JSON body:
+        telegram_chat_id (str, required): Telegram 用户的 Chat ID。
+        username (str, optional): Telegram 用户名。
+        first_name (str, optional): Telegram 显示名。
+        preferences (dict, optional): 推送偏好。
+
+    Returns:
+        {"ok": true, "status": "trial", "trial_end": "..."} 或 {"ok": false, "error": "..."}
+    """
+    data = request.get_json()
+    if not data:
+        return jsonify({"ok": False, "error": "请求体为空"}), 400
+
+    chat_id = data.get("telegram_chat_id", "").strip()
+    if not chat_id:
+        return jsonify({"ok": False, "error": "缺少 telegram_chat_id"}), 400
+
+    from signals.bot_subscription import BotSubscription
+    mgr = BotSubscription(db)
+
+    success = mgr.subscribe(
+        chat_id=chat_id,
+        username=data.get("username", ""),
+        first_name=data.get("first_name", ""),
+        preferences=data.get("preferences"),
+    )
+    if not success:
+        return jsonify({"ok": False, "error": "订阅失败，请稍后重试"}), 500
+
+    # 返回订阅后状态
+    sub = mgr.get_subscriber(chat_id)
+    return jsonify({
+        "ok": True,
+        "data": {
+            "telegram_chat_id": chat_id,
+            "status": sub.get("status", "trial") if sub else "trial",
+            "trial_end": sub.get("trial_end_at", "") if sub else "",
+            "subscribed_at": sub.get("subscribed_at", "") if sub else "",
+        },
+    })
+
+
+@app.route("/api/unsubscribe", methods=["POST"])
+@_require_api_key
+def api_unsubscribe():
+    """Bot 取消订阅。
+
+    POST JSON body:
+        telegram_chat_id (str, required): 要取消的 Telegram Chat ID。
+
+    Returns:
+        {"ok": true, "message": "已取消订阅"} 或 {"ok": false, "error": "..."}
+    """
+    data = request.get_json()
+    if not data:
+        return jsonify({"ok": False, "error": "请求体为空"}), 400
+
+    chat_id = data.get("telegram_chat_id", "").strip()
+    if not chat_id:
+        return jsonify({"ok": False, "error": "缺少 telegram_chat_id"}), 400
+
+    from signals.bot_subscription import BotSubscription
+    mgr = BotSubscription(db)
+
+    mgr.unsubscribe(chat_id)
+    return jsonify({"ok": True, "message": "已取消订阅"})
+
+
+@app.route("/api/subscribe/status")
+@_require_api_key
+def api_subscribe_status():
+    """查询 Bot 订阅状态。
+
+    Query params:
+        chat_id (str): Telegram Chat ID。
+
+    Returns:
+        {"ok": true, "data": {...}} 或 {"ok": false, "error": "..."}
+    """
+    chat_id = request.args.get("chat_id", "").strip()
+    if not chat_id:
+        return jsonify({"ok": False, "error": "缺少 chat_id 参数"}), 400
+
+    from signals.bot_subscription import BotSubscription
+    mgr = BotSubscription(db)
+    sub = mgr.get_subscriber(chat_id)
+
+    if not sub:
+        return jsonify({
+            "ok": True,
+            "data": {
+                "telegram_chat_id": chat_id,
+                "status": "not_found",
+                "is_subscribed": False,
+            },
+        })
+
+    return jsonify({
+        "ok": True,
+        "data": {
+            "telegram_chat_id": sub["telegram_chat_id"],
+            "telegram_username": sub.get("telegram_username", ""),
+            "first_name": sub.get("first_name", ""),
+            "status": sub["status"],
+            "is_subscribed": sub["status"] in ("trial", "active"),
+            "subscribed_at": sub.get("subscribed_at", ""),
+            "trial_end_at": sub.get("trial_end_at", ""),
+            "expires_at": sub.get("expires_at", ""),
+            "signals_pushed": sub.get("signals_pushed", 0),
+            "preferences": sub.get("preferences", "{}"),
+        },
+    })
+
+
 # ─── 免费试用 API ────────────────────────────────────────────────
 
 
