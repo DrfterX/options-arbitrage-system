@@ -47,38 +47,6 @@
   border-radius: 1px;
 }
 
-.nav-tabs {
-  display: flex;
-  gap: 2px;
-}
-.nav-tab {
-  font-size: .65rem;
-  color: var(--text3);
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 12px;
-  border-radius: var(--radius-sm);
-  transition: all .15s var(--ease-out);
-  font-family: var(--font-ui);
-  letter-spacing: .03em;
-  cursor: pointer;
-  line-height: 1.2;
-}
-.nav-tab:hover {
-  color: var(--text);
-  background: rgba(90, 97, 115, .08);
-}
-.nav-tab.active {
-  color: var(--brand);
-  background: var(--brand-bg);
-  font-weight: 500;
-}
-.nav-tab-icon {
-  font-size: .7rem;
-  opacity: .7;
-}
 
 /* Full-width matrix — no right panel */
 .main-grid { display: block; }
@@ -93,13 +61,9 @@
   border-radius: 50%;
   background: var(--brand);
   margin-left: 6px;
-  animation: mx-loading-pulse .8s ease-in-out infinite alternate;
+  animation: loading-pulse .8s ease-in-out infinite alternate;
 }
 .matrix-section.is-loading .mx-loading-dot { display: inline-block; }
-@keyframes mx-loading-pulse {
-  0% { opacity: .2; transform: scale(.7); }
-  100% { opacity: 1; transform: scale(1.1); }
-}
 .matrix-section.is-loading .skeleton {
   animation: skeleton-shimmer 1.5s ease-in-out infinite, skeleton-fade-in .3s ease-out both;
 }
@@ -121,11 +85,6 @@
   background: rgba(79,91,128,.22);
   border-radius: 3px;
 }
-@keyframes skeleton-fade-in {
-  0% { opacity: 0; transform: translateY(2px); }
-  100% { opacity: 1; transform: translateY(0); }
-}
-
 /* ── N 型结构实时信号面板 ── */
 .ns-grid { display:flex; flex-direction:column; gap:8px; }
 .ns-card {
@@ -243,11 +202,6 @@
 }
 .mx-retry-btn:active {
   transform: scale(.96);
-}
-/* Skeleton shimmer animation — must match skeleton class usage */
-@keyframes skeleton-shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
 }
 
 @media (max-width: 1024px) {
@@ -780,7 +734,8 @@
       <a href="https://signals.drifter.indevs.in" class="nav-tab"><span class="nav-tab-icon">◈</span> 总览</a>
       <span class="nav-tab active"><span class="nav-tab-icon">📈</span> 期货</span>
       <a href="https://options.drifter.indevs.in" class="nav-tab"><span class="nav-tab-icon">📉</span> 期权</a>
-	      <a href="https://signals.drifter.indevs.in/api/docs" class="nav-tab"><span class="nav-tab-icon">⎔</span> API</a>
+      <a href="https://signals.drifter.indevs.in" class="nav-tab premium-tab"><span class="nav-tab-icon">✦</span> Premium</a>
+      <a href="/api/docs" class="nav-tab"><span class="nav-tab-icon">⎔</span> API</a>
     </div>
     <span class="data-badge" id="symbolCount">{{ total_signals }} 品种</span>
     <span class="topbar-time">{{ now }}</span>
@@ -1337,7 +1292,7 @@ setInterval(function() {
 var popup = document.getElementById('klinePopup');
 var canvas = document.getElementById('kpCanvas');
 var ctx = canvas.getContext('2d');
-var _klineRefresh = null;  // 60s auto-refresh interval for K-line popup
+var _klineRefresh = null;  // 30s auto-refresh interval for K-line popup
 
 // ── EMA helper for MACD calculation ──
 function calcEMA(data, period) {
@@ -1367,7 +1322,7 @@ function calcEMA(data, period) {
     return result;
 }
 
-function drawKline(bars, nA, nB, nC, nDir, nAt, nBt, nCt) {
+function drawKline(bars, nA, nB, nC, nDir, nAt, nBt, nCt, displayCount) {
     var dpr = window.devicePixelRatio || 1;
     var rect = canvas.getBoundingClientRect();
     // Total canvas height 340px: 220 K-line + 120 MACD
@@ -1378,8 +1333,14 @@ function drawKline(bars, nA, nB, nC, nDir, nAt, nBt, nCt) {
     ctx.clearRect(0, 0, W, H_TOTAL);
     if (!bars.length) return;
 
-    // ── MACD Calculation (default: 12/26/9) ──
-    var closes = bars.map(function(b) { return b.c; });
+    // ── Use all bars for MACD calculation, but only displayCount bars for K-line ──
+    var macdBars = bars;
+    if (displayCount && displayCount < bars.length) {
+        bars = bars.slice(-displayCount);
+    }
+
+    // ── MACD Calculation (default: 12/26/9) — uses ALL bars ──
+    var closes = macdBars.map(function(b) { return b.c; });
     var ema12 = calcEMA(closes, 12);
     var ema26 = calcEMA(closes, 26);
     var dif = [];  // DIF = EMA12 - EMA26
@@ -1403,12 +1364,17 @@ function drawKline(bars, nA, nB, nC, nDir, nAt, nBt, nCt) {
             macdBar.push(null);
         }
     }
-    // MACD range
+    // ── Slice MACD data to match displayed bars ──
+    var displayDif = dif.slice(-bars.length);
+    var displayDea = deaAligned.slice(-bars.length);
+    var displayMacdBar = macdBar.slice(-bars.length);
+
+    // MACD range (use displayed portion)
     var macdMin = Infinity, macdMax = -Infinity;
-    for (var i = 26; i < dif.length; i++) {
-        if (dif[i] != null) { macdMin = Math.min(macdMin, dif[i]); macdMax = Math.max(macdMax, dif[i]); }
-        if (deaAligned[i] != null) { macdMin = Math.min(macdMin, deaAligned[i]); macdMax = Math.max(macdMax, deaAligned[i]); }
-        if (macdBar[i] != null) { macdMin = Math.min(macdMin, macdBar[i]); macdMax = Math.max(macdMax, macdBar[i]); }
+    for (var i = 0; i < displayDif.length; i++) {
+        if (displayDif[i] != null) { macdMin = Math.min(macdMin, displayDif[i]); macdMax = Math.max(macdMax, displayDif[i]); }
+        if (displayDea[i] != null) { macdMin = Math.min(macdMin, displayDea[i]); macdMax = Math.max(macdMax, displayDea[i]); }
+        if (displayMacdBar[i] != null) { macdMin = Math.min(macdMin, displayMacdBar[i]); macdMax = Math.max(macdMax, displayMacdBar[i]); }
     }
     if (macdMin === Infinity) { macdMin = -0.1; macdMax = 0.1; }
     var macdPad = (macdMax - macdMin) * 0.1 || 0.01;
@@ -1601,10 +1567,10 @@ function drawKline(bars, nA, nB, nC, nDir, nAt, nBt, nCt) {
     ctx.setLineDash([]);
 
     // MACD histogram (DIF - DEA) * 2
-    for (var i = 26; i < bars.length; i++) {
-        if (macdBar[i] == null) continue;
+    for (var i = 0; i < bars.length; i++) {
+        if (displayMacdBar[i] == null) continue;
         var x = barXs[i];
-        var h = macdY(macdBar[i]) - zeroY;
+        var h = macdY(displayMacdBar[i]) - zeroY;
         var barH = Math.abs(h);
         if (barH < 1) barH = 1;
         var color = h <= 0 ? 'rgba(34,197,94,0.6)' : 'rgba(240,68,56,0.6)';
@@ -1617,9 +1583,9 @@ function drawKline(bars, nA, nB, nC, nDir, nAt, nBt, nCt) {
     ctx.lineWidth = 1;
     ctx.beginPath();
     var started = false;
-    for (var i = 26; i < bars.length; i++) {
-        if (dif[i] == null) continue;
-        var x = barXs[i], y = macdY(dif[i]);
+    for (var i = 0; i < bars.length; i++) {
+        if (displayDif[i] == null) continue;
+        var x = barXs[i], y = macdY(displayDif[i]);
         if (!started) { ctx.moveTo(x, y); started = true; }
         else { ctx.lineTo(x, y); }
     }
@@ -1630,9 +1596,9 @@ function drawKline(bars, nA, nB, nC, nDir, nAt, nBt, nCt) {
     ctx.lineWidth = 1;
     ctx.beginPath();
     started = false;
-    for (var i = 26; i < bars.length; i++) {
-        if (deaAligned[i] == null) continue;
-        var x = barXs[i], y = macdY(deaAligned[i]);
+    for (var i = 0; i < bars.length; i++) {
+        if (displayDea[i] == null) continue;
+        var x = barXs[i], y = macdY(displayDea[i]);
         if (!started) { ctx.moveTo(x, y); started = true; }
         else { ctx.lineTo(x, y); }
     }
@@ -1706,9 +1672,10 @@ async function showKlinePopup(el) {
             priceLine = 'N 型结构待确认（数据不足以标记ABC）';
         }
         document.getElementById('kpPrice').textContent = priceLine;
-        document.getElementById('kpTime').textContent = data.bars.length + '根K线 | 最新:' + data.bars[data.bars.length-1].c;
-        requestAnimationFrame(function() { drawKline(data.bars, parseFloat(a), parseFloat(b), parseFloat(c_val), dir, parseFloat(at), parseFloat(bt), parseFloat(ct)); });
-        // ── Start 60s auto-refresh interval ──
+        document.getElementById('kpTime').textContent = displayCount + '根K线 | 最新:' + data.bars[data.bars.length-1].c;
+        var displayCount = data.display_count || 60;
+        requestAnimationFrame(function() { drawKline(data.bars, parseFloat(a), parseFloat(b), parseFloat(c_val), dir, parseFloat(at), parseFloat(bt), parseFloat(ct), displayCount); });
+        // ── Start 30s auto-refresh interval ──
         if (_klineRefresh) clearInterval(_klineRefresh);
         _klineRefresh = setInterval(function() {
             fetch('/api/klines?symbol=' + sym + '&timeframe=' + tf)
@@ -1731,8 +1698,8 @@ async function showKlinePopup(el) {
                         pl2 = 'N 型结构待确认（数据不足以标记ABC）';
                     }
                     document.getElementById('kpPrice').textContent = pl2;
-                    document.getElementById('kpTime').textContent = d2.bars.length + '根K线 | 最新:' + lastC2;
-                    requestAnimationFrame(function() { drawKline(d2.bars, parseFloat(a2), parseFloat(b2), parseFloat(c2), dir2, parseFloat(at2), parseFloat(bt2), parseFloat(ct2)); });
+                    document.getElementById('kpTime').textContent = displayCount + '根K线 | 最新:' + lastC2;
+                    requestAnimationFrame(function() { drawKline(d2.bars, parseFloat(a2), parseFloat(b2), parseFloat(c2), dir2, parseFloat(at2), parseFloat(bt2), parseFloat(ct2), displayCount); });
                     // Clear any previous failure flag on success
                     var ktEl = document.getElementById('kpTime');
                     if (ktEl && ktEl.dataset.fail) { ktEl.dataset.fail = ''; ktEl.textContent = ktEl.textContent.replace(' ⚠️',''); }
@@ -1740,7 +1707,7 @@ async function showKlinePopup(el) {
                     var ktEl = document.getElementById('kpTime');
                     if (ktEl && !ktEl.dataset.fail) { ktEl.dataset.fail = '1'; ktEl.textContent += ' ⚠️'; }
                 });
-        }, 60000);
+        }, 30000);
     } catch(err) {
         console.error('Kline popup error:', err);
         if (skel) skel.style.display = 'none';
@@ -1765,7 +1732,7 @@ document.addEventListener('visibilitychange', function() {
         clearInterval(_klineRefresh);
         _klineRefresh = null;
     } else if (!document.hidden && _currentCell && !_klineRefresh) {
-        // Page visible again and popup still open → restart 60s interval (next tick auto-refreshes)
+        // Page visible again and popup still open → restart 30s interval (next tick auto-refreshes)
         var el = _currentCell;
         _klineRefresh = setInterval(function() {
             fetch('/api/klines?symbol=' + el.dataset.sym + '&timeframe=' + el.dataset.tf)
@@ -1788,8 +1755,8 @@ document.addEventListener('visibilitychange', function() {
                         pl2 = 'N 型结构待确认（数据不足以标记ABC）';
                     }
                     document.getElementById('kpPrice').textContent = pl2;
-                    document.getElementById('kpTime').textContent = d2.bars.length + '根K线 | 最新:' + lastC2;
-                    requestAnimationFrame(function() { drawKline(d2.bars, parseFloat(a2), parseFloat(b2), parseFloat(c2), dir2, parseFloat(at2), parseFloat(bt2), parseFloat(ct2)); });
+                    document.getElementById('kpTime').textContent = displayCount + '根K线 | 最新:' + lastC2;
+                    requestAnimationFrame(function() { drawKline(d2.bars, parseFloat(a2), parseFloat(b2), parseFloat(c2), dir2, parseFloat(at2), parseFloat(bt2), parseFloat(ct2), displayCount); });
                     // Clear any previous failure flag on success
                     var ktEl = document.getElementById('kpTime');
                     if (ktEl && ktEl.dataset.fail) { ktEl.dataset.fail = ''; ktEl.textContent = ktEl.textContent.replace(' ⚠️',''); }
@@ -1797,7 +1764,7 @@ document.addEventListener('visibilitychange', function() {
                     var ktEl = document.getElementById('kpTime');
                     if (ktEl && !ktEl.dataset.fail) { ktEl.dataset.fail = '1'; ktEl.textContent += ' ⚠️'; }
                 });
-        }, 60000);
+        }, 30000);
     }
 });
 

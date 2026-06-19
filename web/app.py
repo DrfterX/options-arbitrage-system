@@ -121,7 +121,8 @@ SECTORS = {
     "新能源": ["SI","LC"],
 }
 
-KLINE_COUNT = 200
+KLINE_COUNT = 60
+KLINE_MACD_BARS = 200  # MACD(12,26,9) 计算用的 K 线数量（大于 KLINE_COUNT，不显示在图上）
 
 def _get_hub():
     from signals.hub import SignalHub
@@ -810,7 +811,7 @@ def api_klines():
         
         # 简化为前端用格式
         result = []
-        for b in bars[-KLINE_COUNT:]:
+        for b in bars[-KLINE_MACD_BARS:]:
             result.append({
                 "o": round(b["o"], 2), "c": round(b["c"], 2),
                 "h": round(b["h"], 2), "l": round(b["l"], 2),
@@ -822,7 +823,10 @@ def api_klines():
         from futures.shared import _get_active_n_structure
         n_struct = _get_active_n_structure(db, sym, contract or "", tf)
 
-        resp = {"symbol": sym, "timeframe": tf, "bars": result}
+        resp = {
+            "symbol": sym, "timeframe": tf,
+            "bars": result, "display_count": KLINE_COUNT,
+        }
         if n_struct:
             resp["n_structure"] = {
                 "dir": n_struct["direction"],
