@@ -44,6 +44,24 @@ try:
 except Exception as e:
     logger.warning("数据库表初始化异常（非致命）: %s", e)
 
+# ─── N 型结构 1d/1w 时间戳归一化辅助 ──────────────────────────
+# 对 1d/1w 周期，将 A/B/C 时间戳归一化到 05:45 UTC (= 13:45 BJT)，
+# 与归一化后的 K 线时间戳对齐。确保前端 findBarForNPoint() 的几何
+# 匹配识别到正确的 K 线 bar。
+_BJ_OFFSET = 8 * 3600
+_TARGET_HOUR_SEC = 20700  # 05:45 UTC = 13:45 BJT
+
+def _normalize_n_ts(d: dict) -> None:
+    """原地归一化 N 型结构字典的 1d/1w 时间戳。"""
+    if d.get("timeframe") not in ("1d", "1w"):
+        return
+    for key in ("point_a_time", "point_b_time", "point_c_time"):
+        ts = d.get(key)
+        if ts is None:
+            continue
+        bj_midnight_utc = ((ts + _BJ_OFFSET) // 86400) * 86400 - _BJ_OFFSET
+        d[key] = bj_midnight_utc + _TARGET_HOUR_SEC
+
 # 管理员密码（从环境变量读取，默认值让人类可以立即使用）
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "autocompany2024")
 
@@ -103,7 +121,7 @@ SECTORS = {
     "新能源": ["SI","LC"],
 }
 
-KLINE_COUNT = 60
+KLINE_COUNT = 200
 
 def _get_hub():
     from signals.hub import SignalHub
@@ -243,6 +261,8 @@ def index() -> str:
         structures = {}
         for r in n_rows:
             d = dict(r)
+            if d.get("timeframe") in ("1d", "1w"):
+                _normalize_n_ts(d)
             structures.setdefault(d["symbol"], {})[d["timeframe"]] = {
                 "dir": d["direction"], "state": d["state"],
                 "a": d["point_a_price"], "b": d["point_b_price"], "c": d["point_c_price"],
@@ -450,6 +470,8 @@ def api_matrix():
         structures = {}
         for r in n_rows:
             d = dict(r)
+            if d.get("timeframe") in ("1d", "1w"):
+                _normalize_n_ts(d)
             structures.setdefault(d["symbol"], {})[d["timeframe"]] = {
                 "dir": d["direction"], "state": d["state"],
                 "a": d["point_a_price"], "b": d["point_b_price"], "c": d["point_c_price"],
@@ -564,6 +586,8 @@ def api_n_structures():
         by_symbol = {}
         for r in n_rows:
             d = dict(r)
+            if d.get("timeframe") in ("1d", "1w"):
+                _normalize_n_ts(d)
             sym = d["symbol"]
             tf = d["timeframe"]
             name = SYMBOL_NAMES.get(sym, sym)
@@ -771,6 +795,16 @@ def api_klines():
                     bars[-1] = rt_bars["bar"]
                 else:
                     bars.append(rt_bars["bar"])
+
+            # ── 1d/1w 时间戳归一化 ──
+            # 将 bar 的时间戳归一化到 05:45 UTC (= 13:45 BJT)，
+            # 与 N-structure 时间戳对齐，确保前端几何匹配精准。
+            _MIDNIGHT_SEC = 57600  # 16:00 UTC = BJT 午夜
+            for bar in bars:
+                ts = bar["t"]
+                if ts % 86400 == _MIDNIGHT_SEC:
+                    bj_midnight_utc = ((ts + _BJ_OFFSET) // 86400) * 86400 - _BJ_OFFSET
+                    bar["t"] = bj_midnight_utc + _TARGET_HOUR_SEC
         else:
             bars.reverse()
         
