@@ -295,6 +295,12 @@ def sitemap_xml():
     <priority>0.9</priority>
   </url>
   <url>
+    <loc>https://signals.drifter.indevs.in/blog/ru2609-case-study</loc>
+    <lastmod>2026-06-21</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
     <loc>https://futures.drifter.indevs.in/</loc>
     <lastmod>{futures_lastmod}</lastmod>
     <changefreq>daily</changefreq>
@@ -594,6 +600,12 @@ def blog_article_intro():
 def blog_article_engine_deepdive():
     """技术深挖：N 型结构自动识别引擎架构。"""
     return render_template("blog_post_engine_deepdive.html")
+
+
+@app.route("/blog/ru2609-case-study")
+def blog_article_ru2609():
+    """实盘案例：橡胶2609 周线 N 型结构分析。"""
+    return render_template("blog_post_ru2609.html")
 
 
 # ── N 型结构动态重算辅助 ───────────────────────────────────────
