@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="description" content="从状态机设计到前向非重叠扫描算法，完整还原 N 型结构自动识别引擎的工程实现。信号矩阵开源 MIT，核心技术不到 400 行 Python。">
+<meta property="og:title" content="写一个 K 线 N 型结构自动识别引擎需要几步？ | 信号矩阵 Blog">
+<meta property="og:description" content="从极值点提取→前向非重叠扫描→三笔状态机→C 点滑动→多周期共振。完整还原 N 型结构自动识别引擎的架构设计和工程取舍。">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://signals.drifter.indevs.in/blog/n-structure-engine-deepdive">
+<meta property="og:image" content="https://signals.drifter.indevs.in/static/images/signals-dashboard.png">
+<link rel="canonical" href="https://signals.drifter.indevs.in/blog/n-structure-engine-deepdive">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="写一个 K 线 N 型结构自动识别引擎需要几步？从状态机到多周期共振">
+<meta name="twitter:description" content="从极值点提取→前向非重叠扫描→三笔状态机→C 点滑动→多周期共振。完整还原 N 型结构自动识别引擎的架构设计和工程取舍。">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "写一个 K 线 N 型结构自动识别引擎需要几步？从状态机到多周期共振",
+  "description": "从极值点提取→前向非重叠扫描→三笔状态机→C 点滑动→多周期共振。完整还原 N 型结构自动识别引擎的架构设计和工程取舍。",
+  "image": "https://signals.drifter.indevs.in/static/images/signals-dashboard.png",
+  "author": {"@type": "Organization", "name": "信号矩阵"},
+  "datePublished": "2026-06-21",
+  "publisher": {"@type": "Organization", "name": "信号矩阵"}
+}
+</script>
+<title>写一个 K 线 N 型结构自动识别引擎需要几步？从状态机到多周期共振 | 信号矩阵</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css">
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   Blog Post — signals.drifter.indevs.in/blog/*
+   Aesthetic: Terminal Luxe — readable long-form, instrument-cluster
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── topbar ── */
+.blog-topbar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 20px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  backdrop-filter: blur(8px);
+}
+.blog-topbar .logo {
+  font-weight: 800;
+  font-size: .75rem;
+  letter-spacing: .06em;
+  color: var(--text);
+}
+.blog-topbar .logo .accent { color: var(--brand); }
+.blog-topbar .nav-links {
+  margin-left: auto;
+  display: flex; gap: 16px;
+  font-size: .62rem;
+  font-weight: 500;
+}
+.blog-topbar .nav-links a {
+  color: var(--text2);
+  text-decoration: none;
+  transition: color .15s;
+}
+.blog-topbar .nav-links a:hover { color: var(--text); }
+
+/* ── layout ── */
+.blog-wrap {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 40px 24px 80px;
+}
+
+/* ── header ── */
+.blog-header {
+  margin-bottom: 44px;
+}
+.blog-header .meta {
+  font-size: .58rem;
+  color: var(--text3);
+  letter-spacing: .04em;
+  margin-bottom: 8px;
+  display: flex; gap: 12px; align-items: center;
+}
+.blog-header .meta .tag {
+  background: rgba(59, 130, 246, .1);
+  color: #60a5fa;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+}
+.blog-header h1 {
+  font-size: 1.4rem;
+  font-weight: 800;
+  letter-spacing: -.02em;
+  line-height: 1.3;
+  margin-bottom: 12px;
+}
+.blog-header .subtitle {
+  font-size: .72rem;
+  color: var(--text2);
+  line-height: 1.6;
+  max-width: 600px;
+}
+
+/* ── body ── */
+.blog-body {
+  font-size: .72rem;
+  line-height: 1.85;
+  color: var(--text);
+}
+.blog-body h2 {
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: -.01em;
+  margin: 36px 0 14px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+.blog-body h3 {
+  font-size: .82rem;
+  font-weight: 600;
+  margin: 28px 0 10px;
+}
+.blog-body p {
+  margin-bottom: 14px;
+}
+.blog-body strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.blog-body blockquote {
+  margin: 18px 0;
+  padding: 12px 16px;
+  background: rgba(34, 197, 94, .04);
+  border-left: 2px solid var(--brand);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  font-size: .68rem;
+  color: var(--text2);
+  line-height: 1.6;
+}
+.blog-body blockquote p { margin-bottom: 0; }
+.blog-body blockquote strong { color: var(--text); }
+.blog-body code {
+  font-family: var(--font-mono);
+  font-size: .65rem;
+  background: rgba(34, 197, 94, .08);
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: var(--brand);
+}
+.blog-body pre {
+  background: rgba(8, 11, 16, .6);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  margin: 16px 0;
+  overflow-x: auto;
+  font-size: .62rem;
+  line-height: 1.6;
+  font-family: var(--font-mono);
+  color: var(--text2);
+}
+.blog-body ul, .blog-body ol {
+  margin: 10px 0 14px;
+  padding-left: 20px;
+}
+.blog-body li {
+  margin-bottom: 6px;
+}
+.blog-body a {
+  color: var(--brand);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color .15s;
+}
+.blog-body a:hover { border-bottom-color: var(--brand); }
+
+/* ── tables ── */
+.blog-body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 16px 0;
+  font-size: .65rem;
+}
+.blog-body th, .blog-body td {
+  padding: 8px 12px;
+  text-align: left;
+  border: 1px solid var(--border);
+}
+.blog-body th {
+  background: rgba(34, 197, 94, .04);
+  font-weight: 600;
+  font-size: .6rem;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--text2);
+}
+.blog-body td {
+  color: var(--text);
+}
+.blog-body tr:nth-child(even) td {
+  background: rgba(255,255,255,.02);
+}
+
+/* ── horizontal rule ── */
+.blog-body hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 32px 0;
+}
+
+/* ── highlight box ── */
+.blog-body .highlight-box {
+  margin: 18px 0;
+  padding: 16px 20px;
+  background: rgba(34, 197, 94, .04);
+  border: 1px solid rgba(34, 197, 94, .12);
+  border-radius: var(--radius-md);
+  font-size: .68rem;
+  line-height: 1.7;
+}
+.blog-body .highlight-box strong {
+  color: var(--brand);
+}
+
+/* ── CTA section ── */
+.blog-cta {
+  margin: 40px 0 0;
+  padding: 24px;
+  background: linear-gradient(135deg, rgba(34, 197, 94, .04), rgba(139, 92, 246, .04));
+  border: 1px solid rgba(34, 197, 94, .12);
+  border-radius: var(--radius-lg);
+  text-align: center;
+}
+.blog-cta h3 {
+  font-size: .82rem;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+.blog-cta p {
+  font-size: .65rem;
+  color: var(--text2);
+  margin-bottom: 14px;
+  line-height: 1.6;
+}
+.blog-cta .btn {
+  display: inline-block;
+  padding: 10px 24px;
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  color: #000;
+  background: var(--brand);
+  border: none;
+  border-radius: var(--radius-md);
+  text-decoration: none;
+  transition: all .2s var(--ease-out);
+  font-family: var(--font-ui);
+  cursor: pointer;
+}
+.blog-cta .btn:hover {
+  box-shadow: 0 2px 20px rgba(34, 197, 94, .2);
+  filter: brightness(1.1);
+}
+.blog-cta .btn:active { transform: scale(.97); }
+
+/* ── footer ── */
+.blog-footer {
+  margin-top: 48px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: .55rem;
+  color: var(--text3);
+}
+.blog-footer a {
+  color: var(--text2);
+  text-decoration: none;
+}
+.blog-footer a:hover { color: var(--text); }
+
+/* ── responsive ── */
+@media (max-width: 540px) {
+  .blog-wrap { padding: 24px 16px 60px; }
+  .blog-header h1 { font-size: 1.1rem; }
+  .blog-body { font-size: .7rem; }
+}
+</style>
+</head>
+<body>
+
+<!-- ═══ topbar ═══ -->
+<nav class="blog-topbar">
+  <a href="/" class="logo" style="text-decoration:none"><span class="accent">信号</span>矩阵</a>
+  <div class="nav-links">
+    <a href="/">仪表盘</a>
+    <a href="/pricing">定价</a>
+    <a href="/blog">Blog</a>
+  </div>
+</nav>
+
+<!-- ═══ article ═══ -->
+<article class="blog-wrap">
+
+  <header class="blog-header">
+    <div class="meta">
+      <span class="tag">技术深挖</span>
+      <span>2026-06-21</span>
+      <span>·</span>
+      <span>信号矩阵团队</span>
+    </div>
+    <h1>写一个 K 线 N 型结构自动识别引擎需要几步？</h1>
+    <div class="subtitle">
+      从状态机设计到前向非重叠扫描算法，完整还原信号矩阵 N 型结构自动识别引擎的工程实现。核心技术不到 400 行 Python，<strong>全开源 MIT 许可</strong>。<br>
+      <strong>适用读者</strong>：对算法实现好奇的开发者 / 想做量化工具的交易者
+    </div>
+  </header>
+
+  <div class="blog-body">
+
+    <blockquote>
+      <strong>导读：</strong>在期货技术分析中，N 型结构（ABC 三点形态）是最基础也是最常用的价格模式之一。如果你每天花半小时在 7 个周期上画 N 型，这篇文章会帮你省下这个时间——我们实现了一个全自动 N 型结构识别引擎，15 分钟到周线全周期通用。本文从算法设计到工程实现，完整还原思路。
+    </blockquote>
+
+    <h2>一、为什么需要自动识别 N 型结构？</h2>
+
+    <p>先做一个小测试。打开文华财经或 TradingView，随便选一个期货品种：</p>
+
+    <ol>
+      <li>切换到 15 分钟图 → 找最近的 N 型 → 标记 A、B、C 三点</li>
+      <li>切换到 1 小时图 → 再来一遍</li>
+      <li>切到日线 → 再来一遍</li>
+      <li>切到周线 → 再来一遍</li>
+    </ol>
+
+    <p>做完这四步，已经过去 5-10 分钟了。而且不同人画的 N 型可能完全不同——A 点选在哪根 K 线，C 点是否成立，上升还是下降，全靠个人经验。</p>
+
+    <p>更麻烦的是，<strong>行情刷新后，之前画的结构可能已经失效了</strong>——C 点被新 K 线突破，或者方向发生了翻转。这时候你需要重新画。</p>
+
+    <p>如果一个系统能自动完成这件事——<strong>实时、跨周期、可验证</strong>——你就不需要在这件事上花任何时间了。</p>
+
+    <p>这就是我们做 N 型结构自动识别引擎的出发点。</p>
+
+    <div class="highlight-box">
+      <strong>项目地址（开源 MIT）：</strong> <a href="https://github.com/DrfterX/options-arbitrage-system">github.com/DrfterX/options-arbitrage-system</a><br>
+      <strong>在线体验：</strong> <a href="https://signals.drifter.indevs.in">signals.drifter.indevs.in</a>
+    </div>
+
+    <hr>
+
+    <h2>二、N 型结构的正确定义</h2>
+
+    <p>在深入代码之前，需要把这个基础问题说清楚。因为<strong>错误的定义会导致整个算法跑偏</strong>。</p>
+
+    <p>一个 N 型结构由 A、B、C 三个点构成，但很多人把 A、B、C 简单地理解为「前高、前低、当前价」，这不够精确。</p>
+
+    <h3>上升 N 型（做多信号）</h3>
+
+    <pre>
+价格
+↑        B（第一笔终点/最高点）
+↑       ↗↘
+↑      ↗  ↘
+↑     ↗    ↘  C（第二笔低点）—— 第三笔起点
+↑    ↗        ↘
+↑   ↗          ↘     ↗
+↑  ↗            ↘ ↗   最新价
+↑ ↗              ↗
+↑ A（第一笔起点/最低点）
+└─────────────────────────→ 时间</pre>
+
+    <p><strong>正确标点方式：</strong></p>
+    <ul>
+      <li><strong>A 点</strong> = 第一笔的起点，是整个 N 型的最低点</li>
+      <li><strong>A → B</strong> = 第一笔上涨，B 是第一笔的终点（最高点）</li>
+      <li><strong>B → C</strong> = 第二笔下跌，C 是第二笔的终点（最低点）</li>
+      <li><strong>关键约束：C 点不能低于 A 点</strong>，否则上升 N 型不成立</li>
+      <li><strong>C → 最新价</strong> = 正在形成的第三笔，突破 B 点为确认信号</li>
+    </ul>
+
+    <h3>下降 N 型（做空信号）</h3>
+
+    <p>方向相反：</p>
+    <ul>
+      <li><strong>A 点</strong> = 第一笔的起点，是整个 N 型的最高点</li>
+      <li><strong>A → B</strong> = 第一笔下跌，B 是第一笔的终点（最低点）</li>
+      <li><strong>B → C</strong> = 第二笔上涨，C 是第二笔的终点（最高点）</li>
+      <li><strong>约束：C 点不能高于 A 点</strong></li>
+      <li><strong>C → 最新价</strong> = 潜在第三笔，跌破 B 点确认做空</li>
+    </ul>
+
+    <h3>容易踩的坑</h3>
+
+    <p>最常见的错误是<strong>用「前高前低」来定义 A、B、C</strong>，比如：</p>
+
+    <pre>A = 最近的最低点，B = 最近的最高点，C = 再一个最低点</pre>
+
+    <p>这样标出来的三点之间不一定有「第一笔 → 第二笔 → 潜在第三笔」的逻辑关系。它们可能属于同一个上涨波段，或者 C 已经破掉了 A 的位置。</p>
+
+    <p><strong>正确的思路是：先判断方向，再按方向标点。</strong></p>
+
+    <p><strong>上升 N 型（同时满足）：</strong></p>
+    <ol>
+      <li>B 价格 > A 价格 ✓（第一笔上涨确立）</li>
+      <li>C 价格 < B 价格 ✓（第二笔下跌确立）</li>
+      <li>C 价格 > A 价格 ✓（C 不破 A，否则失效）</li>
+      <li>最新价 > C 价格 ✓（潜在第三笔向上）</li>
+    </ol>
+
+    <p><strong>下降 N 型（同时满足）：</strong></p>
+    <ol>
+      <li>A 价格 > B 价格 ✓（第一笔下跌确立）</li>
+      <li>C 价格 > B 价格 ✓（第二笔上涨确立）</li>
+      <li>C 价格 < A 价格 ✓（C 不高于 A）</li>
+      <li>最新价 < C 价格 ✓（潜在第三笔向下）</li>
+    </ol>
+
+    <hr>
+
+    <h2>三、算法核心：前向非重叠扫描</h2>
+
+    <p>确定了定义后，我们面临的问题是：<strong>从一堆极值点中，怎么找到最近的一个有效 N 型结构？</strong></p>
+
+    <h3>3.1 数据预处理</h3>
+
+    <p>首先，从 K 线数据中提取极值点（PEAK 和 TROUGH），然后用一个合并步骤处理连续的同向极值点：</p>
+
+    <pre>def _merge_same_type(swing_points):
+    """合并连续同向极值点，保留最极端值"""
+    merged = []
+    for sp in swing_points:
+        if merged and sp["point_type"] == merged[-1]["point_type"]:
+            prev = merged[-1]
+            if sp["point_type"] == "TROUGH":
+                if sp["price"] < prev["price"]:
+                    merged[-1] = sp  # 更低 → 更极端的低点
+            else:  # PEAK
+                if sp["price"] > prev["price"]:
+                    merged[-1] = sp  # 更高 → 更极端的高点
+        else:
+            merged.append(sp)
+    return merged</pre>
+
+    <p>这个处理至关重要——K 线里连续的几根阳线会产生多个 PEAK，我们不需要它们，只要最高/最低的那个。</p>
+
+    <h3>3.2 核心算法：前向非重叠扫描</h3>
+
+    <p>代码最核心的部分是这个函数。思路是：<strong>从最早的极值点开始，依次尝试作为 A 点，然后找 B，再找 C。找到后跳到 C 之后继续，取最后一个结构作为当前活跃的 N 型。</strong></p>
+
+    <pre>def _find_n_structure_forward(merged):
+    """前向非重叠扫描——返回最后一个有效的 N 型结构"""
+    structures = []
+
+    i = 0
+    while i < len(merged) - 2:
+        a = merged[i]
+        found = False
+
+        for b_idx in range(i + 1, len(merged)):
+            if merged[b_idx]["point_type"] == a["point_type"]:
+                continue  # 同类型，不是 B
+            b = merged[b_idx]
+            direction = _determine_direction(a["price"], b["price"])
+
+            # 上升 N → A 必须是 TROUGH（最低点）
+            # 下降 N → A 必须是 PEAK（最高点）
+            if (direction == "LONG" and a["point_type"] != "TROUGH") or \
+               (direction == "SHORT" and a["point_type"] != "PEAK"):
+                continue
+
+            for c_idx in range(b_idx + 1, len(merged)):
+                if merged[c_idx]["point_type"] != a["point_type"]:
+                    continue
+                c = merged[c_idx]
+
+                if direction == "LONG" and c["price"] <= a["price"]:
+                    continue
+                if direction == "SHORT" and c["price"] >= a["price"]:
+                    continue
+
+                structures.append({
+                    "direction": direction,
+                    "a": a, "b": b, "c": c,
+                })
+                i = c_idx + 1  # 非重叠：跳到 C 之后
+                found = True
+                break
+
+            if found:
+                break
+
+        if not found:
+            i += 1
+
+    return structures[-1] if structures else None</pre>
+
+    <p>这段代码的关键设计有三个：</p>
+
+    <p><strong>1. 非重叠约束（non-overlapping）</strong></p>
+
+    <p>找到 C 后将扫描起点设为 C 之后，而不是 C 本身或 B。这防止了「第三笔内部的小波动被误认为新结构」的滑动错误。</p>
+
+    <p>举个例子，如果一个上升 N 型的第三笔内部出现一个小级别的下跌再上涨，那段小波动的低点容易被误判为「新的 C 点」。非重叠约束强制要求下一个结构必须从 C 之后开始，彻底避免了这个陷阱。</p>
+
+    <p><strong>2. 方向判定前置</strong></p>
+
+    <p>先通过 <code>_determine_direction(A, B)</code> 判断是上升还是下降，然后再校验 A 点类型是否匹配（上升 N 要求 A 是最低点，下降 N 要求 A 是最高点）。这个顺序很重要——<strong>错误的顺序会导致 A 点和 B 点同时放错位置</strong>。</p>
+
+    <p><strong>3. 取最后一个有效结构</strong></p>
+
+    <p><code>structures[-1]</code> 取到的是最近的一个有效结构。这符合直觉——我们想要的是<strong>当前仍在运行中的</strong> N 型结构，而不是几个月前已经完成的那一个。</p>
+
+    <h3>3.3 为什么不用逆向扫描？</h3>
+
+    <p>最开始尝试的是<strong>从最新的极值点倒推</strong>——先找最后一个 C，然后往前找 B，再往前找 A。</p>
+
+    <p>但这种方法有一个致命的缺陷：<strong>A 点会随新极值点的出现而不断滑动</strong>。</p>
+
+    <p>比如新的极值点出现后，C 的位置变了，往前找的 B 可能也变了，整条线段全部重画，用户在 UI 上看到的就是「闪烁的 N 型结构」。交易者无法信任一个不断变化的信号。</p>
+
+    <p>前向扫描的哲学是：<strong>一旦锁定 A → B → C，它们就固定在各自的历史位置上。只有 C 点可以随新 K 线变化而滑动，A 和 B 不动。</strong></p>
+
+    <hr>
+
+    <h2>四、三笔状态机</h2>
+
+    <p>用一个简单的状态机来追踪 N 型结构的生命周期：</p>
+
+    <pre>IDLE → LEG1 → LEG2 → LEG3 → COMPLETED</pre>
+
+    <table>
+      <tr><th>状态</th><th>含义</th></tr>
+      <tr><td><code>IDLE</code></td><td>无活跃结构，等待形成</td></tr>
+      <tr><td><code>LEG1</code></td><td>A 点已确认（第一个极值点出现）</td></tr>
+      <tr><td><code>LEG2</code></td><td>B 点已确认（反向极值出现，方向确立）</td></tr>
+      <tr><td><code>LEG3</code></td><td>A → B → C 完整结构形成，第三段运行中</td></tr>
+      <tr><td><code>COMPLETED</code></td><td>结构结束（被新结构替代）</td></tr>
+    </table>
+
+    <p>当算法从前向扫描中找到有效的 ABC 三点时，直接将状态设为 <code>LEG3</code>。如果 A 之前还有同类型的极值点，说明旧结构已经被新结构取代，标记为 <code>COMPLETED</code>。</p>
+
+    <hr>
+
+    <h2>五、C 点滑动与动态重算</h2>
+
+    <p>行情是实时更新的，新 K 线出现后，C 点可能不是最优的极值点了。</p>
+
+    <h3>5.1 C 点滑动更新</h3>
+
+    <p>当新的极值点与 C 点同类型且更极端时（上升 N 的 C 是低点，新低点更低），我们更新 C 点的位置——<strong>A 和 B 不动，C 随行情滑动</strong>：</p>
+
+    <pre>def _update_c_point(active, swing_points, db):
+    """更新 C 点——最新 swing point 更极端时滑动更新"""
+    latest = swing_points[-1]
+
+    if active["direction"] == "LONG":
+        c_type = "TROUGH"
+        more_extreme = latest["price"] < active["point_c_price"]
+    else:
+        c_type = "PEAK"
+        more_extreme = latest["price"] > active["point_c_price"]
+
+    if latest["point_type"] != c_type or not more_extreme:
+        return None
+
+    # 阈值防突破检查：C 超越 A 则结构失效
+    if active["direction"] == "LONG":
+        if latest["price"] <= active["point_a_price"]:
+            _mark_completed(active, db)
+            return None
+
+    active["point_c_price"] = latest["price"]
+    active["point_c_time"] = latest["timestamp"]
+    _save_n_structure(db, active)
+    return active</pre>
+
+    <p>但有一个安全网：如果 C 点的值<strong>突破了 A 点</strong>（上升 N 中 C 跌破了 A 的位置），说明原有的上升结构已经失效，我们不再滑动，而是标记为 <code>COMPLETED</code>。</p>
+
+    <h3>5.2 A 点突破：结构迁移</h3>
+
+    <p>如果 A 点本身被突破了会怎样？比如上升 N 中 A 是最低点（TROUGH），新 K 线的价格跌破了这个低点——说明原本的「A 是最低点」这个假设已经不存在了。</p>
+
+    <p>这时候触发<strong>动态重算（dynamic_restructure）</strong>：</p>
+
+    <pre>old_A 被突破 → old_B 变成 new_A → 找 new_B → 找 new_C → 方向重判</pre>
+
+    <p>逻辑很简单：原结构的 B 点成为新结构的 A 点（因为它是当前可用的最早期极值点），然后重新找 B 和 C。</p>
+
+    <p>如果极值点不足以形成新结构，则回退到全量重算（detect_and_save）。</p>
+
+    <hr>
+
+    <h2>六、多周期共振扫描</h2>
+
+    <p>单个周期的 N 型结构信号价值有限。真正有价值的信号是<strong>多个周期同时指向同一个方向</strong>——我们称之为共振。</p>
+
+    <p>信号矩阵覆盖四个周期：</p>
+
+    <table>
+      <tr><th>周期</th><th>用途</th></tr>
+      <tr><td>15 分钟</td><td>短线交易信号</td></tr>
+      <tr><td>1 小时</td><td>日内趋势</td></tr>
+      <tr><td>1 日线</td><td>中期趋势</td></tr>
+      <tr><td>1 周线</td><td>大趋势框架</td></tr>
+    </table>
+
+    <p>当三个或四个周期同时显示看多（上升 N 型）时，信号强度可达 <code>3/4</code> 或 <code>4/4</code>：</p>
+
+    <pre>var resColor = row.resonance >= 3 ? '#22c55e' :  // 强信号 → 绿色
+                (row.resonance >= 2 ? '#f59e0b' :  // 中信号 → 橙色
+                                      '#64748b');  // 弱信号 → 灰色</pre>
+
+    <p><strong>判断逻辑完全一致。</strong>15 分钟图的算法和周线图的算法是同一套代码——周期不同仅影响 K 线形态数据，不影响判定规则。这是这个引擎的核心理念：</p>
+
+    <div class="highlight-box">
+      <strong>核心理念：</strong>承认不同周期的行情特征不同，但 N 型结构的数学定义是一致的。
+    </div>
+
+    <hr>
+
+    <h2>七、实战案例：橡胶 2609 周 K 线</h2>
+
+    <p>以橡胶 2609 合约的周线为例（2026 年数据）：</p>
+
+    <table>
+      <tr><th>点位</th><th>价格</th><th>说明</th></tr>
+      <tr><td>A</td><td>17,220</td><td>这一轮上涨的起点，最低点</td></tr>
+      <tr><td>B</td><td>18,440</td><td>第一笔终点的最高点</td></tr>
+      <tr><td>C</td><td>17,245</td><td>第二笔回调的低点（高于 A，结构保持）</td></tr>
+    </table>
+
+    <p>这条上升 N 型满足：</p>
+    <ul>
+      <li>✅ B (18,440) > A (17,220) — 第一笔上涨</li>
+      <li>✅ C (17,245) < B (18,440) — 第二笔下跌</li>
+      <li>✅ C (17,245) > A (17,220) — C 不破 A，结构有效</li>
+      <li>✅ 最新价 > C — 正在形成第三笔</li>
+    </ul>
+
+    <p>信号解读：<strong>偏多。</strong>回调没有破前低，价格有向上突破的潜力。</p>
+
+    <hr>
+
+    <h2>八、总结与思考</h2>
+
+    <h3>做对了什么</h3>
+
+    <ol>
+      <li><strong>前向非重叠扫描</strong> — 解决了逆向扫描导致的「结构闪烁」问题，A、B 点锁定后不再变化</li>
+      <li><strong>先判方向再标点</strong> — 避免了方向混乱导致的标点错误</li>
+      <li><strong>C 点滑动 + A 点突破迁移</strong> — 兼顾了结构的稳定性和对行情的实时响应</li>
+      <li><strong>周期无关的算法统一</strong> — 同一套逻辑跑所有周期，减少心智负担</li>
+    </ol>
+
+    <h3>架构取舍</h3>
+
+    <ul>
+      <li><strong>状态机只用 5 个状态</strong> — 极简设计，三段的生命周期清晰</li>
+      <li><strong>非重叠约束</strong> — 牺牲了对次级波动的敏感度，换来了信号的稳定性</li>
+      <li><strong>全量重算作为安全网</strong> — 增量更新处理不了的情况一律回退到全量重算，避免状态错乱</li>
+    </ul>
+
+    <h3>一些可供借鉴的工程思考</h3>
+
+    <ul>
+      <li><strong>日志先行：</strong>所有结构状态变更都打日志（方向/价格/时间/原因），问题出现时可以直接追溯</li>
+      <li><strong>防御性检查：</strong>C 点滑动时持续检查是否突破 A，防止静默失效</li>
+      <li><strong>开源友好：</strong>全部代码 MIT 许可，核心技术不到 400 行 Python</li>
+    </ul>
+
+    <!-- CTA -->
+    <div class="blog-cta">
+      <h3>亲眼看看 N 型结构引擎的识别效果</h3>
+      <p>打开信号矩阵 → 切换到期权 K 线面板 → N 型结构自动标注在 K 线图上。覆盖 15+ 品种 × 4 个周期，实时更新。</p>
+      <a href="https://signals.drifter.indevs.in" class="btn">体验信号矩阵 →</a>
+    </div>
+
+    <p style="font-size:.6rem;color:var(--text3);margin-top:24px;"><em>本文为技术原理分享，不构成投资建议。期货交易有风险，请自行判断。</em></p>
+
+  </div>
+
+  <footer class="blog-footer">
+    <div style="display:flex;justify-content:space-between;align-items:center;width:100%;">
+      <span>文章编号：SIG-2026-007 · 数据截止：2026-06-21</span>
+      <a href="/blog">← 返回 Blog</a>
+    </div>
+    <span><strong>免责声明</strong>：本文所有信号数据仅作技术分析参考，不构成投资建议。期货/期权交易具有高风险，请根据自身风险承受能力谨慎决策。</span>
+  </footer>
+
+</article>
+
+</body>
+</html>

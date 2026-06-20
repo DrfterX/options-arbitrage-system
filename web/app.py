@@ -289,6 +289,12 @@ def sitemap_xml():
     <priority>0.9</priority>
   </url>
   <url>
+    <loc>https://signals.drifter.indevs.in/blog/n-structure-engine-deepdive</loc>
+    <lastmod>2026-06-21</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
     <loc>https://futures.drifter.indevs.in/</loc>
     <lastmod>{futures_lastmod}</lastmod>
     <changefreq>daily</changefreq>
@@ -582,6 +588,12 @@ def blog_article_options_strategies():
 def blog_article_intro():
     """产品介绍：免费多周期信号看板。"""
     return render_template("blog_post_intro.html")
+
+
+@app.route("/blog/n-structure-engine-deepdive")
+def blog_article_engine_deepdive():
+    """技术深挖：N 型结构自动识别引擎架构。"""
+    return render_template("blog_post_engine_deepdive.html")
 
 
 # ── N 型结构动态重算辅助 ───────────────────────────────────────
