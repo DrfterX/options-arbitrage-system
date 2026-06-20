@@ -248,7 +248,7 @@ def sitemap_xml():
   </url>
   <url>
     <loc>https://signals.drifter.indevs.in/blog</loc>
-    <lastmod>2026-06-20</lastmod>
+    <lastmod>2026-06-21</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
@@ -267,6 +267,18 @@ def sitemap_xml():
   <url>
     <loc>https://signals.drifter.indevs.in/blog/multi-timeframe-signals</loc>
     <lastmod>2026-06-20</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://signals.drifter.indevs.in/blog/iv-n-structure-combined</loc>
+    <lastmod>2026-06-21</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://signals.drifter.indevs.in/blog/options-strategies</loc>
+    <lastmod>2026-06-21</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.9</priority>
   </url>
@@ -552,6 +564,12 @@ def blog_article_mtf():
 def blog_article_iv_nstructure():
     """期权 IV 辅助期货交易：低波品种 + N 型突破。"""
     return render_template("blog_post_iv_nstructure.html")
+
+
+@app.route("/blog/options-strategies")
+def blog_article_options_strategies():
+    """期权策略实战：用 IV 百分位数据选策略。"""
+    return render_template("blog_post_options_strategies.html")
 
 
 # ── N 型结构动态重算辅助 ───────────────────────────────────────
