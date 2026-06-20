@@ -548,6 +548,12 @@ def blog_article_mtf():
     return render_template("blog_post_mtf.html")
 
 
+@app.route("/blog/iv-n-structure-combined")
+def blog_article_iv_nstructure():
+    """期权 IV 辅助期货交易：低波品种 + N 型突破。"""
+    return render_template("blog_post_iv_nstructure.html")
+
+
 # ── N 型结构动态重算辅助 ───────────────────────────────────────
 
 
