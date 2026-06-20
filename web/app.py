@@ -259,6 +259,12 @@ def sitemap_xml():
     <priority>0.9</priority>
   </url>
   <url>
+    <loc>https://signals.drifter.indevs.in/blog/options-iv-analysis</loc>
+    <lastmod>2026-06-20</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
     <loc>https://futures.drifter.indevs.in/</loc>
     <lastmod>{futures_lastmod}</lastmod>
     <changefreq>daily</changefreq>
@@ -522,6 +528,12 @@ def blog_index():
 def blog_article_n_structure():
     """N 型结构实战：多周期共振捕捉橡胶期货趋势。"""
     return render_template("blog_post.html")
+
+
+@app.route("/blog/options-iv-analysis")
+def blog_article_iv():
+    """期权 IV 分析：用隐含波动率识别定价偏差。"""
+    return render_template("blog_post_iv.html")
 
 
 # ── N 型结构动态重算辅助 ───────────────────────────────────────
