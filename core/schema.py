@@ -290,6 +290,26 @@ ALL_TABLES: dict[str, str] = {
             visited_at  INTEGER NOT NULL
         )
     """,
+
+    # ── 17. Bot 订阅用户表 ─────────────────────────────────────
+    "bot_subscribers": """
+        CREATE TABLE IF NOT EXISTS bot_subscribers (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            telegram_chat_id TEXT    NOT NULL UNIQUE,
+            telegram_username TEXT   DEFAULT '',
+            first_name       TEXT   DEFAULT '',
+            status           TEXT   NOT NULL DEFAULT 'trial'
+                               CHECK(status IN ('trial','active','expired','cancelled')),
+            subscribed_at    TEXT   NOT NULL DEFAULT (datetime('now')),
+            trial_end_at     TEXT   DEFAULT '',
+            expires_at       TEXT   DEFAULT '',
+            preferences      TEXT   DEFAULT '{}',
+            signals_pushed   INTEGER DEFAULT 0,
+            last_pushed_at   TEXT   DEFAULT '',
+            created_at       TEXT   DEFAULT (datetime('now')),
+            updated_at       TEXT   DEFAULT (datetime('now'))
+        )
+    """,
 }
 
 # ============================================================
@@ -332,4 +352,6 @@ INDEXES: list[str] = [
     "CREATE INDEX IF NOT EXISTS idx_page_hits_visited ON page_hits(visited_at)",
     "CREATE INDEX IF NOT EXISTS idx_page_hits_url ON page_hits(url)",
     "CREATE INDEX IF NOT EXISTS idx_page_hits_session ON page_hits(session_id)",
+    "CREATE INDEX IF NOT EXISTS idx_bot_subs_status ON bot_subscribers(status)",
+    "CREATE INDEX IF NOT EXISTS idx_bot_subs_trial_end ON bot_subscribers(trial_end_at)",
 ]

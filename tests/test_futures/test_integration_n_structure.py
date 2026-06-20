@@ -428,24 +428,27 @@ class TestPhase4MultiplePush:
             make_kline(TS + 10, close=105, low=103, high=107),
         ])
         _seed_swings(db, self.SYMBOL, self.CONTRACT, self.TF, [
-            make_swing("TROUGH", 95, TS + 9),
-            make_swing("PEAK", 105, TS + 10),
+            make_swing("TROUGH", 110, TS + 7),
+            make_swing("PEAK", 120, TS + 9),
         ])
 
         r2 = dynamic_restructure(self.SYMBOL, self.CONTRACT, self.TF, db)
-        # LONG A=100,B=130,C=115 → A broken(B=130→new_A) → migration:
-        # new_B = first TROUGH after old_B=T115(TS+5) price=115.0
-        # new_C = first PEAK after T115 = P105(TS+10) price=105.0
+        # LONG A=100,B=130,C=115 → A broken(low=93<100) → migration:
+        # old_B=130(PEAK) → new_A=130(PEAK)
+        # ISEED swings (after old_B time=TS+3):
+        #   TROUGH(115, TS+5) → new_B (first TROUGH, original C点)
+        #   TROUGH(110, TS+7)  → same type, merged into T115
+        #   PEAK(120, TS+9)    → new_C (first PEAK after new_B)
         # direction: A(130) > B(115) → SHORT
+        # C2 check: SHORT C(120) > B(115) ✅
         assert r2["direction"] == "SHORT"
         assert r2["point_a_price"] == 130.0
         assert r2["point_b_price"] == 115.0
-        assert r2["point_c_price"] == 105.0
+        assert r2["point_c_price"] == 120.0
         assert_is_active(r2)
 
         # ── Push 3: 新 SHORT 结构 B 反转 ──
         # SHORT: A=130, B=115 → latest_low > 115 且回弹 > 50%
-        # limit=3 需要 3 根最新 K 线全部 >115 low
         # 回弹需要 (low-115)/(130-115) > 0.5 → low > 122.5
         _seed_klines(db, self.SYMBOL, self.CONTRACT, self.TF, [
             make_kline(TS + 12, close=123, low=123, high=124),
@@ -458,8 +461,9 @@ class TestPhase4MultiplePush:
 
         r3 = dynamic_restructure(self.SYMBOL, self.CONTRACT, self.TF, db)
         # B 反转检测：SHORT A=130, B=115 → 需 latest_low > 122.5
-        # 但历史低点 93（来自 Push2）仍低于 B=115 → B 反转条件不满足
-        # 正确行为：SHORT 结构仍有效（看全部 K 线，非仅最新 3 根）
+        # 但 min(low) across all klines = min(93,103,123,124,125) = 93 < 115
+        # → B 反转条件不满足（历史低点 93 仍低于 B=115）
+        # 正确行为：SHORT 结构仍有效
         assert r3["direction"] == "SHORT"
         assert r3["point_a_price"] == 130.0
         assert r3["point_b_price"] == 115.0

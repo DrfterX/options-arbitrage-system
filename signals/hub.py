@@ -30,6 +30,16 @@ def _sanitize_json(obj: Any) -> Any:
     return obj
 
 
+def _safe_float(val, default: float = 0.0) -> float:
+    """安全转 float，None → default，异常 → default。"""
+    if val is None:
+        return default
+    try:
+        return float(val)
+    except (TypeError, ValueError):
+        return default
+
+
 class SignalHub:
     """统一信号中心：存储、查询、去重。
 
@@ -142,8 +152,6 @@ class SignalHub:
         except Exception as e:
             logger.error("记录期货信号失败 %s %s: %s", result.symbol, result.contract, e)
             return -1
-        finally:
-            pass  # 连接由 Database 管理生命周期
 
     # ── 期权信号 ──────────────────────────────────────────────
 
@@ -190,18 +198,18 @@ class SignalHub:
                     signal_dict.get("contract", ""),
                     signal_dict.get("strategy", ""),
                     signal_dict.get("signal_type", "WATCH"),
-                    float(signal_dict.get("strength", 0)),
+                    _safe_float(signal_dict.get("strength", 0)),
                     signal_dict.get("reason", ""),
-                    float(signal_dict.get("futures_price", 0)),
-                    float(signal_dict.get("iv_avg", 0)),
-                    float(signal_dict.get("iv_percentile", 0)),
+                    _safe_float(signal_dict.get("futures_price", 0)),
+                    _safe_float(signal_dict.get("iv_avg", 0)),
+                    _safe_float(signal_dict.get("iv_percentile", 0)),
                     signal_dict.get("iv_level", ""),
-                    float(signal_dict.get("net_delta", 0)),
-                    float(signal_dict.get("net_theta", 0)),
-                    float(signal_dict.get("net_vega", 0)),
-                    float(signal_dict.get("max_profit", 0)),
-                    float(signal_dict.get("max_loss", 0)),
-                    float(signal_dict.get("unified_score", 0)),
+                    _safe_float(signal_dict.get("net_delta", 0)),
+                    _safe_float(signal_dict.get("net_theta", 0)),
+                    _safe_float(signal_dict.get("net_vega", 0)),
+                    _safe_float(signal_dict.get("max_profit", 0)),
+                    _safe_float(signal_dict.get("max_loss", 0)),
+                    _safe_float(signal_dict.get("unified_score", 0)),
                     strategy_details_json,
                     now_utc,
                 ),
@@ -222,8 +230,6 @@ class SignalHub:
                 "记录期权信号失败 %s: %s", signal_dict.get("symbol"), e
             )
             return -1
-        finally:
-            pass  # 连接由 Database 管理生命周期
 
     # ── 去重 ──────────────────────────────────────────────────
 
@@ -258,8 +264,6 @@ class SignalHub:
         except Exception as e:
             logger.warning("去重查询失败: %s", e)
             return False
-        finally:
-            pass  # 连接由 Database 管理生命周期
 
     def record_push(
         self,
@@ -300,8 +304,6 @@ class SignalHub:
         except Exception as e:
             logger.error("记录推送失败 %s: %s", fingerprint, e)
             return False
-        finally:
-            pass  # 连接由 Database 管理生命周期
 
     # ── 查询 ──────────────────────────────────────────────────
 
@@ -316,17 +318,14 @@ class SignalHub:
             期货信号字典列表（按 created_at 降序）。
         """
         conn = self.db.get_conn()
-        try:
-            delay_clause = "AND created_at <= datetime('now', '-15 minutes')" if delay else ""
-            rows = conn.execute(
-                f"""SELECT * FROM futures_signals
-                   WHERE 1=1 {delay_clause}
-                   ORDER BY created_at DESC LIMIT ?""",
-                (limit,),
-            ).fetchall()
-            return [dict(r) for r in rows]
-        finally:
-            pass  # 连接由 Database 管理生命周期
+        delay_clause = "AND created_at <= datetime('now', '-15 minutes')" if delay else ""
+        rows = conn.execute(
+            f"""SELECT * FROM futures_signals
+               WHERE 1=1 {delay_clause}
+               ORDER BY created_at DESC LIMIT ?""",
+            (limit,),
+        ).fetchall()
+        return [dict(r) for r in rows]
 
     def get_recent_options(self, limit: int = 50, delay: bool = False) -> list:
         """获取最近期权信号。
@@ -339,17 +338,14 @@ class SignalHub:
             期权信号字典列表（按 created_at 降序）。
         """
         conn = self.db.get_conn()
-        try:
-            delay_clause = "AND created_at <= datetime('now', '-15 minutes')" if delay else ""
-            rows = conn.execute(
-                f"""SELECT * FROM options_signals
-                   WHERE 1=1 {delay_clause}
-                   ORDER BY unified_score DESC, created_at DESC LIMIT ?""",
-                (limit,),
-            ).fetchall()
-            return [dict(r) for r in rows]
-        finally:
-            pass  # 连接由 Database 管理生命周期
+        delay_clause = "AND created_at <= datetime('now', '-15 minutes')" if delay else ""
+        rows = conn.execute(
+            f"""SELECT * FROM options_signals
+               WHERE 1=1 {delay_clause}
+               ORDER BY unified_score DESC, created_at DESC LIMIT ?""",
+            (limit,),
+        ).fetchall()
+        return [dict(r) for r in rows]
 
     # ── 过滤决策日志 ──────────────────────────────────────────
 
@@ -418,8 +414,6 @@ class SignalHub:
         except Exception as e:
             logger.error("记录过滤决策失败 %s: %s", symbol, e)
             return False
-        finally:
-            pass  # 连接由 Database 管理生命周期
 
     def get_filter_stats(self, delay: bool = False) -> dict:
         """获取 SmartFilter 统计汇总。
@@ -431,36 +425,33 @@ class SignalHub:
             dict: 总评估数/推送数/抑制数/各等级分布。
         """
         conn = self.db.get_conn()
-        try:
-            delay_clause = "AND created_at <= datetime('now', '-15 minutes')" if delay else ""
-            total = conn.execute(
-                f"SELECT COUNT(*) as c FROM filter_decision_log WHERE 1=1 {delay_clause}"
-            ).fetchone()["c"]
+        delay_clause = "AND created_at <= datetime('now', '-15 minutes')" if delay else ""
+        total = conn.execute(
+            f"SELECT COUNT(*) as c FROM filter_decision_log WHERE 1=1 {delay_clause}"
+        ).fetchone()["c"]
 
-            pushed = conn.execute(
-                f"SELECT COUNT(*) as c FROM filter_decision_log WHERE should_push=1 {delay_clause}"
-            ).fetchone()["c"]
+        pushed = conn.execute(
+            f"SELECT COUNT(*) as c FROM filter_decision_log WHERE should_push=1 {delay_clause}"
+        ).fetchone()["c"]
 
-            suppressed = conn.execute(
-                "SELECT COUNT(*) as c FROM filter_decision_log WHERE should_push=0"
-            ).fetchone()["c"]
+        suppressed = conn.execute(
+            "SELECT COUNT(*) as c FROM filter_decision_log WHERE should_push=0"
+        ).fetchone()["c"]
 
-            levels = conn.execute(
-                f"""SELECT push_level, COUNT(*) as c
-                   FROM filter_decision_log
-                   WHERE 1=1 {delay_clause}
-                   GROUP BY push_level
-                   ORDER BY c DESC"""
-            ).fetchall()
+        levels = conn.execute(
+            f"""SELECT push_level, COUNT(*) as c
+               FROM filter_decision_log
+               WHERE 1=1 {delay_clause}
+               GROUP BY push_level
+               ORDER BY c DESC"""
+        ).fetchall()
 
-            return {
-                "total": total,
-                "pushed": pushed,
-                "suppressed": suppressed,
-                "levels": [dict(r) for r in levels],
-            }
-        finally:
-            pass  # 连接由 Database 管理生命周期
+        return {
+            "total": total,
+            "pushed": pushed,
+            "suppressed": suppressed,
+            "levels": [dict(r) for r in levels],
+        }
 
     def get_recent_filter_log(self, limit: int = 20, delay: bool = False) -> list:
         """获取最近的过滤决策日志。
@@ -473,17 +464,14 @@ class SignalHub:
             过滤决策日志列表（按 created_at 降序）。
         """
         conn = self.db.get_conn()
-        try:
-            delay_clause = "AND created_at <= datetime('now', '-15 minutes')" if delay else ""
-            rows = conn.execute(
-                f"""SELECT * FROM filter_decision_log
-                   WHERE 1=1 {delay_clause}
-                   ORDER BY created_at DESC LIMIT ?""",
-                (limit,),
-            ).fetchall()
-            return [dict(r) for r in rows]
-        finally:
-            pass  # 连接由 Database 管理生命周期
+        delay_clause = "AND created_at <= datetime('now', '-15 minutes')" if delay else ""
+        rows = conn.execute(
+            f"""SELECT * FROM filter_decision_log
+               WHERE 1=1 {delay_clause}
+               ORDER BY created_at DESC LIMIT ?""",
+            (limit,),
+        ).fetchall()
+        return [dict(r) for r in rows]
 
     # ── 清理 ──────────────────────────────────────────────────
 
@@ -521,5 +509,3 @@ class SignalHub:
         except Exception as e:
             logger.error("清理旧数据失败: %s", e)
             return 0
-        finally:
-            pass  # 连接由 Database 管理生命周期

@@ -237,10 +237,11 @@ class IVRecorder:
         """
         conn = self.db.get_conn()
         try:
-            # 获取每个品种最新一条记录
+            # 获取每个品种最新一条记录（按品种分组取各自最大日期）
             rows = conn.execute(
-                """SELECT DISTINCT symbol, contract FROM iv_history
-                   WHERE date = (SELECT MAX(date) FROM iv_history)
+                """SELECT symbol, contract, MAX(date) as max_date
+                   FROM iv_history
+                   GROUP BY symbol, contract
                    ORDER BY symbol"""
             ).fetchall()
 

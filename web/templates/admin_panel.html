@@ -468,6 +468,12 @@
 </div>
 
 <script>
+// ── Global HTML escape helper (XSS prevention) ──
+function esc(s) {
+  if (s == null) return '';
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 // ═══════════════════════════════════════════════════════════════════
 //  Admin Panel  —  password-protected token generator
 // ═══════════════════════════════════════════════════════════════════
@@ -615,12 +621,12 @@ function loadSubscriptions() {
           ? row.session_id.slice(0, 24) + '…'
           : (row.session_id || '—');
         html += '<tr>'
-          + '<td>' + row.id + '</td>'
-          + '<td class="td-email" title="' + (row.email || '') + '">' + (row.email || '—') + '</td>'
-          + '<td><span class="status-badge ' + statusClass + '">' + row.status + '</span></td>'
-          + '<td style="font-size:.52rem;">' + sessionDisplay + '</td>'
-          + '<td>' + (row.created_at || '—') + '</td>'
-          + '<td>' + (row.expires_at || '—') + '</td>'
+          + '<td>' + esc(String(row.id)) + '</td>'
+          + '<td class="td-email" title="' + esc(row.email || '') + '">' + esc(row.email || '—') + '</td>'
+          + '<td><span class="status-badge ' + statusClass + '">' + esc(row.status) + '</span></td>'
+          + '<td style="font-size:.52rem;">' + esc(sessionDisplay) + '</td>'
+          + '<td>' + esc(row.created_at || '—') + '</td>'
+          + '<td>' + esc(row.expires_at || '—') + '</td>'
           + '</tr>';
       });
 
@@ -628,7 +634,7 @@ function loadSubscriptions() {
       wrap.innerHTML = html;
     })
     .catch(function(e) {
-      wrap.innerHTML = '<div class="empty-state"><div class="empty-icon">❌</div><div>加载失败: ' + (e.message || '未知错误') + '</div></div>';
+      wrap.innerHTML = '<div class="empty-state"><div class="empty-icon">❌</div><div>加载失败: ' + esc(e.message || '未知错误') + '</div></div>';
     });
 }
 </script>

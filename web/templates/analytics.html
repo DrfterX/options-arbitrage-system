@@ -42,59 +42,63 @@ nav a:hover { text-decoration: underline; }
 <div id="daily-chart" class="loading">加载中...</div>
 
 <script>
-(async function(){
-  try {
-    const res = await fetch('/api/stats/visits');
-    const d = await res.json();
+(function(){
+  function esc(s) { if (s == null) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
-    // ── 统计卡片 ──
-    document.getElementById('stats').innerHTML = `
-      <div class="stat-cards">
-        <div class="stat-card"><div class="num">${d.total}</div><div class="label">总访问</div></div>
-        <div class="stat-card"><div class="num">${d.unique}</div><div class="label">独立访客</div></div>
-        <div class="stat-card"><div class="num">${d.today}</div><div class="label">今日</div></div>
-      </div>
-    `;
+  (async function(){
+    try {
+      const res = await fetch('/api/stats/visits');
+      const d = await res.json();
 
-    // ── 热门页面 ──
-    if (d.top_pages && d.top_pages.length) {
-      document.getElementById('top-pages').innerHTML = `
-        <table><tr><th>页面</th><th>访问</th></tr>
-        ${d.top_pages.map(p => `<tr><td>${p.url}</td><td class="num">${p.cnt}</td></tr>`).join('')}
-        </table>`;
-    } else {
-      document.getElementById('top-pages').innerHTML = '<p style="color:#64748b">暂无数据</p>';
+      // ── 统计卡片 ──
+      document.getElementById('stats').innerHTML = `
+        <div class="stat-cards">
+          <div class="stat-card"><div class="num">${esc(d.total)}</div><div class="label">总访问</div></div>
+          <div class="stat-card"><div class="num">${esc(d.unique)}</div><div class="label">独立访客</div></div>
+          <div class="stat-card"><div class="num">${esc(d.today)}</div><div class="label">今日</div></div>
+        </div>
+      `;
+
+      // ── 热门页面 ──
+      if (d.top_pages && d.top_pages.length) {
+        document.getElementById('top-pages').innerHTML = `
+          <table><tr><th>页面</th><th>访问</th></tr>
+          ${d.top_pages.map(p => `<tr><td>${esc(p.url)}</td><td class="num">${esc(p.cnt)}</td></tr>`).join('')}
+          </table>`;
+      } else {
+        document.getElementById('top-pages').innerHTML = '<p style="color:#64748b">暂无数据</p>';
+      }
+
+      // ── 来源 ──
+      if (d.top_refs && d.top_refs.length) {
+        document.getElementById('top-refs').innerHTML = `
+          <table><tr><th>来源</th><th>访问</th></tr>
+          ${d.top_refs.map(r => `<tr><td>${esc(r.referrer || '(直接访问)')}</td><td class="num">${esc(r.cnt)}</td></tr>`).join('')}
+          </table>`;
+      } else {
+        document.getElementById('top-refs').innerHTML = '<p style="color:#64748b">暂无数据</p>';
+      }
+
+      // ── 每日趋势 ──
+      if (d.daily && d.daily.length) {
+        const maxCnt = Math.max(...d.daily.map(r => r.cnt), 1);
+        document.getElementById('daily-chart').innerHTML = `
+          <div style="display:flex;gap:4px;align-items:end;height:120px;padding:1rem 0;">
+            ${d.daily.reverse().map(r => `
+              <div style="flex:1;display:flex;flex-direction:column;align-items:center;">
+                <div style="font-size:0.7rem;color:#64748b;margin-bottom:2px;">${esc(r.cnt)}</div>
+                <div style="width:100%;background:linear-gradient(to top,#38bdf8,#0284c7);border-radius:4px 4px 0 0;height:${(r.cnt/maxCnt*100)}px;min-height:${r.cnt>0?'4':'0'}px;"></div>
+                <div style="font-size:0.65rem;color:#475569;margin-top:4px;transform:rotate(-45deg);white-space:nowrap;">${esc(r.day.slice(5))}</div>
+              </div>
+            `).join('')}
+          </div>`;
+      } else {
+        document.getElementById('daily-chart').innerHTML = '<p style="color:#64748b">暂无数据</p>';
+      }
+    } catch(e) {
+      document.querySelectorAll('.loading').forEach(el => el.innerHTML = '<div class="error">加载失败: ' + esc(e.message) + '</div>');
     }
-
-    // ── 来源 ──
-    if (d.top_refs && d.top_refs.length) {
-      document.getElementById('top-refs').innerHTML = `
-        <table><tr><th>来源</th><th>访问</th></tr>
-        ${d.top_refs.map(r => `<tr><td>${r.referrer || '(直接访问)'}</td><td class="num">${r.cnt}</td></tr>`).join('')}
-        </table>`;
-    } else {
-      document.getElementById('top-refs').innerHTML = '<p style="color:#64748b">暂无数据</p>';
-    }
-
-    // ── 每日趋势 ──
-    if (d.daily && d.daily.length) {
-      const maxCnt = Math.max(...d.daily.map(r => r.cnt), 1);
-      document.getElementById('daily-chart').innerHTML = `
-        <div style="display:flex;gap:4px;align-items:end;height:120px;padding:1rem 0;">
-          ${d.daily.reverse().map(r => `
-            <div style="flex:1;display:flex;flex-direction:column;align-items:center;">
-              <div style="font-size:0.7rem;color:#64748b;margin-bottom:2px;">${r.cnt}</div>
-              <div style="width:100%;background:linear-gradient(to top,#38bdf8,#0284c7);border-radius:4px 4px 0 0;height:${(r.cnt/maxCnt*100)}px;min-height:${r.cnt>0?'4':'0'}px;"></div>
-              <div style="font-size:0.65rem;color:#475569;margin-top:4px;transform:rotate(-45deg);white-space:nowrap;">${r.day.slice(5)}</div>
-            </div>
-          `).join('')}
-        </div>`;
-    } else {
-      document.getElementById('daily-chart').innerHTML = '<p style="color:#64748b">暂无数据</p>';
-    }
-  } catch(e) {
-    document.querySelectorAll('.loading').forEach(el => el.innerHTML = '<div class="error">加载失败: ' + e.message + '</div>');
-  }
+  })();
 })();
 </script>
 </body>

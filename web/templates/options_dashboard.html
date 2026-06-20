@@ -862,7 +862,7 @@
           {% if options %}
           {% for s in options[:20] %}
           <tr>
-            <td><span class="strat-sym">{{ s.symbol }}</span> <span class="strat-name">{{ s.contract or '' }}</span></td>
+            <td><span class="strat-sym">{{ s.symbol }}</span> <span class="strat-name">{{ s.name or s.contract or '' }}</span></td>
             <td><span class="strat-type {% if s.strategy == 'iron_condor' %}strat-ic{% elif s.strategy == 'vertical_spread' %}strat-vs{% elif s.strategy == 'calendar_spread' %}strat-cs{% else %}strat-other{% endif %}">{{ s.strategy|replace('_', ' ') }}</span></td>
             <td class="{% if s.iv_level == '极端高' %}strat-iv-high{% elif s.iv_level == '偏高' %}strat-iv-high{% elif s.iv_level == '正常' %}strat-iv-normal{% elif s.iv_level == '偏低' %}strat-iv-low{% elif s.iv_level == '极端低' %}strat-iv-extreme{% endif %}">{{ "%.1f"|format((s.iv_avg or 0)*100) }}%</td>
             <td class="strat-greeks">Δ:{{ "%.2f"|format(s.net_delta or 0) }}<br>Θ:{{ "%.2f"|format(s.net_theta or 0) }}</td>
@@ -894,6 +894,7 @@
         <div class="option-card-header">
           <div>
             <span class="option-card-sym">{{ s.symbol }}</span>
+            <span style="font-size:.58rem;color:var(--text3);margin-left:2px">{{ s.name or '' }}</span>
             <span class="option-card-contract">{{ s.contract or '' }}</span>
           </div>
           <span class="option-card-strat">{{ s.strategy|replace('_', ' ') }}</span>
@@ -1037,8 +1038,8 @@ var IV_DATA = JSON.parse('{{ iv_json|safe }}');
       type: 'category',
       data: IV_DATA.map(function(d){ return (d.symbol||'').toUpperCase(); }),
       axisLabel: {
-        color: '#8b92a5', fontSize: 7, interval: 0, rotate: 35,
-        lineHeight: 15, margin: 3,
+        color: '#8b92a5', fontSize: 8, interval: Math.max(0, Math.floor(IV_DATA.length / 18)), rotate: 30,
+        lineHeight: 16, margin: 4,
         formatter: function(val, idx) {
           var d = IV_DATA[idx];
           if (!d) return val;
@@ -1414,6 +1415,7 @@ function renderOptionsSignals(signals) {
   var theadHtml = '';
   sorted.forEach(function(s, idx) {
     var sym = s.symbol || '';
+    var cname = s.name || '';
     var contract = s.contract || '';
     var strategy = (s.strategy || '').replace(/_/g, ' ');
     var stratClass = 'strat-other';
@@ -1428,7 +1430,7 @@ function renderOptionsSignals(signals) {
     var score = s.unified_score || 0;
     var scoreClr = score >= 70 ? 'var(--brand)' : (score >= 50 ? '#f0b429' : 'var(--text3)');
     theadHtml += '<tr>'
-      + '<td><span class="strat-sym">' + esc(sym) + '</span> <span class="strat-name">' + esc(contract) + '</span></td>'
+      + '<td><span class="strat-sym">' + esc(sym) + '</span> <span class="strat-name">' + esc(cname || contract) + '</span></td>'
       + '<td><span class="strat-type ' + stratClass + '">' + esc(strategy) + '</span></td>'
       + '<td class="' + ivClass + '">' + ivPct + '%</td>'
       + '<td class="strat-greeks">Δ:' + (s.net_delta != null ? s.net_delta.toFixed(2) : '0.00') + '<br>Θ:' + (s.net_theta != null ? s.net_theta.toFixed(2) : '0.00') + '</td>'
@@ -1466,7 +1468,7 @@ function renderOptionCards(signals) {
     var reason = s.reason || '';
     html += '<div class="option-card ' + strengthCls + '">'
       + '<div class="option-card-header">'
-      + '<div><span class="option-card-sym">' + esc(s.symbol || '') + '</span> <span class="option-card-contract">' + esc(s.contract || '') + '</span></div>'
+      + '<div><span class="option-card-sym">' + esc(s.symbol || '') + '</span><span style="font-size:.58rem;color:var(--text3);margin-left:2px">' + esc(s.name || '') + '</span> <span class="option-card-contract">' + esc(s.contract || '') + '</span></div>'
       + '<span class="option-card-strat">' + esc((s.strategy || '').replace(/_/g, ' ')) + '</span>'
       + '</div>'
       + '<div class="option-card-iv">'

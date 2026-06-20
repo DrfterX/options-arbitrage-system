@@ -70,22 +70,27 @@ def get_webhook_secret() -> str:
 
 PREMIUM_TABLE_DDL = """
     CREATE TABLE IF NOT EXISTS premium_subscriptions (
-        id            INTEGER PRIMARY KEY AUTOINCREMENT,
-        session_id    TEXT NOT NULL UNIQUE,
-        customer_id   TEXT DEFAULT '',
-        email         TEXT DEFAULT '',
-        status        TEXT NOT NULL DEFAULT 'active',
-        token         TEXT DEFAULT '',
-        created_at    TEXT DEFAULT (datetime('now','localtime')),
-        expires_at    TEXT DEFAULT ''
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id      TEXT NOT NULL UNIQUE,
+        customer_id     TEXT DEFAULT '',
+        subscription_id TEXT DEFAULT '',
+        email           TEXT DEFAULT '',
+        status          TEXT NOT NULL DEFAULT 'active',
+        token           TEXT DEFAULT '',
+        created_at      TEXT DEFAULT (datetime('now','localtime')),
+        expires_at      TEXT DEFAULT ''
     )
 """
 
 
 def ensure_premium_table(db) -> None:
-    """创建 premium_subscriptions 表（如不存在）。"""
+    """创建 premium_subscriptions 表（如不存在），并执行增量迁移。"""
     conn = db.get_conn()
     conn.execute(PREMIUM_TABLE_DDL)
+    # 增量迁移：为旧表补 subscription_id 列（CREATE TABLE IF NOT EXISTS 不会更新已存在的表）
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(premium_subscriptions)")}
+    if "subscription_id" not in cols:
+        conn.execute("ALTER TABLE premium_subscriptions ADD COLUMN subscription_id TEXT DEFAULT ''")
     conn.commit()
 
 
@@ -188,6 +193,7 @@ def _handle_checkout_completed(db, session: dict) -> None:
     """处理 checkout.session.completed 事件——记录支付成功并生成 Bearer Token。"""
     session_id = session.get("id", "")
     customer_id = session.get("customer", "") or ""
+    subscription_id = session.get("subscription", "") or ""
     email = session.get("customer_details", {}).get("email", "") or ""
     status = session.get("status", "complete")
     token = _generate_token()
@@ -198,9 +204,10 @@ def _handle_checkout_completed(db, session: dict) -> None:
     try:
         conn.execute(
             """INSERT OR IGNORE INTO premium_subscriptions
-               (session_id, customer_id, email, status, token)
-               VALUES (?, ?, ?, ?, ?)""",
-            (session_id, customer_id, email, "active" if status == "complete" else status, token),
+               (session_id, customer_id, subscription_id, email, status, token)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (session_id, customer_id, subscription_id, email,
+             "active" if status == "complete" else status, token),
         )
         conn.commit()
         logger.info("订阅记录已写入: session=%s email=%s token=%s", session_id, email, token[:8] + "...")
@@ -225,11 +232,17 @@ def _handle_subscription_deleted(db, subscription: dict) -> None:
 
 
 def _update_subscription_status(db, subscription_id: str, status: str) -> None:
-    """更新订阅状态（通过 customer_id 关联）。"""
+    """更新订阅状态（优先按 subscription_id 关联，回退 customer_id）。"""
     conn = db.get_conn()
     conn.execute(
-        "UPDATE premium_subscriptions SET status=? WHERE customer_id=?",
+        "UPDATE premium_subscriptions SET status=? WHERE subscription_id=?",
         (status, subscription_id),
+    )
+    # 兼容旧数据（subscription_id 为空、靠 customer_id 关联的记录）
+    conn.execute(
+        "UPDATE premium_subscriptions SET status=?, subscription_id=? "
+        "WHERE customer_id=? AND (subscription_id='' OR subscription_id IS NULL)",
+        (status, subscription_id, subscription_id),
     )
     conn.commit()
 

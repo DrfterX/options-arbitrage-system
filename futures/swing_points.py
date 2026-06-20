@@ -120,7 +120,10 @@ def _get_klines(
     timeframe: str,
     limit: int = 2000,
 ) -> List[Dict[str, Any]]:
-    """读取K线数据，按时间升序。"""
+    """读取K线数据，按时间升序。
+
+    对 1d/1w 周期自动执行时间戳归一化，详见 ``_normalize_bar_timestamps``。
+    """
     with db.get_conn() as conn:
         rows = conn.execute(
             """SELECT * FROM futures_klines
@@ -128,7 +131,54 @@ def _get_klines(
                ORDER BY timestamp DESC LIMIT ?""",
             (symbol, contract, timeframe, limit),
         ).fetchall()
-    return [dict(r) for r in reversed(rows)]
+    klines = [dict(r) for r in reversed(rows)]
+
+    # ── 1d/1w 时间戳归一化 ───────────────────────────────────────
+    # 与 n_structure._get_klines 保持一致，确保极值点检测基于
+    # 归一化后的时间戳，避免 AKShare 午夜线与聚合时段线的歧义。
+    if timeframe in ("1d", "1w"):
+        _normalize_bar_timestamps(klines, timeframe)
+
+    return klines
+
+
+def _normalize_bar_timestamps(
+    klines: List[Dict[str, Any]], timeframe: str
+) -> None:
+    """归一化 1d/1w K 线时间戳到标准边界（原地修改）。
+
+    AKShare 日线数据的时间戳在北京时间午夜（16:00 UTC，即北京日期
+    的 00:00），而交易时段聚合的 K 线在 01:xx~06:xx UTC。
+    归一化只修正午夜线：将其时间戳对齐到同一北京日期的 13:45 BJT
+    (05:45 UTC)，与聚合时段线一致。
+
+    对同一北京日期有多根 K 线的场景（AKShare 午夜线 + 聚合时段线），
+    去重保留最后一条。
+
+    Args:
+        klines: K 线列表（会被原地修改）。
+        timeframe: 周期（仅 1d/1w 执行归一化）。
+    """
+    if timeframe not in ("1d", "1w"):
+        return
+
+    BJ_OFFSET = 8 * 3600  # 北京时间 UTC+8
+    MIDNIGHT_SEC = 57600   # 16:00 UTC = BJT 00:00
+    TARGET_HOUR_SEC = 20700  # 05:45 UTC = 13:45 BJT
+
+    # 第一遍：仅修正午夜时间戳（16:00 UTC = BJT 00:00）
+    for k in klines:
+        ts = k["timestamp"]
+        if ts % 86400 == MIDNIGHT_SEC or ts % 86400 == 0:
+            bj_midnight_utc = ((ts + BJ_OFFSET) // 86400) * 86400 - BJ_OFFSET
+            k["timestamp"] = bj_midnight_utc + TARGET_HOUR_SEC
+
+    # 第二遍：按相同时间戳去重（保留最后一条）
+    seen: dict = {}
+    for idx, k in enumerate(klines):
+        seen[k["timestamp"]] = idx
+    kept = [klines[idx] for idx in sorted(seen.values())]
+    klines[:] = kept
 
 
 def _get_swing_points(
@@ -138,7 +188,11 @@ def _get_swing_points(
     timeframe: str,
     limit: int = 200,
 ) -> List[Dict[str, Any]]:
-    """读取已有极值点，按时间升序。"""
+    """读取已有极值点，按时间升序。
+
+    对 1d/1w 周期的极值点自动执行时间戳归一化（与 K 线归一化一致），
+    确保历史极值点的时间戳与归一化后的 K 线时间戳对齐。
+    """
     with db.get_conn() as conn:
         rows = conn.execute(
             """SELECT * FROM futures_swing_points
@@ -146,7 +200,20 @@ def _get_swing_points(
                ORDER BY timestamp DESC LIMIT ?""",
             (symbol, contract, timeframe, limit),
         ).fetchall()
-    return [dict(r) for r in reversed(rows)]
+    points = [dict(r) for r in reversed(rows)]
+
+    # ── 1d/1w 时间戳归一化（仅午夜线 16:00 UTC = BJT 00:00） ───
+    if timeframe in ("1d", "1w"):
+        BJ_OFFSET = 8 * 3600
+        MIDNIGHT_SEC = 57600  # 16:00 UTC = BJT 00:00
+        TARGET_HOUR_SEC = 20700  # 05:45 UTC = 13:45 BJT
+        for p in points:
+            ts = p["timestamp"]
+            if ts % 86400 == MIDNIGHT_SEC or ts % 86400 == 0:
+                bj_midnight_utc = ((ts + BJ_OFFSET) // 86400) * 86400 - BJ_OFFSET
+                p["timestamp"] = bj_midnight_utc + TARGET_HOUR_SEC
+
+    return points
 
 
 def _save_swing_points(db: Database, rows: List[Dict[str, Any]]) -> None:

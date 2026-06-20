@@ -106,9 +106,11 @@ def _enrich_iv_status(status_list):
 
 
 def _enrich_options_signals(options_list):
-    """清洗期权信号数据的合约 n 前缀。"""
+    """清洗期权信号数据的合约 n 前缀 + 添加中文名。"""
     for item in options_list:
         item["contract"] = _clean_contract_n_prefix(item.get("contract", ""))
+        sym = (item.get("symbol") or "").upper()
+        item["name"] = SYMBOL_NAMES.get(sym, item.get("symbol", ""))
     return options_list
 
 

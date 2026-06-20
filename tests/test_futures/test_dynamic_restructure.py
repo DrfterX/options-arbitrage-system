@@ -168,33 +168,38 @@ class TestABrokenMigration:
     @patch("futures.n_structure._get_klines")
     @patch("futures.n_structure._get_active_n_structure")
     def test_long_a_broken_leg3(
-        self, mock_get_active: MagicMock,
+        self,
+        mock_get_active: MagicMock,
         mock_get_klines: MagicMock,
         mock_get_swings: MagicMock,
         mock_save: MagicMock,
     ) -> None:
-        """LONG A 突破迁移后 C >= B → LEG3 状态"""
+        """LONG A 突破迁移后 SHORT C <= B → C2 检查失败 → fallback to detect_and_save
+        detect_and_save 用极值点重建 LONG 结构（A=80,B=110,C=85）。"""
         mock_get_active.return_value = _long_active()
         # A 突破
         mock_get_klines.return_value = [
             make_kline(T4, close=88, high=100, low=85, open_=95),
         ]
-        # B 后：TROUGH(85,T3), PEAK(95,T4) — C=95 >= B=85 → LEG3 for SHORT... wait
-        # SHORT LEG3 means C <= B. C=95 and B=85 → C > B → LEG2
-        # Let me set up C < B: TROUGH(85,T3), PEAK(82,T4)
+        # 极值点：T80(T1)→P110(T2)→T85(T3)→P82(T4)
+        # 迁移：new_A=P110, new_B=T85, new_C=P82 → SHORT C(82) <= B(85) → C2失败→fallback
+        # detect_and_save: T80→P110→T85 → LONG A=80,B=110,C=85
         mock_get_swings.return_value = [
             make_swing("TROUGH", 80, T1),
             make_swing("PEAK", 110, T2),
             make_swing("TROUGH", 85, T3),
-            make_swing("PEAK", 82, T4),   # C=82 < B=85 → SHORT LEG3
+            make_swing("PEAK", 82, T4),
         ]
 
         result = dynamic_restructure("RB", "rb2510", "1w", _test_db)
 
-        assert result["direction"] == "SHORT"
-        # SHORT: C <= B → LEG3
+        # C2 检查失败 → fallback detect_and_save
+        # detect_and_save 重建：LONG A=80,B=110,C=85
+        assert result["direction"] == "LONG"
+        assert result["point_a_price"] == 80.0
+        assert result["point_b_price"] == 110.0
+        assert result["point_c_price"] == 85.0
         assert result["state"] == NState.LEG3.value
-        assert result["point_c_price"] < result["point_b_price"]
         mock_save.assert_called_once()
 
 
