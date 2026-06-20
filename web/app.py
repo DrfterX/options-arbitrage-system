@@ -179,6 +179,17 @@ def sitemap_xml():
         options_lastmod = _fmt_date(options_ts)
         portal_lastmod = max(futures_lastmod, options_lastmod)
 
+        # 品种着陆页 URL 块 — 从 SYMBOL_NAMES 动态生成
+        symbol_urls = "\n".join(
+            f"""  <url>
+    <loc>https://signals.drifter.indevs.in/symbol/{sym}</loc>
+    <lastmod>{futures_lastmod}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>"""
+            for sym in SYMBOL_NAMES
+        )
+
         xml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
@@ -205,6 +216,7 @@ def sitemap_xml():
     <changefreq>daily</changefreq>
     <priority>0.9</priority>
   </url>
+{symbol_urls}
 </urlset>"""
         return xml, 200, {
             "Content-Type": "application/xml",
