@@ -1437,7 +1437,7 @@ function renderOptionsSignals(signals) {
       + '<td class="' + ivClass + '">' + ivPct + '%</td>'
       + '<td class="strat-greeks">Δ:' + (s.net_delta != null ? s.net_delta.toFixed(2) : '0.00') + '<br>Θ:' + (s.net_theta != null ? s.net_theta.toFixed(2) : '0.00') + '</td>'
       + '<td><span class="strat-pnl-pos">+' + (s.max_profit != null ? s.max_profit.toFixed(0) : '0') + '</span> / <span class="strat-pnl-neg">' + (s.max_loss != null ? s.max_loss.toFixed(0) : '0') + '</span></td>'
-      + '<td><span class="strat-strength" style="color:' + scoreClr + '">' + scoreDisplay + '</span></td>'
+      + '<td><span class="strat-strength" style="color:' + scoreClr + '">' + (s.unified_score != null ? (s.unified_score > 99.9 ? '99.9+' : s.unified_score.toFixed(1)) : '—') + '</span></td>'
       + '<td class="strat-detail-link" onclick="showStratDetailFromData(this)" data-idx="' + signals.indexOf(s) + '"><span>📋</span></td>'
       + '</tr>';
   });
