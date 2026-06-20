@@ -865,7 +865,7 @@
           {% for s in options[:20] %}
           <tr>
             <td><span class="strat-sym">{{ s.symbol }}</span> <span class="strat-name">{{ s.name or s.contract or '' }}</span></td>
-            <td><span class="strat-type {% if s.strategy == 'iron_condor' %}strat-ic{% elif s.strategy == 'vertical_spread' %}strat-vs{% elif s.strategy == 'calendar_spread' %}strat-cs{% else %}strat-other{% endif %}">{{ s.strategy|replace('_', ' ') }}</span></td>
+            <td><span class="strat-type {% if s.strategy == 'iron_condor' %}strat-ic{% elif s.strategy == 'vertical_spread' %}strat-vs{% elif s.strategy == 'calendar_spread' %}strat-cs{% else %}strat-other{% endif %}">{{ s.strategy_cn }}</span></td>
             <td class="{% if s.iv_level == '极端高' %}strat-iv-high{% elif s.iv_level == '偏高' %}strat-iv-high{% elif s.iv_level == '正常' %}strat-iv-normal{% elif s.iv_level == '偏低' %}strat-iv-low{% elif s.iv_level == '极端低' %}strat-iv-extreme{% endif %}">{{ "%.1f"|format((s.iv_avg or 0)*100) }}%</td>
             <td class="strat-greeks">Δ:{{ "%.2f"|format(s.net_delta or 0) }}<br>Θ:{{ "%.2f"|format(s.net_theta or 0) }}</td>
             <td><span class="strat-pnl-pos">+{{ "%.0f"|format(s.max_profit or 0) }}</span> / <span class="strat-pnl-neg">{{ "%.0f"|format(s.max_loss or 0) }}</span></td>
@@ -899,7 +899,7 @@
             <span style="font-size:.58rem;color:var(--text3);margin-left:2px">{{ s.name or '' }}</span>
             <span class="option-card-contract">{{ s.contract or '' }}</span>
           </div>
-          <span class="option-card-strat">{{ s.strategy|replace('_', ' ') }}</span>
+          <span class="option-card-strat">{{ s.strategy_cn }}</span>
         </div>
         <div class="option-card-iv">
           <span>{{ "%.1f"|format((s.iv_avg or 0)*100) }}% IV</span>
@@ -1419,7 +1419,7 @@ function renderOptionsSignals(signals) {
     var sym = s.symbol || '';
     var cname = s.name || '';
     var contract = s.contract || '';
-    var strategy = (s.strategy || '').replace(/_/g, ' ');
+    var strategy = s.strategy_cn || (s.strategy || '').replace(/_/g, ' ');
     var stratClass = 'strat-other';
     if (s.strategy === 'iron_condor') stratClass = 'strat-ic';
     else if (s.strategy === 'vertical_spread') stratClass = 'strat-vs';
@@ -1471,7 +1471,7 @@ function renderOptionCards(signals) {
     html += '<div class="option-card ' + strengthCls + '">'
       + '<div class="option-card-header">'
       + '<div><span class="option-card-sym">' + esc(s.symbol || '') + '</span><span style="font-size:.58rem;color:var(--text3);margin-left:2px">' + esc(s.name || '') + '</span> <span class="option-card-contract">' + esc(s.contract || '') + '</span></div>'
-      + '<span class="option-card-strat">' + esc((s.strategy || '').replace(/_/g, ' ')) + '</span>'
+      + '<span class="option-card-strat">' + esc(s.strategy_cn || (s.strategy || '').replace(/_/g, ' ')) + '</span>'
       + '</div>'
       + '<div class="option-card-iv">'
       + '<span>' + (s.iv_avg ? (s.iv_avg * 100).toFixed(1) : '—') + '% IV</span>'
@@ -1506,7 +1506,7 @@ function showStratDetailFromData(el) {
     var popup = document.getElementById('stratPopup');
     var titleEl = document.getElementById('spTitle');
     var bodyEl = document.getElementById('spBody');
-    titleEl.textContent = s.symbol + ' ' + (s.contract || '') + ' — ' + (s.strategy || '').replace(/_/g, ' ');
+    titleEl.textContent = s.symbol + ' ' + (s.contract || '') + ' — ' + (s.strategy_cn || (s.strategy || '').replace(/_/g, ' '));
 
     // ── Try to use strategy_details (rich detail object) ──
     var detail = s.strategy_details;
@@ -1518,7 +1518,7 @@ function showStratDetailFromData(el) {
     if (detail && typeof detail === 'object') {
       // ── Full detail mode (strategy_details available) ──
       var fields = [
-        { label: '类型', value: (detail.type || s.strategy || '').replace(/_/g, ' ') },
+        { label: '类型', value: (detail.type || s.strategy_cn || s.strategy || '').replace(/_/g, ' ') },
         { label: '标的价', value: sf(detail.underlying, 1) },
         { label: 'IV 均值', value: s.iv_avg ? (s.iv_avg * 100).toFixed(1) + '%' : '—' },
         { label: '到期天数', value: detail.days_to_expiry != null ? detail.days_to_expiry : '—' },
@@ -1560,7 +1560,7 @@ function showStratDetailFromData(el) {
       if (detail.strikes && detail.strikes.length) html += '<div class="strat-popup-desc"><strong>行权价:</strong> ' + detail.strikes.map(function(s) { return s.toFixed(0); }).join(', ') + '</div>';
     } else {
       // ── Fallback mode (no strategy_details — show basic info from signal fields) ──
-      html += '<div class="strat-popup-row"><span class="sp-label">类型</span><span class="sp-value">' + (s.strategy || '').replace(/_/g, ' ') + '</span></div>';
+      html += '<div class="strat-popup-row"><span class="sp-label">类型</span><span class="sp-value">' + (s.strategy_cn || (s.strategy || '').replace(/_/g, ' ')) + '</span></div>';
       html += '<div class="strat-popup-row"><span class="sp-label">评分</span><span class="sp-value" style="color:var(--brand);font-weight:600">' + sf(s.unified_score, 1) + '</span></div>';
       html += '<div class="strat-popup-row"><span class="sp-label">IV 均值</span><span class="sp-value">' + (s.iv_avg ? (s.iv_avg * 100).toFixed(1) + '%' : '—') + '</span></div>';
       html += '<div class="strat-popup-row"><span class="sp-label">IV 百分位</span><span class="sp-value">' + (s.iv_percentile != null ? s.iv_percentile.toFixed(0) + '%' : '—') + '</span></div>';

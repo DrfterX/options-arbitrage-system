@@ -84,6 +84,21 @@ SYMBOL_NAMES = {
     "PF":"花生仁","PK":"花生","PR":"聚丙烯",
 }
 
+STRATEGY_NAMES = {
+    "iron_condor": "铁鹰策略",
+    "vertical_spread": "垂直价差",
+    "calendar_spread": "日历价差",
+    "covered_call": "备兑看涨",
+    "protective_put": "保护看跌",
+    "straddle": "跨式策略",
+    "strangle": "宽跨式",
+    "short_strangle": "卖跨",
+    "bull_put": "牛沽",
+    "bear_call": "熊购",
+    "ratio_spread": "比例价差",
+}
+
+
 def _clean_contract_n_prefix(contract: str) -> str:
     """清洗合约前缀: ag/nag2607 → ag2607, nag2607 → ag2607。"""
     import re
@@ -106,11 +121,24 @@ def _enrich_iv_status(status_list):
 
 
 def _enrich_options_signals(options_list):
-    """清洗期权信号数据的合约 n 前缀 + 添加中文名。"""
+    """清洗期权信号数据的合约 n 前缀 + 添加中文名 + 策略中文名 + 主连标记。"""
     for item in options_list:
         item["contract"] = _clean_contract_n_prefix(item.get("contract", ""))
         sym = (item.get("symbol") or "").upper()
         item["name"] = SYMBOL_NAMES.get(sym, item.get("symbol", ""))
+
+        # 策略英文 → 中文映射
+        strat = (item.get("strategy") or "").strip()
+        item["strategy_cn"] = STRATEGY_NAMES.get(strat, strat.replace("_", " "))
+
+        # 合约格式：主连合约（纯字母，无数字后缀）加 cont 标记
+        cont = item.get("contract", "")
+        if cont and not any(ch.isdigit() for ch in cont):
+            item["contract"] = cont + " cont"
+        else:
+            # 移除多余空格
+            item["contract"] = " ".join(cont.split())
+
     return options_list
 
 
@@ -920,6 +948,10 @@ def api_klines():
         # 1.5. 返回 N 型结构数据（只返回经条件4验证的活跃结构）
         from futures.shared import _get_active_n_structure
         n_struct = _get_active_n_structure(db, sym, contract or "", tf)
+
+        # 1d/1w 周期：归一化 N 结构时间戳到 05:45 UTC，与 bar 时间戳对齐
+        if tf in ("1d", "1w") and n_struct:
+            _normalize_n_ts(n_struct)
 
         resp = {
             "symbol": sym, "timeframe": tf,
