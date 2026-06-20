@@ -235,6 +235,18 @@ def sitemap_xml():
     <priority>0.7</priority>
   </url>
   <url>
+    <loc>https://signals.drifter.indevs.in/pricing</loc>
+    <lastmod>{portal_lastmod}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://signals.drifter.indevs.in/subscribe</loc>
+    <lastmod>{portal_lastmod}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
     <loc>https://futures.drifter.indevs.in/</loc>
     <lastmod>{futures_lastmod}</lastmod>
     <changefreq>daily</changefreq>
