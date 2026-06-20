@@ -1111,9 +1111,7 @@ var IV_DATA = JSON.parse('{{ iv_json|safe }}');
         formatter: function(val, idx) {
           var d = IV_DATA[idx];
           if (!d) return val;
-          var sym = (d.symbol || '').toUpperCase();
-          var cname = (d.name && d.name !== d.symbol) ? d.name : '';
-          return cname ? sym + ' · ' + cname : sym;
+          return (d.symbol || '').toUpperCase();
         },
       },
       axisLine: { lineStyle: { color: 'rgba(26,32,64,.5)' } },
