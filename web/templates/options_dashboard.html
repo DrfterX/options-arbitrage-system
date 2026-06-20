@@ -1071,8 +1071,6 @@ function renderExpiryBadge(expiry) {
 document.getElementById('initialSkeleton')?.remove();
 
 // ── Auto refresh: 30s poll + 5min full reload ──
-// ── Initialize signals data for detail popup ──
-window._signalsData = {{ options|tojson|safe }};
 var AUTO_REFRESH = true;
 if (AUTO_REFRESH) {
   setInterval(function() {
