@@ -1,0 +1,1 @@
+"""scripts.core 包 — 核心计算模块（Greeks 现金化等）。"""

@@ -47,9 +47,132 @@
 .auth-tab:hover { color:var(--text); }
 .auth-tab.active { color:var(--brand); border-bottom-color:var(--brand); }
 .auth-tab-sub { font-size:.6rem; color:var(--text3); margin-bottom:14px; line-height:1.4; }
+
+/* ── Initial skeleton (CSS-only, visible before JS loads) ── */
+.initial-skeleton {
+  padding: 16px 24px;
+  background: var(--bg);
+  position: absolute;
+  inset: 0;
+  z-index: 999;
+}
+.initial-skeleton .is-topbar {
+  height: 32px;
+  background: linear-gradient(90deg, rgba(79,91,128,0.06) 25%, rgba(79,91,128,0.16) 50%, rgba(79,91,128,0.06) 75%);
+  background-size: 200% 100%;
+  border-radius: var(--radius-sm);
+  margin-bottom: 14px;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+.initial-skeleton .is-stats {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.initial-skeleton .is-stat {
+  flex: 1;
+  height: 48px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, rgba(79,91,128,0.06) 25%, rgba(79,91,128,0.16) 50%, rgba(79,91,128,0.06) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+.initial-skeleton .is-matrix {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.initial-skeleton .is-matrix-row {
+  height: 24px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, rgba(79,91,128,0.06) 25%, rgba(79,91,128,0.16) 50%, rgba(79,91,128,0.06) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+  animation-delay: calc(var(--i, 0) * 0.06s);
+}
+.initial-skeleton .is-matrix-row:nth-child(1) { --i: 0; }
+.initial-skeleton .is-matrix-row:nth-child(2) { --i: 1; }
+.initial-skeleton .is-matrix-row:nth-child(3) { --i: 2; }
+.initial-skeleton .is-matrix-row:nth-child(4) { --i: 3; }
+.initial-skeleton .is-matrix-row:nth-child(5) { --i: 4; }
+.initial-skeleton .is-matrix-row:nth-child(6) { --i: 5; }
+.initial-skeleton .is-matrix-row:nth-child(7) { --i: 6; }
+.initial-skeleton .is-matrix-row:nth-child(8) { --i: 7; }
+
+/* ── Core section skeleton loading states ── */
+.stats-bar { transition: opacity .25s var(--ease-out); }
+.stats-bar.is-loading .stat-item .value:not(.skeleton) { opacity: .5; }
+.matrix-section { transition: opacity .25s var(--ease-out); }
+.matrix-section.is-loading .matrix-table { opacity: .5; pointer-events: none; }
+.matrix-section .matrix-table { transition: opacity .3s var(--ease-out); }
+.cards-section.is-loading .grid { opacity: .4; pointer-events: none; transition: opacity .25s var(--ease-out); }
+.cards-section .grid { transition: opacity .3s var(--ease-out); }
+.sector-stats { transition: opacity .25s var(--ease-out); }
+.sector-stats.is-loading .sector-card { opacity: .4; pointer-events: none; transition: opacity .25s var(--ease-out); }
+.sector-stats .sector-card { transition: opacity .3s var(--ease-out); }
+</style>
+
+<style id="premium-teaser-styles">
+/* ─── Premium Teaser — Gold (#f0b429) ─── */
+.premium-teaser {
+  margin: 16px 20px 0;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, rgba(240,180,41,.08) 0%, rgba(240,180,41,.03) 100%);
+  border: 1px solid rgba(240,180,41,.25);
+  border-radius: var(--radius-sm, 8px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.pt-left { display: flex; align-items: center; gap: 12px; }
+.pt-icon { font-size: 1.3rem; flex-shrink: 0; }
+.pt-text { font-size: .85rem; color: var(--text2); line-height: 1.45; }
+.pt-text strong { color: var(--text); }
+.pt-features { display: flex; gap: 16px; margin-top: 3px; }
+.pt-feature { font-size: .78rem; color: var(--text3); display: flex; align-items: center; gap: 4px; }
+.pt-feature::before { content: '•'; color: #f0b429; font-weight: 700; }
+.pt-cta {
+  padding: 8px 18px;
+  background: linear-gradient(135deg, #f0b429, #d4951e);
+  color: #0a0c17;
+  border: none;
+  border-radius: 6px;
+  font-size: .82rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  text-decoration: none;
+  flex-shrink: 0;
+  transition: box-shadow .2s;
+}
+.pt-cta:hover { box-shadow: 0 0 20px rgba(240,180,41,.4); }
+.pt-cta:active { transform: scale(.97); }
 </style>
 </head>
 <body>
+
+<!-- ─── CSS-ONLY INITIAL SKELETON (shown before page renders) ─── -->
+<div id="initialSkeleton" class="initial-skeleton">
+  <div class="is-topbar"></div>
+  <div class="is-stats">
+    <div class="is-stat"></div>
+    <div class="is-stat"></div>
+    <div class="is-stat"></div>
+    <div class="is-stat"></div>
+  </div>
+  <div class="is-matrix">
+    <div class="is-matrix-row"></div>
+    <div class="is-matrix-row"></div>
+    <div class="is-matrix-row"></div>
+    <div class="is-matrix-row"></div>
+    <div class="is-matrix-row"></div>
+    <div class="is-matrix-row"></div>
+    <div class="is-matrix-row"></div>
+    <div class="is-matrix-row"></div>
+  </div>
+</div>
+
 <div class="app">
 <div class="topbar">
   <h1><span class="dot"></span><span class="accent">▣</span> 信号矩阵 <span class="data-badge">期货 × 期权</span></h1>
@@ -310,6 +433,22 @@
 <div class="footer">Auto Company · 期权期货交易信号平台 · v0.1.0</div>
 </div><!-- /.app -->
 
+<!-- ─── PREMIUM TEASER ─── -->
+<div id="premiumTeaser" class="premium-teaser" style="display:none">
+  <div class="pt-left">
+    <div class="pt-icon">✦</div>
+    <div class="pt-text">
+      <strong>Premium 功能预览</strong>
+      <div class="pt-features">
+        <span class="pt-feature">N 型结构今日推荐</span>
+        <span class="pt-feature">实时突破预警</span>
+        <span class="pt-feature">全品种多周期覆盖</span>
+      </div>
+    </div>
+  </div>
+  <a href="/pricing" class="pt-cta">升级 Premium ✦</a>
+</div>
+
 <div class="kline-popup" id="klinePopup">
   <span class="kp-close" id="kpClose">&times;</span>
   <div class="kp-header"><span class="kp-title" id="kpTitle"></span><span class="kp-tf" id="kpTF"></span></div>
@@ -321,6 +460,9 @@
 </div>
 
 <script>
+// ── Remove CSS-only initial skeleton (shown before JS/SSR content) ──
+document.getElementById('initialSkeleton')?.remove();
+
 // ── Global HTML escape helper (XSS prevention) ──
 function esc(s) {
   if (s == null) return '';
@@ -348,6 +490,8 @@ if (AUTO_REFRESH) {
   // ── 5min matrix refresh: 触发 API 侧 N 型结构重算 + DOM 增量刷新矩阵 ──
   setInterval(function() {
     if (document.hidden) return;
+    var mxSection = document.querySelector('.matrix-section');
+    if (mxSection) mxSection.classList.add('is-loading');
     fetch('/api/matrix', { cache: 'no-cache' })
       .then(function(r) { return r.json(); })
       .then(function(d) {
@@ -407,8 +551,13 @@ if (AUTO_REFRESH) {
         if (timeEl) timeEl.textContent = ts + ' ⟳';
         var badge = document.querySelector('.data-badge');
         if (badge && d.matrix.length != null) badge.textContent = d.matrix.length + ' 品种';
+        var mxSection = document.querySelector('.matrix-section');
+        if (mxSection) mxSection.classList.remove('is-loading');
       })
-      .catch(function(e) { /* silent */ });
+      .catch(function(e) {
+        var mxSection = document.querySelector('.matrix-section');
+        if (mxSection) mxSection.classList.remove('is-loading');
+      });
   }, 300000); // 5 minutes
 }
 
@@ -1314,11 +1463,12 @@ function handleRegister() {
 /* ── Fetch user plan status & render plan badge in topbar ── */
 function fetchUserStatus() {
   var badge = document.getElementById('userPlanBadge');
+  var teaser = document.getElementById('premiumTeaser');
   if (!badge) return;
   var token = getAuthToken();
   if (!token) {
-    // Not logged in — show upgrade CTA
     badge.innerHTML = '<a href="/pricing" class="upgrade-btn">✦ 升级 Pro</a>';
+    if (teaser) teaser.style.display = '';
     return;
   }
   fetch('/api/pricing/user-status', {
@@ -1328,22 +1478,27 @@ function fetchUserStatus() {
   .then(function(d) {
     if (!d.logged_in) {
       badge.innerHTML = '<a href="/pricing" class="upgrade-btn">✦ 升级 Pro</a>';
+      if (teaser) teaser.style.display = '';
       return;
     }
     if (d.plan === 'premium') {
       badge.innerHTML = '<span class="plan-badge-pill premium">✦ Premium</span>';
+      if (teaser) teaser.style.display = 'none';
     } else if (d.plan === 'pro') {
       badge.innerHTML = '<span class="plan-badge-pill pro">✦ Pro</span>';
+      if (teaser) teaser.style.display = 'none';
     } else if (d.trial_days_remaining > 0) {
       badge.innerHTML = '<span class="plan-badge-pill trial">✦ 试用 ' + d.trial_days_remaining + '天</span>'
         + '<a href="/pricing" class="upgrade-btn">升级 ✦</a>';
+      if (teaser) teaser.style.display = 'none';
     } else {
-      // Free / trial expired
       badge.innerHTML = '<a href="/pricing" class="upgrade-btn">✦ 升级 Pro</a>';
+      if (teaser) teaser.style.display = '';
     }
   })
   .catch(function() {
     badge.innerHTML = '<a href="/pricing" class="upgrade-btn">✦ 升级 Pro</a>';
+    if (teaser) teaser.style.display = '';
   });
 }
 

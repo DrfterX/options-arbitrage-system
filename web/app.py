@@ -32,6 +32,14 @@ from web.iron_ore_api import _build_bp as _build_iron_bp
 from web.public_api import _build_bp as _build_public_api_bp
 from futures.backtest import run_backtest as _run_backtest
 
+# Greeks 现金化 — 将 Delta/Vega/Theta 换算为人民币现金敞口
+from scripts.core.greeks_cash import (
+    delta_cash as _delta_cash,
+    theta_cash as _theta_cash,
+    vega_cash as _vega_cash,
+    get_multiplier as _get_multiplier,
+)
+
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
@@ -121,7 +129,7 @@ def _enrich_iv_status(status_list):
 
 
 def _enrich_options_signals(options_list):
-    """清洗期权信号数据的合约 n 前缀 + 添加中文名 + 策略中文名 + 主连标记。"""
+    """清洗期权信号数据 + 添加中文名/策略中文名/主连标记 + Greeks 现金化敞口。"""
     for item in options_list:
         item["contract"] = _clean_contract_n_prefix(item.get("contract", ""))
         sym = (item.get("symbol") or "").upper()
@@ -138,6 +146,26 @@ def _enrich_options_signals(options_list):
         else:
             # 移除多余空格
             item["contract"] = " ".join(cont.split())
+
+        # ── Greeks 现金化：raw → 人民币敞口 ──────────────────
+        # 公式参考 User Directives 2026-06-21：
+        #   Delta Cash = Delta × 标的价 × 合约单位
+        #   Vega Cash  = 1% × Vega × 合约单位
+        #   Theta Cash = (Theta / 365) × 合约单位
+        # Gamma Cash 暂不可用：数据库无 net_gamma 字段（仅存 delta/theta/vega）
+        delta_raw = item.get("net_delta", 0) or 0
+        theta_raw = item.get("net_theta", 0) or 0
+        vega_raw = item.get("net_vega", 0) or 0
+        price = item.get("futures_price", 0) or 0
+        multiplier = _get_multiplier(sym)
+        if price > 0 and multiplier > 0:
+            item["delta_cash"] = round(_delta_cash(delta_raw, price, multiplier), 2)
+            item["theta_cash"] = round(_theta_cash(theta_raw, multiplier), 2)
+            item["vega_cash"] = round(_vega_cash(vega_raw, multiplier), 2)
+        else:
+            item["delta_cash"] = 0.0
+            item["theta_cash"] = 0.0
+            item["vega_cash"] = 0.0
 
     return options_list
 
@@ -543,7 +571,7 @@ def premium_success_page():
     status = check_premium_status(db, session_id=session_id)
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     return render_template("pricing.html", payment_success=status.get("premium", False),
-        now=now, active_tab='pricing')
+        now=now, active_tab='pricing', session_id=session_id)
 
 
 @app.route("/subscribe")
@@ -2510,6 +2538,273 @@ def _require_api_key(f):
             return jsonify({"ok": False, "error": "认证服务异常"}), 500
         return f(*args, **kwargs)
     return decorated
+
+
+# Telegram Bot Webhook Secret Token（从环境变量读取，用于验证 webhook 请求来源）
+_TELEGRAM_WEBHOOK_SECRET = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "")
+
+
+@app.route("/telegram-webhook", methods=["POST"])
+def telegram_webhook():
+    """Telegram Bot Webhook — 接收 Telegram Update，解析 Bot 命令。
+
+    Telegram 推送 Update 到此端点，支持命令：
+      - /start → 发送欢迎消息 + 引导订阅
+      - /subscribe → 直接注册订阅
+      - /unsubscribe → 取消订阅
+      - /status → 查询订阅状态
+
+    安全:
+      - 验证 X-Telegram-Bot-Api-Secret-Token Header（如配置）
+      - Chat ID 格式校验（纯数字）
+      - 速率限制：单 chat_id 每 10 秒最多处理一次
+    """
+    # 1. Webhook Secret Token 验证（如果配置了）
+    secret = _TELEGRAM_WEBHOOK_SECRET
+    if secret:
+        received_secret = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+        if not received_secret or received_secret != secret:
+            logger.warning("Telegram Webhook Secret Token 不匹配，拒绝请求")
+            return "Unauthorized", 403
+
+    # 2. 解析 Telegram Update
+    try:
+        update = request.get_json(force=True)
+    except Exception:
+        logger.warning("Telegram webhook: 无效的 JSON 请求体")
+        return "Bad Request", 400
+
+    if not update:
+        return "OK", 200  # 空 update 也返回 200（Telegram 要求）
+
+    # 3. 提取消息
+    message = update.get("message") or update.get("edited_message")
+    if not message:
+        return "OK", 200
+
+    chat = message.get("chat", {})
+    chat_id = str(chat.get("id", ""))
+    text = (message.get("text") or "").strip()
+    username = message.get("from", {}).get("username", "") or ""
+    first_name = message.get("from", {}).get("first_name", "") or ""
+
+    if not chat_id:
+        return "OK", 200
+
+    # 4. 简单速率限制：同 chat_id 每 10 秒内只处理一次
+    import time as _time
+    rate_key = f"tg_webhook_{chat_id}"
+    now = _time.time()
+    last = getattr(telegram_webhook, rate_key, 0)
+    if now - last < 10:
+        logger.debug("Telegram webhook 速率限制: chat_id=%s", chat_id)
+        return "OK", 200
+    setattr(telegram_webhook, rate_key, now)
+
+    # 5. 解析命令
+    cmd = text.lower()
+    from signals.bot_subscription import BotSubscription
+    mgr = BotSubscription(db)
+
+    if cmd.startswith("/start"):
+        # 发送欢迎消息
+        welcome = (
+            f"👋 欢迎您，{first_name or username or '朋友'}！\n\n"
+            "🤖 *Auto Company 信号推送 Bot*\n\n"
+            "本 Bot 会为您推送期货信号、期权分析、日报概览。\n\n"
+            "可用命令：\n"
+            "  /subscribe — 订阅信号推送\n"
+            "  /unsubscribe — 取消订阅\n"
+            "  /status — 查询订阅状态\n\n"
+            "点击 /subscribe 开始接收信号 🚀"
+        )
+        from signals.telegram_notifier import send_message_to_user
+        send_message_to_user(welcome, chat_id, parse_mode="Markdown")
+
+    elif cmd.startswith("/subscribe"):
+        success = mgr.subscribe(
+            chat_id=chat_id,
+            username=username,
+            first_name=first_name,
+        )
+        if success:
+            reply = (
+                "✅ *订阅成功！*\n\n"
+                "您已获得 7 天免费试用。\n"
+                "之后您将收到期货扫描信号和每日市场日报。\n\n"
+                "发送 /status 查看订阅详情\n"
+                "发送 /unsubscribe 取消订阅"
+            )
+        else:
+            reply = "❌ 订阅失败，请稍后重试。"
+        from signals.telegram_notifier import send_message_to_user
+        send_message_to_user(reply, chat_id, parse_mode="Markdown")
+
+    elif cmd.startswith("/unsubscribe"):
+        mgr.unsubscribe(chat_id)
+        reply = "✅ 已取消订阅。如需重新订阅，发送 /subscribe。"
+        from signals.telegram_notifier import send_message_to_user
+        send_message_to_user(reply, chat_id, parse_mode="Markdown")
+
+    elif cmd.startswith("/status"):
+        sub = mgr.get_subscriber(chat_id)
+        if sub:
+            status_map = {
+                "trial": "📋 试用中",
+                "active": "✅ 已付费",
+                "expired": "⏰ 已过期",
+                "cancelled": "❌ 已取消",
+            }
+            status_label = status_map.get(sub.get("status", ""), sub.get("status", "未知"))
+            trial_end = sub.get("trial_end_at", "") or "—"
+            pushed = sub.get("signals_pushed", 0)
+            reply = (
+                f"📊 *订阅状态*\n\n"
+                f"  状态: {status_label}\n"
+                f"  试用到期: {trial_end}\n"
+                f"  已推送信号: {pushed} 次\n"
+                f"  Chat ID: `{chat_id}`"
+            )
+        else:
+            reply = (
+                "📊 *订阅状态*\n\n"
+                "您尚未订阅信号推送。\n"
+                "发送 /subscribe 开始免费试用 🚀"
+            )
+        from signals.telegram_notifier import send_message_to_user
+        send_message_to_user(reply, chat_id, parse_mode="Markdown")
+
+    else:
+        # 未知命令 — 提示可用命令
+        reply = (
+            "🤖 可用命令：\n\n"
+            "  /start — 欢迎信息\n"
+            "  /subscribe — 订阅信号推送\n"
+            "  /unsubscribe — 取消订阅\n"
+            "  /status — 查询订阅状态"
+        )
+        from signals.telegram_notifier import send_message_to_user
+        send_message_to_user(reply, chat_id, parse_mode="Markdown")
+
+    return "OK", 200
+
+
+@app.route("/api/bot/subscribe", methods=["POST"])
+def api_bot_subscribe():
+    """Bot 订阅（公开 API）— 注册 Telegram 推送订阅。
+
+    供 subscribe.html 订阅着落页使用，无需 API Key。
+    用户通过引导页面输入 Chat ID 和邮箱完成订阅。
+
+    POST JSON body:
+        chat_id (str, required): Telegram Chat ID（纯数字）。
+        email (str, required): 用户邮箱（用于付费关联）。
+        username (str, optional): Telegram 用户名。
+        first_name (str, optional): Telegram 显示名。
+
+    Returns:
+        {"ok": true, "status": "trial", "trial_end": "..."} 或 {"ok": false, "error": "..."}
+    """
+    data = request.get_json()
+    if not data:
+        return jsonify({"ok": False, "error": "请求体为空"}), 400
+
+    chat_id = (data.get("chat_id") or "").strip()
+    email = (data.get("email") or "").strip()
+
+    # 校验必填字段
+    if not chat_id:
+        return jsonify({"ok": False, "error": "缺少 chat_id"}), 400
+    if not email:
+        return jsonify({"ok": False, "error": "缺少 email"}), 400
+
+    # Chat ID 格式校验（必须为纯数字）
+    if not chat_id.isdigit():
+        return jsonify({"ok": False, "error": "Chat ID 格式无效，必须为纯数字"}), 400
+
+    # 邮箱格式校验
+    if not re.match(r"[^@]+@[^@]+\.[^@]+$", email):
+        return jsonify({"ok": False, "error": "邮箱格式无效"}), 400
+
+    # Chat ID 长度校验（Telegram Chat ID 通常 < 15 位）
+    if len(chat_id) > 20:
+        return jsonify({"ok": False, "error": "Chat ID 长度异常"}), 400
+
+    from signals.bot_subscription import BotSubscription
+    mgr = BotSubscription(db)
+
+    success = mgr.subscribe(
+        chat_id=chat_id,
+        username=data.get("username", ""),
+        first_name=data.get("first_name", ""),
+        preferences={"email": email},
+    )
+    if not success:
+        return jsonify({"ok": False, "error": "订阅失败，请稍后重试"}), 500
+
+    sub = mgr.get_subscriber(chat_id)
+    return jsonify({
+        "ok": True,
+        "data": {
+            "chat_id": chat_id,
+            "email": email,
+            "status": sub.get("status", "trial") if sub else "trial",
+            "trial_end": sub.get("trial_end_at", "") if sub else "",
+            "subscribed_at": sub.get("subscribed_at", "") if sub else "",
+        },
+    })
+
+
+@app.route("/api/bot/unsubscribe", methods=["POST"])
+def api_bot_unsubscribe():
+    """Bot 取消订阅（公开 API）— 取消 Telegram 推送订阅。
+
+    供 subscribe.html 订阅着落页使用，无需 API Key。
+    支持通过 chat_id 或 email 取消订阅。
+
+    POST JSON body:
+        chat_id (str, optional): Telegram Chat ID。
+        email (str, optional): 用户邮箱（二选一）。
+
+    Returns:
+        {"ok": true, "message": "已取消订阅"} 或 {"ok": false, "error": "..."}
+    """
+    data = request.get_json()
+    if not data:
+        return jsonify({"ok": False, "error": "请求体为空"}), 400
+
+    chat_id = (data.get("chat_id") or "").strip()
+    email = (data.get("email") or "").strip()
+
+    if not chat_id and not email:
+        return jsonify({"ok": False, "error": "请提供 chat_id 或 email"}), 400
+
+    from signals.bot_subscription import BotSubscription
+    mgr = BotSubscription(db)
+
+    if chat_id:
+        mgr.unsubscribe(chat_id)
+        return jsonify({"ok": True, "message": f"Chat ID {chat_id} 已取消订阅"})
+
+    # 通过 email 取消：查找该 email 关联的所有订阅者
+    if email:
+        conn = db.get_conn()
+        rows = conn.execute(
+            "SELECT telegram_chat_id FROM bot_subscribers WHERE preferences LIKE ?",
+            (f'%{email}%',),
+        ).fetchall()
+        count = 0
+        for row in rows:
+            mgr.unsubscribe(row["telegram_chat_id"])
+            count += 1
+        if count:
+            return jsonify({"ok": True, "message": f"已取消 {count} 个关联订阅"})
+        return jsonify({"ok": True, "message": "未找到关联订阅"})
+
+    return jsonify({"ok": False, "error": "取消订阅失败"}), 500
+
+
+# ─── API Key 认证的 Bot API（机器间调用） ─────────────────────
 
 
 @app.route("/api/subscribe", methods=["POST"])

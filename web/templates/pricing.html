@@ -476,6 +476,84 @@
   .pc-price { font-size: 1.6rem; }
 }
 
+/* ── payment success banner ── */
+.payment-success-banner {
+  background: linear-gradient(135deg, rgba(240,180,41,.08) 0%, rgba(240,180,41,.02) 100%);
+  border: 1px solid rgba(240,180,41,.2);
+  border-radius: var(--radius-lg);
+  padding: 28px 24px;
+  margin-bottom: 28px;
+  animation: pr-fadein .5s var(--ease-out) both;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.psb-hero {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.psb-hero-icon {
+  font-size: 2rem;
+  flex-shrink: 0;
+}
+.psb-hero-text h2 {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--brand);
+  margin: 0 0 4px;
+}
+.psb-hero-text p {
+  font-size: .65rem;
+  color: var(--text2);
+  line-height: 1.5;
+  margin: 0;
+}
+.psb-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.psb-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 22px;
+  background: var(--brand);
+  color: #000;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: .7rem;
+  font-weight: 700;
+  font-family: var(--font-ui);
+  letter-spacing: .03em;
+  text-decoration: none;
+  cursor: pointer;
+  transition: filter .2s, box-shadow .2s;
+}
+.psb-btn-primary:hover { filter: brightness(1.1); box-shadow: 0 4px 20px rgba(240,180,41,.2); }
+.psb-btn-primary:active { transform: scale(.98); }
+.psb-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 18px;
+  background: rgba(240,180,41,.08);
+  color: var(--text);
+  border: 1px solid rgba(240,180,41,.15);
+  border-radius: var(--radius-md);
+  font-size: .65rem;
+  font-weight: 600;
+  font-family: var(--font-ui);
+  text-decoration: none;
+  cursor: pointer;
+  transition: all .2s;
+}
+.psb-btn-secondary:hover {
+  background: rgba(240,180,41,.14);
+  border-color: rgba(240,180,41,.25);
+}
+
 /* ── animation ── */
 @keyframes pr-fadein {
   from { opacity: 0; transform: translateY(16px); }
@@ -524,6 +602,23 @@
     <h1>选择适合你的 <span class="accent">方案</span></h1>
     <div class="sub">期货 N 型结构多周期共振扫描、IV 百分位监控、期权策略评分排序——选择最适合你交易节奏的订阅方案。</div>
   </div>
+
+  {% if payment_success %}
+  <!-- ── Payment Success Banner ── -->
+  <div class="payment-success-banner">
+    <div class="psb-hero">
+      <span class="psb-hero-icon">🎉</span>
+      <div class="psb-hero-text">
+        <h2>支付成功！订阅已激活</h2>
+        <p>感谢你的信任和支持！Premium 功能已全部解锁，你的 Token 已自动配置。</p>
+      </div>
+    </div>
+    <div class="psb-actions">
+      <a href="/" class="psb-btn-primary">进入仪表盘 →</a>
+      <a href="https://options.drifter.indevs.in" class="psb-btn-secondary">🎯 期权面板</a>
+    </div>
+  </div>
+  {% endif %}
 
   <!-- ── Pricing Cards ── -->
   <div class="pricing-grid">
@@ -924,6 +1019,26 @@ function openCustomerPortal() {
     document.getElementById('premiumCta').onclick = function() { showLoginModal(); };
   });
 })();
+
+{% if payment_success and session_id %}
+/* ── Payment success: auto-fetch & store Premium Token ── */
+(function() {
+  var sid = '{{ session_id }}';
+
+  fetch('/api/premium/token?session_id=' + encodeURIComponent(sid))
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.token) {
+        // Store premium token as auth token (used by API interceptor)
+        setAuthToken(d.token);
+        showToast('🔑 Premium Token 已就绪', '🔑');
+      } else {
+        console.warn('Premium token not yet available for session:', sid);
+      }
+    })
+    .catch(function(e) { console.warn('Token fetch failed:', e); });
+})();
+{% endif %}
 
 /* ── Enter key support ── */
 document.addEventListener('keydown', function(e) {

@@ -303,6 +303,11 @@ body {
 .opt-theta-neg { color: var(--short); }
 .opt-theta-pos { color: var(--long); }
 
+/* ── Greeks 现金化显示 ── */
+.cash-greek { font-size: .52rem; color: var(--text3); font-weight: 400; }
+.cash-greek.positive { color: #22c55e; }
+.cash-greek.negative { color: var(--short); }
+
 /* IV 等级 */
 .opt-iv-extreme { color: #f04438; font-weight: 600; }
 .opt-iv-high { color: #f0b429; font-weight: 600; }

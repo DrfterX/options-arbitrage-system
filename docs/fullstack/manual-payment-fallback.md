@@ -34,7 +34,7 @@ Token 传递方式（按优先级）：
 portal.html 新增：
 - Token 输入框 + 验证按钮（`#tokenInput` + `#verifyTokenBtn`）
 - `verifyManualToken()`: 调用 `/api/premium/verify-token` 验证并解锁 Premium
-- 页面加载时自动检查 `localStorage` 中的 `premium_token`
+- 页面加载时自动检查 `localStorage` 中的 `session_token`（premium_token 已弃用，见定价页清理）
 - Premium 内容加载函数增加 `?token=` query param
 
 ### 5. 支付流程

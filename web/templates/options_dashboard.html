@@ -753,6 +753,44 @@
 .auth-tab-sub { font-size:.6rem; color:var(--text3); margin-bottom:14px; line-height:1.4; }
 </style>
 
+<style id="premium-teaser-styles">
+/* ─── Premium Teaser — Gold (#f0b429) ─── */
+.premium-teaser {
+  margin: 16px 20px 0;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, rgba(240,180,41,.08) 0%, rgba(240,180,41,.03) 100%);
+  border: 1px solid rgba(240,180,41,.25);
+  border-radius: var(--radius-sm, 8px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.pt-left { display: flex; align-items: center; gap: 12px; }
+.pt-icon { font-size: 1.3rem; flex-shrink: 0; }
+.pt-text { font-size: .85rem; color: var(--text2); line-height: 1.45; }
+.pt-text strong { color: var(--text); }
+.pt-features { display: flex; gap: 16px; margin-top: 3px; }
+.pt-feature { font-size: .78rem; color: var(--text3); display: flex; align-items: center; gap: 4px; }
+.pt-feature::before { content: '•'; color: #f0b429; font-weight: 700; }
+.pt-cta {
+  padding: 8px 18px;
+  background: linear-gradient(135deg, #f0b429, #d4951e);
+  color: #0a0c17;
+  border: none;
+  border-radius: 6px;
+  font-size: .82rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  text-decoration: none;
+  flex-shrink: 0;
+  transition: box-shadow .2s;
+}
+.pt-cta:hover { box-shadow: 0 0 20px rgba(240,180,41,.4); }
+.pt-cta:active { transform: scale(.97); }
+</style>
+
 </head>
 <body>
 
@@ -908,10 +946,13 @@
             <td><span class="strat-sym">{{ s.symbol }}</span> <span class="strat-name">{{ s.name or s.contract or '' }}</span></td>
             <td><span class="strat-type {% if s.strategy == 'iron_condor' %}strat-ic{% elif s.strategy == 'vertical_spread' %}strat-vs{% elif s.strategy == 'calendar_spread' %}strat-cs{% else %}strat-other{% endif %}">{{ s.strategy_cn }}</span></td>
             <td class="{% if s.iv_level == '极端高' %}strat-iv-high{% elif s.iv_level == '偏高' %}strat-iv-high{% elif s.iv_level == '正常' %}strat-iv-normal{% elif s.iv_level == '偏低' %}strat-iv-low{% elif s.iv_level == '极端低' %}strat-iv-extreme{% endif %}">{{ "%.1f"|format((s.iv_avg or 0)*100) }}%</td>
-            <td class="strat-greeks">Δ:{{ "%.2f"|format(s.net_delta or 0) }}<br>Θ:{{ "%.2f"|format(s.net_theta or 0) }}</td>
+            <td class="strat-greeks">
+              Δ:{{ "%.2f"|format(s.net_delta or 0) }} <span class="cash-greek">δ¥{{ "%.0f"|format(s.delta_cash or 0) }}</span><br>
+              Θ:{{ "%.2f"|format(s.net_theta or 0) }} <span class="cash-greek">θ¥{{ "%.0f"|format(s.theta_cash or 0) }}</span>
+            </td>
             <td><span class="strat-pnl-pos">+{{ "%.0f"|format(s.max_profit or 0) }}</span> / <span class="strat-pnl-neg">{{ "%.0f"|format(s.max_loss or 0) }}</span></td>
             <td><span class="strat-strength" style="color:{% if s.unified_score >= 70 %}var(--brand){% elif s.unified_score >= 50 %}#f0b429{% else %}var(--text3){% endif %}">{% if s.unified_score and s.unified_score > 99.9 %}99.9+{% else %}{{ "%.1f"|format(s.unified_score or 0) }}{% endif %}</span></td>
-            <td class="strat-detail-link" onclick="showStratDetailFromData(this)" data-idx="{{ loop.index0 }}"><span>📋</span></td>
+            <td class="strat-detail-link" onclick="showStratDetailFromData(this)" data-sk="{{ s.symbol }}|{{ s.contract }}|{{ s.strategy }}"><span>📋</span></td>
           </tr>
           {% endfor %}
           {% else %}
@@ -946,6 +987,11 @@
           <span>{{ "%.1f"|format((s.iv_avg or 0)*100) }}% IV</span>
           <span style="color:{% if s.iv_level == '极端高' %}#f04438{% elif s.iv_level == '偏高' %}#f0b429{% elif s.iv_level == '正常' %}var(--iv-normal){% elif s.iv_level == '偏低' %}var(--iv-low){% else %}var(--iv-extreme){% endif %}">{{ s.iv_level or '' }}</span>
           <span>Pctl {{ "%.0f"|format(s.iv_percentile or 0) }}%</span>
+        </div>
+        <div class="option-card-cash" style="font-size:.54rem;color:var(--text3);margin-bottom:2px;font-family:var(--font-mono);display:flex;gap:8px">
+          <span>δ¥{{ "%.0f"|format(s.delta_cash or 0) }}</span>
+          <span>θ¥{{ "%.0f"|format(s.theta_cash or 0) }}</span>
+          <span>ν¥{{ "%.0f"|format(s.vega_cash or 0) }}</span>
         </div>
         <div class="option-card-pnl">
           <span class="strat-pnl-pos">P+{{ "%.0f"|format(s.max_profit or 0) }}</span>
@@ -1026,6 +1072,22 @@
 <div class="footer">Auto Company · 期权信号仪表盘 · IV 状态监控系统 · v0.1.0</div>
 </div><!-- /.main -->
 
+<!-- ─── PREMIUM TEASER ─── -->
+<div id="premiumTeaser" class="premium-teaser" style="display:none">
+  <div class="pt-left">
+    <div class="pt-icon">✦</div>
+    <div class="pt-text">
+      <strong>Premium 功能预览</strong>
+      <div class="pt-features">
+        <span class="pt-feature">N 型结构今日推荐</span>
+        <span class="pt-feature">实时突破预警</span>
+        <span class="pt-feature">全品种多周期覆盖</span>
+      </div>
+    </div>
+  </div>
+  <a href="/pricing" class="pt-cta">升级 Premium ✦</a>
+</div>
+
 <!-- ─── Strategy Detail Popup ─── -->
 <div class="strat-popup" id="stratPopup">
   <div class="strat-popup-header">
@@ -1040,6 +1102,13 @@
 function esc(s) {
   if (s == null) return '';
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// ── Cash Greeks formatter: format ¥ amount with thousands separator ──
+function fmtCash(val, decimals) {
+  if (val == null || typeof val !== 'number' || !isFinite(val)) return '—';
+  if (decimals == null) decimals = 0;
+  return Number(val.toFixed(decimals)).toLocaleString();
 }
 
 // ── Score component renderer: icon + progress bar ──
@@ -1099,17 +1168,20 @@ var IV_DATA = JSON.parse('{{ iv_json|safe }}');
   var chart = echarts.init(el, null, { renderer: 'canvas' });
   chart.setOption({
     backgroundColor: 'transparent',
-    grid: { top: 20, right: 24, bottom: Math.max(60, Math.min(200, 50 + IV_DATA.length * 2.5)), left: 52 },
+    grid: { top: 20, right: 32, bottom: Math.max(80, Math.min(280, 70 + IV_DATA.length * 3.5)), left: 56 },
     xAxis: {
       type: 'category',
       data: IV_DATA.map(function(d){ return (d.symbol||'').toUpperCase(); }),
       axisLabel: {
-        color: '#8b92a5', fontSize: 8, interval: IV_DATA.length > 50 ? Math.floor(IV_DATA.length / 30) : 0, rotate: 30,
-        lineHeight: 16, margin: 4,
+        color: '#8b92a5', fontSize: 7, interval: IV_DATA.length > 55 ? Math.floor(IV_DATA.length / 28) : 0,
+        rotate: IV_DATA.length > 55 ? 35 : 30,
+        lineHeight: 13, margin: 3,
         formatter: function(val, idx) {
           var d = IV_DATA[idx];
           if (!d) return val;
-          return (d.symbol || '').toUpperCase();
+          var sym = (d.symbol || '').toUpperCase();
+          var cname = (d.name && d.name !== d.symbol) ? d.name : '';
+          return cname ? sym + '\n' + cname : sym;
         },
       },
       axisLine: { lineStyle: { color: 'rgba(26,32,64,.5)' } },
@@ -1266,6 +1338,9 @@ setInterval(function() {
 function sanitizeJSONString(raw) {
   // 兼容旧数据中 Python json.dumps 输出的 Infinity/NaN（非法 JSON）
   return raw.replace(/: Infinity\b/g, ': null').replace(/: -Infinity\b/g, ': null').replace(/: NaN\b/g, ': null');
+}
+function signalKey(s) {
+  return (s.symbol || '') + '|' + (s.contract || '') + '|' + (s.strategy || '');
 }
 function showStratDetail(el) {
   var raw = el.dataset.detail;
@@ -1483,7 +1558,7 @@ function renderOptionsSignals(signals) {
     tbody.innerHTML = '<tr><td colspan="7" class="strat-empty">暂无期权策略信号</td></tr>';
     return;
   }
-  // Sort by score descending, take top 20 — use signals.indexOf to get original array index for data-idx
+  // Sort by score descending, take top 20 — use signalKey() stable identifier (data-sk) to avoid index drift on sort/refresh
   var sorted = signals.slice().sort(function(a,b){ return (b.unified_score||0) - (a.unified_score||0); }).slice(0, 20);
   var theadHtml = '';
   sorted.forEach(function(s, idx) {
@@ -1506,10 +1581,10 @@ function renderOptionsSignals(signals) {
       + '<td><span class="strat-sym">' + esc(sym) + '</span> <span class="strat-name">' + esc(cname || contract) + '</span></td>'
       + '<td><span class="strat-type ' + stratClass + '">' + esc(strategy) + '</span></td>'
       + '<td class="' + ivClass + '">' + ivPct + '%</td>'
-      + '<td class="strat-greeks">Δ:' + (s.net_delta != null ? s.net_delta.toFixed(2) : '0.00') + '<br>Θ:' + (s.net_theta != null ? s.net_theta.toFixed(2) : '0.00') + '</td>'
+      + '<td class="strat-greeks">Δ:' + (s.net_delta != null ? s.net_delta.toFixed(2) : '0.00') + ' <span class="cash-greek">δ¥' + fmtCash(s.delta_cash, 0) + '</span><br>Θ:' + (s.net_theta != null ? s.net_theta.toFixed(2) : '0.00') + ' <span class="cash-greek">θ¥' + fmtCash(s.theta_cash, 0) + '</span></td>'
       + '<td><span class="strat-pnl-pos">+' + (s.max_profit != null ? s.max_profit.toFixed(0) : '0') + '</span> / <span class="strat-pnl-neg">' + (s.max_loss != null ? s.max_loss.toFixed(0) : '0') + '</span></td>'
       + '<td><span class="strat-strength" style="color:' + scoreClr + '">' + (s.unified_score != null ? (s.unified_score > 99.9 ? '99.9+' : s.unified_score.toFixed(1)) : '—') + '</span></td>'
-      + '<td class="strat-detail-link" onclick="showStratDetailFromData(this)" data-idx="' + signals.indexOf(s) + '"><span>📋</span></td>'
+      + '<td class="strat-detail-link" onclick="showStratDetailFromData(this)" data-sk="' + signalKey(s) + '"><span>📋</span></td>'
       + '</tr>';
   });
   tbody.innerHTML = theadHtml;
@@ -1549,6 +1624,9 @@ function renderOptionCards(signals) {
       + '<span style="color:' + ivClr + '">' + (s.iv_level || '') + '</span>'
       + '<span>Pctl ' + (s.iv_percentile != null ? s.iv_percentile.toFixed(0) : '—') + '%</span>'
       + '</div>'
+      + '<div style="font-size:.54rem;color:var(--text3);margin-bottom:2px;font-family:var(--font-mono);display:flex;gap:8px">'
+      + 'δ¥' + fmtCash(s.delta_cash, 0) + ' θ¥' + fmtCash(s.theta_cash, 0) + ' ν¥' + fmtCash(s.vega_cash, 0)
+      + '</div>'
       + '<div class="option-card-pnl">'
       + '<span class="strat-pnl-pos">P+' + (s.max_profit != null ? s.max_profit.toFixed(0) : '0') + '</span>'
       + '<span class="strat-pnl-neg">L' + (s.max_loss != null ? s.max_loss.toFixed(0) : '0') + '</span>'
@@ -1567,13 +1645,21 @@ function showStratDetailFromData(el) {
     return (prefix || '') + v;
   }
   try {
-    var idx = parseInt(el.dataset.idx);
+    var sk = el.dataset.sk;
     var signals = window._signalsData;
-    if (!signals || idx == null || !signals[idx]) {
-      console.warn('[detail-popup] silent return: signals=' + !!signals + ' idx=' + idx + ' has_signal=' + !!(signals && signals[idx]));
+    if (!signals || !sk || !signals.length) {
+      console.warn('[detail-popup] silent return: signals=' + !!signals + ' sk=' + sk);
       return;
     }
-    var s = signals[idx];
+    // Look up by stable key (data-sk) instead of array index — immune to sort/refresh reordering
+    var s = null;
+    for (var i = 0; i < signals.length; i++) {
+      if (signalKey(signals[i]) === sk) { s = signals[i]; break; }
+    }
+    if (!s) {
+      console.warn('[detail-popup] silent return: signal not found by sk=' + sk);
+      return;
+    }
     var popup = document.getElementById('stratPopup');
     var titleEl = document.getElementById('spTitle');
     var bodyEl = document.getElementById('spBody');
@@ -1594,8 +1680,11 @@ function showStratDetailFromData(el) {
         { label: 'IV 均值', value: s.iv_avg ? (s.iv_avg * 100).toFixed(1) + '%' : '—' },
         { label: '到期天数', value: detail.days_to_expiry != null ? detail.days_to_expiry : '—' },
         { label: '净 Delta', value: sf(s.net_delta, 4) },
+        { label: 'Delta Cash', value: s.delta_cash != null ? '¥' + Number(s.delta_cash.toFixed(0)).toLocaleString() : '—' },
         { label: '净 Theta', value: sf(s.net_theta, 4) },
+        { label: 'Theta Cash', value: s.theta_cash != null ? '¥' + Number(s.theta_cash.toFixed(0)).toLocaleString() : '—' },
         { label: '净 Vega', value: sf(s.net_vega, 2) },
+        { label: 'Vega Cash', value: s.vega_cash != null ? '¥' + Number(s.vega_cash.toFixed(0)).toLocaleString() : '—' },
         { label: '净成本', value: sf(detail.net_cost, 0) },
         { label: '最大盈利', value: sf(s.max_profit, 0, '+') },
         { label: '最大亏损', value: sf(s.max_loss, 0) },
@@ -1640,7 +1729,10 @@ function showStratDetailFromData(el) {
       html += '<div class="strat-popup-row"><span class="sp-label">IV 均值</span><span class="sp-value">' + (s.iv_avg ? (s.iv_avg * 100).toFixed(1) + '%' : '—') + '</span></div>';
       html += '<div class="strat-popup-row"><span class="sp-label">IV 百分位</span><span class="sp-value">' + (s.iv_percentile != null ? s.iv_percentile.toFixed(0) + '%' : '—') + '</span></div>';
       html += '<div class="strat-popup-row"><span class="sp-label">净 Delta</span><span class="sp-value">' + sf(s.net_delta, 4) + '</span></div>';
+      html += '<div class="strat-popup-row"><span class="sp-label">Delta Cash</span><span class="sp-value">' + (s.delta_cash != null ? '¥' + Number(s.delta_cash.toFixed(0)).toLocaleString() : '—') + '</span></div>';
       html += '<div class="strat-popup-row"><span class="sp-label">净 Theta</span><span class="sp-value">' + sf(s.net_theta, 4) + '</span></div>';
+      html += '<div class="strat-popup-row"><span class="sp-label">Theta Cash</span><span class="sp-value">' + (s.theta_cash != null ? '¥' + Number(s.theta_cash.toFixed(0)).toLocaleString() : '—') + '</span></div>';
+      html += '<div class="strat-popup-row"><span class="sp-label">Vega Cash</span><span class="sp-value">' + (s.vega_cash != null ? '¥' + Number(s.vega_cash.toFixed(0)).toLocaleString() : '—') + '</span></div>';
       html += '<div class="strat-popup-row"><span class="sp-label">最大盈利</span><span class="sp-value strat-pnl-pos">' + sf(s.max_profit, 0, '+') + '</span></div>';
       html += '<div class="strat-popup-row"><span class="sp-label">最大亏损</span><span class="sp-value strat-pnl-neg">' + sf(s.max_loss, 0) + '</span></div>';
       if (s.reason) html += '<div class="strat-popup-desc"><strong>理由:</strong> ' + s.reason + '</div>';
@@ -1919,10 +2011,12 @@ function handleRegister() {
 /* ── Fetch user plan status & render plan badge in topbar ── */
 function fetchUserStatus() {
   var badge = document.getElementById('userPlanBadge');
+  var teaser = document.getElementById('premiumTeaser');
   if (!badge) return;
   var token = getAuthToken();
   if (!token) {
     badge.innerHTML = '<a href="/pricing" class="upgrade-btn">✦ 升级 Pro</a>';
+    if (teaser) teaser.style.display = '';
     return;
   }
   fetch('/api/pricing/user-status', {
@@ -1932,21 +2026,27 @@ function fetchUserStatus() {
   .then(function(d) {
     if (!d.logged_in) {
       badge.innerHTML = '<a href="/pricing" class="upgrade-btn">✦ 升级 Pro</a>';
+      if (teaser) teaser.style.display = '';
       return;
     }
     if (d.plan === 'premium') {
       badge.innerHTML = '<span class="plan-badge-pill premium">✦ Premium</span>';
+      if (teaser) teaser.style.display = 'none';
     } else if (d.plan === 'pro') {
       badge.innerHTML = '<span class="plan-badge-pill pro">✦ Pro</span>';
+      if (teaser) teaser.style.display = 'none';
     } else if (d.trial_days_remaining > 0) {
       badge.innerHTML = '<span class="plan-badge-pill trial">✦ 试用 ' + d.trial_days_remaining + '天</span>'
         + '<a href="/pricing" class="upgrade-btn">升级 ✦</a>';
+      if (teaser) teaser.style.display = 'none';
     } else {
       badge.innerHTML = '<a href="/pricing" class="upgrade-btn">✦ 升级 Pro</a>';
+      if (teaser) teaser.style.display = '';
     }
   })
   .catch(function() {
     badge.innerHTML = '<a href="/pricing" class="upgrade-btn">✦ 升级 Pro</a>';
+    if (teaser) teaser.style.display = '';
   });
 }
 

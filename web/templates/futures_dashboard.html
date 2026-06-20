@@ -56,6 +56,10 @@
 /* Matrix skeleton loading state */
 .matrix-section.is-loading .matrix-table { opacity: .5; transition: opacity .2s var(--ease-out); }
 .matrix-section .matrix-table { transition: opacity .3s var(--ease-out); }
+
+/* Stats-bar loading */
+.stats-bar { transition: opacity .25s var(--ease-out); }
+.stats-bar.is-loading .stat-item .value:not(.skeleton) { opacity: .4; }
 .mx-loading-dot {
   display: none;
   width: 6px; height: 6px;
@@ -596,7 +600,43 @@
 }
 </style>
 
-<style id="design-tokens">
+<style id="premium-teaser-styles">
+/* ─── Premium Teaser — Gold (#f0b429) ─── */
+.premium-teaser {
+  margin: 16px 20px 0;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, rgba(240,180,41,.08) 0%, rgba(240,180,41,.03) 100%);
+  border: 1px solid rgba(240,180,41,.25);
+  border-radius: var(--radius-sm, 8px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.pt-left { display: flex; align-items: center; gap: 12px; }
+.pt-icon { font-size: 1.3rem; flex-shrink: 0; }
+.pt-text { font-size: .85rem; color: var(--text2); line-height: 1.45; }
+.pt-text strong { color: var(--text); }
+.pt-features { display: flex; gap: 16px; margin-top: 3px; }
+.pt-feature { font-size: .78rem; color: var(--text3); display: flex; align-items: center; gap: 4px; }
+.pt-feature::before { content: '•'; color: #f0b429; font-weight: 700; }
+.pt-cta {
+  padding: 8px 18px;
+  background: linear-gradient(135deg, #f0b429, #d4951e);
+  color: #0a0c17;
+  border: none;
+  border-radius: 6px;
+  font-size: .82rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  text-decoration: none;
+  flex-shrink: 0;
+  transition: box-shadow .2s;
+}
+.pt-cta:hover { box-shadow: 0 0 20px rgba(240,180,41,.4); }
+.pt-cta:active { transform: scale(.97); }
+</style>
 /* ── Shared design tokens (spacing / shadow / transition / radius) ── */
 :root {
   --space-1: 4px;  --space-2: 8px;  --space-3: 12px;
@@ -963,6 +1003,22 @@
 <div class="footer">Auto Company · 期货信号矩阵 · N 型结构多周期共振系统 · v0.1.0</div>
 </div><!-- /.main -->
 
+<!-- ─── PREMIUM TEASER ─── -->
+<div id="premiumTeaser" class="premium-teaser" style="display:none">
+  <div class="pt-left">
+    <div class="pt-icon">✦</div>
+    <div class="pt-text">
+      <strong>Premium 功能预览</strong>
+      <div class="pt-features">
+        <span class="pt-feature">N 型结构今日推荐</span>
+        <span class="pt-feature">实时突破预警</span>
+        <span class="pt-feature">全品种多周期覆盖</span>
+      </div>
+    </div>
+  </div>
+  <a href="/pricing" class="pt-cta">升级 Premium ✦</a>
+</div>
+
 <!-- ─── K-LINE POPUP ─── -->
 <div class="kline-popup" id="klinePopup">
   <span class="kp-close" id="kpClose">&times;</span>
@@ -1069,7 +1125,9 @@ if (AUTO_REFRESH) {
     if (document.hidden) return;
     var mxSection = document.querySelector('.matrix-section');
     var tbody = document.querySelector('.matrix-table tbody');
+    var statsBar = document.querySelector('.stats-bar');
     if (!tbody || !mxSection) return;
+    if (statsBar) statsBar.classList.add('is-loading');
 
     // Dynamic skeleton count: use current signal rows (minus sector headers)
     var currentRows = document.querySelectorAll('.matrix-table tbody tr:not(.sector-row):not(.skeleton-sensor)').length;
@@ -1140,6 +1198,8 @@ if (AUTO_REFRESH) {
 
         tbody.innerHTML = html;
         mxSection.classList.remove('is-loading');
+        var statsBar = document.querySelector('.stats-bar');
+        if (statsBar) statsBar.classList.remove('is-loading');
 
         // Update status bar
         var now = new Date();
@@ -1151,6 +1211,8 @@ if (AUTO_REFRESH) {
       })
       .catch(function(e) {
         mxSection.classList.remove('is-loading');
+        var statsBar = document.querySelector('.stats-bar');
+        if (statsBar) statsBar.classList.remove('is-loading');
         // Replace skeleton with proper error state (fix: old condition never triggered after skeleton insert)
         var tbody2 = document.querySelector('.matrix-table tbody');
         if (tbody2) {
@@ -1175,6 +1237,8 @@ document.addEventListener('click', function(e) {
   if (!mxSection || !tbody) return;
   // Re-show skeleton and re-fetch immediately (don't wait 5min)
   mxSection.classList.add('is-loading');
+  var statsBar = document.querySelector('.stats-bar');
+  if (statsBar) statsBar.classList.add('is-loading');
   var currentRows = document.querySelectorAll('.matrix-table tbody tr:not(.sector-row):not(.skeleton-sensor)').length;
   tbody.innerHTML = createMatrixSkeleton(Math.max(currentRows || 15, 8), true);
   fetch('/api/matrix', { cache: 'no-cache' })
@@ -1203,6 +1267,7 @@ document.addEventListener('click', function(e) {
       });
       tbody2.innerHTML = html;
       mxSection.classList.remove('is-loading');
+      if (statsBar) statsBar.classList.remove('is-loading');
       var now = new Date(), ts = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0') + ' ' + String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
       var timeEl = document.querySelector('.topbar-time'); if (timeEl) timeEl.textContent = ts + ' ⟳';
       var countEl = document.getElementById('symbolCount'); if (countEl) countEl.textContent = d.matrix.length + ' 品种';
@@ -1210,6 +1275,7 @@ document.addEventListener('click', function(e) {
     .catch(function() {
       // Re-show error state
       mxSection.classList.remove('is-loading');
+      if (statsBar) statsBar.classList.remove('is-loading');
       var tb = document.querySelector('.matrix-table tbody');
       if (tb) {
         tb.innerHTML = '<tr class="mx-error"><td colspan="6" class="mx-error-row"><span class="mx-error-icon">⚠️</span><span class="mx-error-msg">重试失败，请检查网络连接</span><button class="mx-retry-btn" data-mx-retry="1">⟳ 再次重试</button></td></tr>';
@@ -2393,10 +2459,12 @@ document.addEventListener('DOMContentLoaded', function() {
 /* ── Fetch user plan status & render plan badge in topbar ── */
 function fetchUserStatus() {
   var badge = document.getElementById('userPlanBadge');
+  var teaser = document.getElementById('premiumTeaser');
   if (!badge) return;
   var token = getAuthToken();
   if (!token) {
     badge.innerHTML = '<a href="/pricing" class="upgrade-btn">✦ 升级 Pro</a>';
+    if (teaser) teaser.style.display = '';
     return;
   }
   fetch('/api/pricing/user-status', {
@@ -2406,21 +2474,27 @@ function fetchUserStatus() {
   .then(function(d) {
     if (!d.logged_in) {
       badge.innerHTML = '<a href="/pricing" class="upgrade-btn">✦ 升级 Pro</a>';
+      if (teaser) teaser.style.display = '';
       return;
     }
     if (d.plan === 'premium') {
       badge.innerHTML = '<span class="plan-badge-pill premium">✦ Premium</span>';
+      if (teaser) teaser.style.display = 'none';   // 已订阅用户不显示预览
     } else if (d.plan === 'pro') {
       badge.innerHTML = '<span class="plan-badge-pill pro">✦ Pro</span>';
+      if (teaser) teaser.style.display = 'none';   // 已订阅用户不显示预览
     } else if (d.trial_days_remaining > 0) {
       badge.innerHTML = '<span class="plan-badge-pill trial">✦ 试用 ' + d.trial_days_remaining + '天</span>'
         + '<a href="/pricing" class="upgrade-btn">升级 ✦</a>';
+      if (teaser) teaser.style.display = 'none';   // 试用中已享 premium 功能
     } else {
       badge.innerHTML = '<a href="/pricing" class="upgrade-btn">✦ 升级 Pro</a>';
+      if (teaser) teaser.style.display = '';
     }
   })
   .catch(function() {
     badge.innerHTML = '<a href="/pricing" class="upgrade-btn">✦ 升级 Pro</a>';
+    if (teaser) teaser.style.display = '';
   });
 }
 

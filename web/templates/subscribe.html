@@ -3,17 +3,17 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<meta name="description" content="订阅信号矩阵 Telegram Bot，实时接收期货 N 型结构多周期信号、IV 百分位预警和期权策略推送，不再错过交易机会。">
-<meta property="og:title" content="信号矩阵 Bot 订阅 | Telegram 实时推送">
-<meta property="og:description" content="订阅信号矩阵 Telegram Bot，实时接收期货 N 型结构多周期信号、IV 百分位预警和期权策略推送，不再错过交易机会。">
+<meta name="description" content="订阅信号矩阵 Telegram Bot，三步完成注册。实时接收期货 N 型结构多周期信号、IV 百分位预警和期权策略推送，不再错过交易机会。">
+<meta property="og:title" content="信号矩阵 Bot 订阅 | Telegram 实时推送 — 三步注册">
+<meta property="og:description" content="订阅信号矩阵 Telegram Bot，三步完成注册。实时接收期货 N 型结构多周期信号、IV 百分位预警和期权策略推送，不再错过交易机会。">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://signals.drifter.indevs.in/subscribe">
 <meta property="og:image" content="https://signals.drifter.indevs.in/static/images/signals-dashboard.png">
 <link rel="canonical" href="https://signals.drifter.indevs.in/subscribe">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="信号矩阵 Bot 订阅 | Telegram 实时推送">
-<meta name="twitter:description" content="订阅信号矩阵 Telegram Bot，实时接收期货 N 型结构多周期信号、IV 百分位预警和期权策略推送。">
-<title>信号矩阵 Bot 订阅 | Telegram 实时推送</title>
+<meta name="twitter:title" content="信号矩阵 Bot 订阅 | Telegram 实时推送 — 三步注册">
+<meta name="twitter:description" content="订阅信号矩阵 Telegram Bot，三步完成注册。实时接收期货 N 型结构多周期信号、IV 百分位预警和期权策略推送。">
+<title>信号矩阵 Bot 订阅 | Telegram 实时推送 — 三步注册</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/style.css">
@@ -22,7 +22,7 @@
   "@context": "https://schema.org",
   "@type": "WebApplication",
   "name": "信号矩阵 Bot 订阅",
-  "description": "信号矩阵 Telegram Bot 订阅服务，实时推送期货 N 型结构信号、IV 百分位预警和期权策略评分。",
+  "description": "信号矩阵 Telegram Bot 订阅服务，提供三步交互式注册流程，实时推送期货 N 型结构信号、IV 百分位预警和期权策略评分。",
   "applicationCategory": "FinanceApplication",
   "operatingSystem": "Any",
   "browserRequirements": "Requires JavaScript"
@@ -31,7 +31,7 @@
 <style>
 /* ═══════════════════════════════════════════════════════════════
    Bot Subscribe — signals.drifter.indevs.in/subscribe
-   Aesthetic: Terminal Luxe — dark finance, hero card layout
+   Aesthetic: Terminal Luxe — dark finance, hero card, wizard
    ═══════════════════════════════════════════════════════════════ */
 
 /* ── hero layout ── */
@@ -166,111 +166,650 @@
   line-height: 1.6;
 }
 
-/* ── direction accent colors ── */
 .ssc-card-long .ssc-title { color: var(--long); }
 .ssc-card-short .ssc-title { color: var(--short); }
 .ssc-card-purple .ssc-title { color: var(--purple); }
 
-/* ── how to subscribe section ── */
-.sub-how {
-  margin-bottom: 28px;
+/* ═══════════════════════════════════════════════════════════════
+   Wizard — interactive 3-step subscription flow
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── step indicator ── */
+.wizard-header {
+  margin-bottom: 24px;
 }
 
-.sub-section-title {
-  font-size: .8rem;
-  font-weight: 700;
-  letter-spacing: .04em;
-  margin-bottom: 14px;
+.wizard-steps {
   display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.sub-section-title .accent-line {
-  flex: 1;
-  height: 1px;
-  background: linear-gradient(90deg, var(--border-light), transparent);
-}
-
-.sub-steps {
-  display: flex;
-  gap: 12px;
-}
-
-.sub-step {
-  flex: 1;
-  background: rgba(14, 17, 24, .4);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 16px 14px;
-  text-align: center;
-  transition: border-color .2s var(--ease-out);
-}
-
-.sub-step:hover {
-  border-color: var(--border-light);
-}
-
-.sub-step-num {
-  display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  gap: 0;
+}
+
+.wiz-step-dot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  position: relative;
+}
+
+.wiz-dot {
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
-  background: var(--brand-bg);
-  border: 1px solid rgba(240, 180, 41, .18);
-  color: var(--brand);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-size: .65rem;
   font-weight: 700;
   font-family: var(--font-mono);
-  margin-bottom: 8px;
+  border: 2px solid var(--border);
+  background: var(--card);
+  color: var(--text3);
+  transition: all .3s var(--ease-out);
+  position: relative;
+  z-index: 1;
 }
 
-.sub-step-title {
-  font-size: .65rem;
-  font-weight: 600;
-  letter-spacing: .02em;
+.wiz-step-dot.active .wiz-dot {
+  border-color: var(--brand);
+  background: var(--brand-bg);
+  color: var(--brand);
+  box-shadow: 0 0 12px rgba(240, 180, 41, .15);
+}
+
+.wiz-step-dot.done .wiz-dot {
+  border-color: var(--short);
+  background: var(--short-bg);
+  color: var(--short);
+}
+
+.wiz-step-label {
+  font-size: .55rem;
+  color: var(--text3);
+  letter-spacing: .03em;
+  transition: color .2s var(--ease-out);
+  text-align: center;
+  max-width: 80px;
+}
+
+.wiz-step-dot.active .wiz-step-label {
+  color: var(--brand);
+}
+
+.wiz-step-dot.done .wiz-step-label {
+  color: var(--short);
+}
+
+.wiz-connector {
+  flex: 1;
+  height: 2px;
+  background: var(--border);
+  margin: 0 8px;
+  margin-bottom: 22px;
+  transition: background .3s var(--ease-out);
+  max-width: 80px;
+}
+
+.wiz-connector.done {
+  background: var(--short);
+}
+
+/* ── step content ── */
+.wiz-step-content {
+  display: none;
+  animation: wiz-fadein .35s var(--ease-out);
+}
+
+.wiz-step-content.active {
+  display: block;
+}
+
+@keyframes wiz-fadein {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.wiz-step-body {
+  padding: 0 4px;
+}
+
+.wiz-step-body h3 {
+  font-size: .9rem;
+  font-weight: 700;
+  letter-spacing: -.01em;
   margin-bottom: 4px;
 }
 
-.sub-step-desc {
-  font-size: .55rem;
+.wiz-step-body .wiz-step-hint {
+  font-size: .65rem;
   color: var(--text3);
+  line-height: 1.6;
+  margin-bottom: 16px;
+}
+
+/* ── step 1: telegram link ── */
+.wiz-telegram-card {
+  background: rgba(14, 17, 24, .5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 20px;
+  text-align: center;
+  margin-bottom: 12px;
+}
+
+.wiz-tg-icon {
+  font-size: 2.4rem;
+  margin-bottom: 10px;
+}
+
+.wiz-tg-title {
+  font-size: .75rem;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.wiz-tg-desc {
+  font-size: .6rem;
+  color: var(--text3);
+  margin-bottom: 14px;
   line-height: 1.5;
 }
 
-.sub-step-desc code {
+.wiz-tg-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 24px;
+  font-size: .68rem;
+  font-weight: 700;
+  font-family: var(--font-ui);
+  color: #000;
+  background: linear-gradient(135deg, var(--brand) 0%, #e0a020 100%);
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  text-decoration: none;
+  letter-spacing: .03em;
+  transition: all .2s var(--ease-out);
+}
+
+.wiz-tg-btn:hover {
+  box-shadow: 0 4px 20px rgba(240, 180, 41, .25);
+  transform: translateY(-1px);
+  filter: brightness(1.08);
+}
+
+.wiz-tg-btn:active {
+  transform: scale(.97);
+}
+
+.wiz-tg-alt {
+  margin-top: 10px;
+  font-size: .55rem;
+  color: var(--text4);
+}
+
+.wiz-tg-alt code {
+  font-family: var(--font-mono);
+  color: var(--text2);
+  background: rgba(255,255,255,.04);
+  padding: 1px 5px;
+  border-radius: 2px;
+}
+
+/* ── step 2: get chat id ── */
+.wiz-chatid-guide {
+  background: rgba(14, 17, 24, .5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 20px;
+  margin-bottom: 12px;
+}
+
+.wiz-guide-title {
+  font-size: .7rem;
+  font-weight: 600;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wiz-guide-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wiz-guide-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: .62rem;
+  color: var(--text2);
+  line-height: 1.6;
+}
+
+.wiz-gs-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--brand-bg);
+  border: 1px solid rgba(240, 180, 41, .15);
+  color: var(--brand);
+  font-size: .55rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.wiz-gs-text {
+  flex: 1;
+}
+
+.wiz-gs-text code {
   font-family: var(--font-mono);
   color: var(--brand);
   background: rgba(240, 180, 41, .06);
   padding: 1px 5px;
   border-radius: 2px;
-  font-size: .52rem;
+  font-size: .58rem;
 }
 
-.sub-step-link {
-  display: inline-block;
-  margin-top: 8px;
-  padding: 5px 14px;
+.wiz-chatid-example {
+  margin-top: 12px;
+  background: rgba(8, 11, 16, .6);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   font-size: .6rem;
+  color: var(--text3);
+}
+
+.wiz-chatid-example .label {
+  color: var(--text4);
+  font-family: var(--font-mono);
+  font-size: .55rem;
+}
+
+.wiz-chatid-example .value {
+  color: var(--brand);
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: .7rem;
+}
+
+/* ── step 3: form ── */
+.wiz-form-card {
+  background: rgba(14, 17, 24, .5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 20px 20px 22px;
+  margin-bottom: 12px;
+}
+
+.wiz-field {
+  margin-bottom: 14px;
+}
+
+.wiz-field:last-child {
+  margin-bottom: 16px;
+}
+
+.wiz-field label {
+  display: block;
+  font-size: .6rem;
+  color: var(--text2);
+  margin-bottom: 5px;
+  letter-spacing: .04em;
+  font-weight: 500;
+}
+
+.wiz-field label .required {
+  color: var(--long);
+  margin-left: 2px;
+}
+
+.wiz-field input {
+  width: 100%;
+  padding: 9px 12px;
+  font-size: .7rem;
+  font-family: var(--font-mono);
+  color: var(--text);
+  background: rgba(8, 11, 16, .5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  outline: none;
+  transition: border-color .2s var(--ease-out), box-shadow .2s var(--ease-out);
+  box-sizing: border-box;
+}
+
+.wiz-field input:focus {
+  border-color: rgba(240, 180, 41, .3);
+  box-shadow: 0 0 0 2px rgba(240, 180, 41, .06);
+}
+
+.wiz-field input::placeholder {
+  color: var(--text3);
+  opacity: .4;
+}
+
+.wiz-field input.error {
+  border-color: var(--long);
+  box-shadow: 0 0 0 2px rgba(240, 68, 56, .08);
+}
+
+.wiz-field .field-error {
+  display: none;
+  font-size: .55rem;
+  color: var(--long);
+  margin-top: 4px;
+}
+
+.wiz-field .field-error.show {
+  display: block;
+}
+
+.wiz-field-hint {
+  font-size: .52rem;
+  color: var(--text4);
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+/* ── form result ── */
+.wiz-result {
+  display: none;
+  padding: 14px 16px;
+  border-radius: var(--radius-sm);
+  margin-bottom: 12px;
+  font-size: .62rem;
+  line-height: 1.6;
+  animation: wiz-fadein .3s var(--ease-out);
+}
+
+.wiz-result.show {
+  display: block;
+}
+
+.wiz-result.success {
+  background: var(--short-bg);
+  border: 1px solid rgba(34, 197, 94, .2);
+  color: var(--short);
+}
+
+.wiz-result.error {
+  background: var(--long-bg);
+  border: 1px solid rgba(240, 68, 56, .2);
+  color: var(--long);
+}
+
+.wiz-result .result-title {
+  font-weight: 700;
+  font-size: .65rem;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wiz-result .result-body {
+  color: var(--text2);
+}
+
+.wiz-result .result-body code {
+  font-family: var(--font-mono);
+  color: var(--brand);
+  background: rgba(255,255,255,.04);
+  padding: 1px 4px;
+  border-radius: 2px;
+}
+
+/* ── navigation buttons ── */
+.wiz-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.wiz-nav-left {
+  flex: 1;
+}
+
+.wiz-nav-right {
+  display: flex;
+  gap: 8px;
+}
+
+.wiz-btn {
+  padding: 9px 20px;
+  font-size: .65rem;
   font-weight: 600;
   font-family: var(--font-ui);
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  letter-spacing: .03em;
+  transition: all .2s var(--ease-out);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.wiz-btn:active {
+  transform: scale(.97);
+}
+
+.wiz-btn-back {
+  color: var(--text2);
+  background: rgba(255,255,255,.04);
+  border: 1px solid var(--border);
+}
+
+.wiz-btn-back:hover {
+  color: var(--text);
+  background: rgba(255,255,255,.08);
+  border-color: var(--border-light);
+}
+
+.wiz-btn-next {
   color: #000;
   background: var(--brand);
-  border-radius: var(--radius-sm);
-  text-decoration: none;
-  transition: all .2s var(--ease-out);
-  letter-spacing: .03em;
 }
 
-.sub-step-link:hover {
+.wiz-btn-next:hover {
   box-shadow: 0 2px 16px rgba(240, 180, 41, .2);
-  filter: brightness(1.1);
+  filter: brightness(1.08);
 }
 
-.sub-step-link:active {
-  transform: scale(.97);
+.wiz-btn-next:disabled {
+  opacity: .4;
+  cursor: not-allowed;
+  filter: none;
+  box-shadow: none;
+}
+
+.wiz-btn-submit {
+  color: #000;
+  background: linear-gradient(135deg, var(--short) 0%, #1a9e4a 100%);
+}
+
+.wiz-btn-submit:hover {
+  box-shadow: 0 2px 16px rgba(34, 197, 94, .2);
+  filter: brightness(1.08);
+}
+
+.wiz-btn-submit:disabled {
+  opacity: .4;
+  cursor: not-allowed;
+  filter: none;
+  box-shadow: none;
+}
+
+.wiz-btn-submit.loading {
+  position: relative;
+  color: transparent;
+  pointer-events: none;
+}
+
+.wiz-btn-submit.loading::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(0,0,0,.15);
+  border-top-color: #000;
+  border-radius: 50%;
+  animation: wiz-spin .6s linear infinite;
+}
+
+@keyframes wiz-spin {
+  to { transform: rotate(360deg); }
+}
+
+.wiz-btn-resubscribe {
+  color: var(--text2);
+  background: rgba(255,255,255,.04);
+  border: 1px solid var(--border);
+}
+
+.wiz-btn-resubscribe:hover {
+  color: var(--text);
+  border-color: var(--border-light);
+}
+
+/* ── subscribed state ── */
+.wiz-subscribed-card {
+  display: none;
+  background: rgba(14, 17, 24, .5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 20px;
+  margin-bottom: 12px;
+  animation: wiz-fadein .35s var(--ease-out);
+}
+
+.wiz-subscribed-card.show {
+  display: block;
+}
+
+.wiz-subscribed-icon {
+  font-size: 2rem;
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.wiz-subscribed-title {
+  text-align: center;
+  font-size: .75rem;
+  font-weight: 700;
+  color: var(--short);
+  margin-bottom: 4px;
+}
+
+.wiz-subscribed-status {
+  text-align: center;
+  font-size: .6rem;
+  color: var(--text3);
+  margin-bottom: 14px;
+}
+
+.wiz-subscribed-details {
+  background: rgba(8, 11, 16, .4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+
+.wiz-subscribed-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+  font-size: .6rem;
+}
+
+.wiz-subscribed-row .label {
+  color: var(--text3);
+}
+
+.wiz-subscribed-row .value {
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: .58rem;
+}
+
+.wiz-subscribed-row .value.brand {
+  color: var(--brand);
+}
+
+/* ── unsubscribe section ── */
+.wiz-unsub-section {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.wiz-unsub-toggle {
+  font-size: .58rem;
+  color: var(--text4);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: color .15s;
+  background: none;
+  border: none;
+  font-family: var(--font-ui);
+  padding: 0;
+}
+
+.wiz-unsub-toggle:hover {
+  color: var(--long);
+}
+
+.wiz-unsub-form {
+  display: none;
+  margin-top: 10px;
+  animation: wiz-fadein .25s var(--ease-out);
+}
+
+.wiz-unsub-form.show {
+  display: block;
+}
+
+.wiz-unsub-form .wiz-field {
+  margin-bottom: 10px;
+}
+
+.wiz-btn-unsub {
+  color: #000;
+  background: var(--long);
+}
+
+.wiz-btn-unsub:hover {
+  box-shadow: 0 2px 12px rgba(240, 68, 56, .2);
+}
+
+.wiz-btn-unsub:disabled {
+  opacity: .4;
+  cursor: not-allowed;
+  filter: none;
+  box-shadow: none;
 }
 
 /* ── feature list ── */
@@ -306,11 +845,7 @@
 }
 
 .sub-feature .sf-text { flex: 1; }
-
-.sub-feature .sf-highlight {
-  color: var(--text);
-  font-weight: 600;
-}
+.sub-feature .sf-highlight { color: var(--text); font-weight: 600; }
 
 /* ── API / status section ── */
 .sub-api-section {
@@ -380,9 +915,7 @@
   gap: 4px;
 }
 
-.sub-footer-link:hover {
-  color: var(--brand);
-}
+.sub-footer-link:hover { color: var(--brand); }
 
 .sub-footer-copy {
   font-size: .55rem;
@@ -397,14 +930,28 @@
   .sub-signal-grid {
     grid-template-columns: 1fr;
   }
-  .sub-steps {
-    flex-direction: column;
-  }
   .sub-features {
     grid-template-columns: 1fr;
   }
   .sub-title-group h1 {
     font-size: 1.1rem;
+  }
+  .wiz-steps {
+    gap: 0;
+  }
+  .wiz-step-label {
+    max-width: 60px;
+    font-size: .5rem;
+  }
+  .wiz-nav {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+  .wiz-nav-left {
+    flex: none;
+  }
+  .wiz-nav-right {
+    justify-content: center;
   }
 }
 
@@ -416,6 +963,11 @@
   }
   .subscribe-hero {
     margin-top: 30px;
+  }
+  .wiz-connector {
+    max-width: 40px;
+    margin: 0 4px;
+    margin-bottom: 22px;
   }
 }
 
@@ -475,30 +1027,174 @@
       </div>
     </div>
 
-    <!-- How to Subscribe -->
-    <div class="sub-how">
+    <!-- ════════════════════════════════════════════
+         Wizard: 3-Step Interactive Subscription
+         ════════════════════════════════════════════ -->
+    <div class="sub-how" id="wizard-root">
+
+      <!-- Section Title -->
       <div class="sub-section-title">
-        📋 订阅方式
+        📋 三步注册
         <span class="accent-line"></span>
       </div>
-      <div class="sub-steps">
-        <div class="sub-step">
-          <div class="sub-step-num">1</div>
-          <div class="sub-step-title">打开 Telegram</div>
-          <div class="sub-step-desc">在 Telegram 中搜索 <code>@SignalMatrixBot</code> 或点击下方按钮</div>
-          <a href="https://t.me/SignalMatrixBot" target="_blank" rel="noopener" class="sub-step-link">@SignalMatrixBot →</a>
-        </div>
-        <div class="sub-step">
-          <div class="sub-step-num">2</div>
-          <div class="sub-step-title">发送 /start</div>
-          <div class="sub-step-desc">向 Bot 发送 <code>/start</code> 命令，Bot 将自动为您创建 7 天试用订阅</div>
-        </div>
-        <div class="sub-step">
-          <div class="sub-step-num">3</div>
-          <div class="sub-step-title">接收信号</div>
-          <div class="sub-step-desc">订阅成功后，每次新信号生成时将实时推送到您的 Telegram 聊天</div>
+
+      <!-- Step Indicator -->
+      <div class="wizard-header">
+        <div class="wizard-steps">
+          <div class="wiz-step-dot active" data-step="0">
+            <div class="wiz-dot">1</div>
+            <div class="wiz-step-label">打开 Telegram</div>
+          </div>
+          <div class="wiz-connector" data-connector="0"></div>
+          <div class="wiz-step-dot" data-step="1">
+            <div class="wiz-dot">2</div>
+            <div class="wiz-step-label">获取 Chat ID</div>
+          </div>
+          <div class="wiz-connector" data-connector="1"></div>
+          <div class="wiz-step-dot" data-step="2">
+            <div class="wiz-dot">3</div>
+            <div class="wiz-step-label">完成订阅</div>
+          </div>
         </div>
       </div>
+
+      <!-- Step 1: Open Telegram -->
+      <div class="wiz-step-content active" data-wiz-step="0">
+        <div class="wiz-step-body">
+          <h3>Step 1 — 打开 Telegram</h3>
+          <div class="wiz-step-hint">在 Telegram 中找到信号矩阵 Bot，开始订阅流程。</div>
+          <div class="wiz-telegram-card">
+            <div class="wiz-tg-icon">🤖</div>
+            <div class="wiz-tg-title">信号矩阵 Bot</div>
+            <div class="wiz-tg-desc">点击下方按钮，立即在 Telegram 中打开 Bot。或手动搜索 <code>@SignalMatrixBot</code></div>
+            <a href="https://t.me/SignalMatrixBot" target="_blank" rel="noopener" class="wiz-tg-btn">
+              ✈️ 打开 @SignalMatrixBot
+            </a>
+            <div class="wiz-tg-alt">
+              在 Telegram 搜索栏输入 <code>@SignalMatrixBot</code> → 点击搜索结果中的 Bot 即可开始
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 2: Get Chat ID -->
+      <div class="wiz-step-content" data-wiz-step="1">
+        <div class="wiz-step-body">
+          <h3>Step 2 — 获取你的 Chat ID</h3>
+          <div class="wiz-step-hint">向 Bot 发送 <code>/start</code> 命令，获取专属 Chat ID 用于绑定订阅。</div>
+          <div class="wiz-chatid-guide">
+            <div class="wiz-guide-title">📝 操作指引</div>
+            <div class="wiz-guide-steps">
+              <div class="wiz-guide-step">
+                <div class="wiz-gs-num">1</div>
+                <div class="wiz-gs-text">在 Telegram 中打开 <strong>@SignalMatrixBot</strong></div>
+              </div>
+              <div class="wiz-guide-step">
+                <div class="wiz-gs-num">2</div>
+                <div class="wiz-gs-text">向 Bot 发送命令 <code>/start</code></div>
+              </div>
+              <div class="wiz-guide-step">
+                <div class="wiz-gs-num">3</div>
+                <div class="wiz-gs-text">Bot 回复消息中会包含你的 <strong>Chat ID</strong>，例如 <code>你的 Chat ID: 123456789</code></div>
+              </div>
+              <div class="wiz-guide-step">
+                <div class="wiz-gs-num">4</div>
+                <div class="wiz-gs-text">复制该数字，粘贴到下一步的 Chat ID 输入框中</div>
+              </div>
+            </div>
+            <div class="wiz-chatid-example">
+              <span class="label">🤖 Bot 回复示例 :</span>
+              <span class="value">你的 Chat ID: 123456789</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 3: Subscribe Form -->
+      <div class="wiz-step-content" data-wiz-step="2">
+        <div class="wiz-step-body">
+          <h3>Step 3 — 完成订阅</h3>
+          <div class="wiz-step-hint">输入你的 Chat ID 和邮箱，点击订阅即可开始接收实时信号推送。</div>
+
+          <!-- Result box (hidden by default) -->
+          <div class="wiz-result" id="subscribe-result"></div>
+
+          <!-- Subscribed state (hidden by default) -->
+          <div class="wiz-subscribed-card" id="subscribed-card">
+            <div class="wiz-subscribed-icon">✅</div>
+            <div class="wiz-subscribed-title">订阅成功</div>
+            <div class="wiz-subscribed-status" id="sub-status-text">7 天免费试用已开启</div>
+            <div class="wiz-subscribed-details">
+              <div class="wiz-subscribed-row">
+                <span class="label">Chat ID</span>
+                <span class="value" id="sub-detail-chatid">—</span>
+              </div>
+              <div class="wiz-subscribed-row">
+                <span class="label">邮箱</span>
+                <span class="value" id="sub-detail-email">—</span>
+              </div>
+              <div class="wiz-subscribed-row">
+                <span class="label">状态</span>
+                <span class="value brand" id="sub-detail-status">trial</span>
+              </div>
+              <div class="wiz-subscribed-row">
+                <span class="label">试用截止</span>
+                <span class="value" id="sub-detail-trialend">—</span>
+              </div>
+              <div class="wiz-subscribed-row">
+                <span class="label">订阅时间</span>
+                <span class="value" id="sub-detail-time">—</span>
+              </div>
+            </div>
+
+            <!-- Unsubscribe Section -->
+            <div class="wiz-unsub-section">
+              <button class="wiz-unsub-toggle" id="unsub-toggle" type="button">── 取消订阅 ──</button>
+              <div class="wiz-unsub-form" id="unsub-form">
+                <div class="wiz-field">
+                  <label>Chat ID 或邮箱 <span class="required">*</span></label>
+                  <input type="text" id="unsub-input" placeholder="输入 Chat ID 或绑定的邮箱" autocomplete="off">
+                  <div class="field-error" id="unsub-error">请提供有效的 Chat ID 或邮箱</div>
+                </div>
+                <button class="wiz-btn wiz-btn-unsub" id="unsub-btn" type="button">取消订阅</button>
+                <div class="wiz-result" id="unsub-result" style="margin-top:8px;margin-bottom:0"></div>
+              </div>
+            </div>
+
+            <div style="text-align:center;margin-top:10px">
+              <button class="wiz-btn wiz-btn-resubscribe" id="resubscribe-btn" type="button">重新订阅</button>
+            </div>
+          </div>
+
+          <!-- Subscribe Form -->
+          <div class="wiz-form-card" id="subscribe-form-card">
+            <div class="wiz-field">
+              <label for="chat-id-input">Telegram Chat ID <span class="required">*</span></label>
+              <input type="text" id="chat-id-input" placeholder="例如: 123456789" autocomplete="off" inputmode="numeric">
+              <div class="field-error" id="chat-id-error">Chat ID 必须为纯数字</div>
+              <div class="wiz-field-hint">从 Telegram 中的 @SignalMatrixBot 回复中获取</div>
+            </div>
+            <div class="wiz-field">
+              <label for="email-input">邮箱地址 <span class="required">*</span></label>
+              <input type="email" id="email-input" placeholder="your@email.com" autocomplete="email">
+              <div class="field-error" id="email-error">请输入有效的邮箱地址</div>
+              <div class="wiz-field-hint">用于付费关联和订阅管理通知</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Navigation -->
+      <div class="wiz-nav">
+        <div class="wiz-nav-left">
+          <button class="wiz-btn wiz-btn-back" id="wiz-prev" type="button" style="display:none">← 上一步</button>
+        </div>
+        <div class="wiz-nav-right">
+          <button class="wiz-btn wiz-btn-next" id="wiz-next" type="button">下一步 →</button>
+          <button class="wiz-btn wiz-btn-submit" id="wiz-submit" type="button" style="display:none">✅ 立即订阅</button>
+        </div>
+      </div>
+
     </div>
 
     <!-- Features -->
@@ -537,10 +1233,10 @@
     <div class="sub-api-section">
       <div class="sub-api-title">🔌 API 接入（开发者）</div>
       <div class="sub-api-codes">
-        <div class="sub-api-code"><span class="comment"># 注册订阅（需 API Key）</span></div>
-        <div class="sub-api-code">curl -X POST https://signals.drifter.indevs.in/api/subscribe \<br>  <span class="accent">-H</span> <span class="string">"X-API-Key: your-key"</span> \<br>  <span class="accent">-H</span> <span class="string">"Content-Type: application/json"</span> \<br>  <span class="accent">-d</span> <span class="string">'{"telegram_chat_id":"12345","username":"trader1"}'</span></div>
-        <div class="sub-api-code"><span class="comment"># 查询订阅状态</span></div>
-        <div class="sub-api-code">curl <span class="string">"https://signals.drifter.indevs.in/api/subscribe/status?chat_id=12345"</span> \<br>  <span class="accent">-H</span> <span class="string">"X-API-Key: your-key"</span></div>
+        <div class="sub-api-code"><span class="comment"># 注册订阅</span></div>
+        <div class="sub-api-code">curl -X POST https://signals.drifter.indevs.in/api/bot/subscribe \<br>  <span class="accent">-H</span> <span class="string">"Content-Type: application/json"</span> \<br>  <span class="accent">-d</span> <span class="string">'{"chat_id":"123456789","email":"user@example.com"}'</span></div>
+        <div class="sub-api-code"><span class="comment"># 取消订阅</span></div>
+        <div class="sub-api-code">curl -X POST https://signals.drifter.indevs.in/api/bot/unsubscribe \<br>  <span class="accent">-H</span> <span class="string">"Content-Type: application/json"</span> \<br>  <span class="accent">-d</span> <span class="string">'{"chat_id":"123456789"}'</span></div>
       </div>
     </div>
 
@@ -558,6 +1254,313 @@
   </div>
 
 </div>
+
+<script>
+(function() {
+  'use strict';
+
+  /* ── state ── */
+  var currentStep = 0;          // 0-based: 0=Telegram, 1=ChatID, 2=Form
+  var stepDots   = document.querySelectorAll('.wiz-step-dot');
+  var connectors = document.querySelectorAll('.wiz-connector');
+  var stepPanels = document.querySelectorAll('.wiz-step-content');
+  var prevBtn    = document.getElementById('wiz-prev');
+  var nextBtn    = document.getElementById('wiz-next');
+  var submitBtn  = document.getElementById('wiz-submit');
+
+  /* ── form elements ── */
+  var chatIdInput  = document.getElementById('chat-id-input');
+  var emailInput   = document.getElementById('email-input');
+  var chatIdErr    = document.getElementById('chat-id-error');
+  var emailErr     = document.getElementById('email-error');
+  var resultBox    = document.getElementById('subscribe-result');
+  var formCard     = document.getElementById('subscribe-form-card');
+
+  /* ── subscribed state ── */
+  var subCard         = document.getElementById('subscribed-card');
+  var subStatusText   = document.getElementById('sub-status-text');
+  var subDetailChatId = document.getElementById('sub-detail-chatid');
+  var subDetailEmail  = document.getElementById('sub-detail-email');
+  var subDetailStatus = document.getElementById('sub-detail-status');
+  var subDetailTrial  = document.getElementById('sub-detail-trialend');
+  var subDetailTime   = document.getElementById('sub-detail-time');
+
+  /* ── unsubscribe ── */
+  var unsubToggle = document.getElementById('unsub-toggle');
+  var unsubForm   = document.getElementById('unsub-form');
+  var unsubInput  = document.getElementById('unsub-input');
+  var unsubBtn    = document.getElementById('unsub-btn');
+  var unsubErr    = document.getElementById('unsub-error');
+  var unsubResult = document.getElementById('unsub-result');
+  var resubBtn    = document.getElementById('resubscribe-btn');
+
+  /* ── step management ── */
+  function goToStep(step) {
+    if (step < 0 || step > 2) return;
+    currentStep = step;
+
+    // update dots & connectors
+    for (var i = 0; i < stepDots.length; i++) {
+      stepDots[i].classList.remove('active', 'done');
+      if (i < step) stepDots[i].classList.add('done');
+      if (i === step) stepDots[i].classList.add('active');
+    }
+    for (var j = 0; j < connectors.length; j++) {
+      connectors[j].classList.toggle('done', j < step);
+    }
+
+    // show/hide panels
+    for (var k = 0; k < stepPanels.length; k++) {
+      stepPanels[k].classList.toggle('active', k === step);
+    }
+
+    // navigation visibility
+    prevBtn.style.display = step === 0 ? 'none' : 'inline-flex';
+    nextBtn.style.display = step === 2 ? 'none' : 'inline-flex';
+    submitBtn.style.display = step === 2 ? 'inline-flex' : 'none';
+
+    // hide result when re-entering form step
+    if (step === 2) {
+      resultBox.classList.remove('show');
+    }
+  }
+
+  /* ── form validation ── */
+  function validateForm() {
+    var chatId = (chatIdInput.value || '').trim();
+    var email  = (emailInput.value || '').trim();
+    var valid  = true;
+
+    // chat_id: must be pure digits
+    chatIdErr.classList.remove('show');
+    chatIdInput.classList.remove('error');
+    if (!chatId) {
+      chatIdErr.textContent = '请输入 Chat ID';
+      chatIdErr.classList.add('show');
+      chatIdInput.classList.add('error');
+      valid = false;
+    } else if (!/^\d+$/.test(chatId)) {
+      chatIdErr.textContent = 'Chat ID 必须为纯数字';
+      chatIdErr.classList.add('show');
+      chatIdInput.classList.add('error');
+      valid = false;
+    } else if (chatId.length > 20) {
+      chatIdErr.textContent = 'Chat ID 长度异常（不能超过 20 位）';
+      chatIdErr.classList.add('show');
+      chatIdInput.classList.add('error');
+      valid = false;
+    }
+
+    // email: basic format
+    emailErr.classList.remove('show');
+    emailInput.classList.remove('error');
+    if (!email) {
+      emailErr.textContent = '请输入邮箱地址';
+      emailErr.classList.add('show');
+      emailInput.classList.add('error');
+      valid = false;
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      emailErr.textContent = '邮箱格式无效';
+      emailErr.classList.add('show');
+      emailInput.classList.add('error');
+      valid = false;
+    }
+
+    return valid;
+  }
+
+  /* ── dismiss field errors on input ── */
+  chatIdInput.addEventListener('input', function() {
+    chatIdErr.classList.remove('show');
+    chatIdInput.classList.remove('error');
+    // hide previous result when editing
+    resultBox.classList.remove('show');
+  });
+  emailInput.addEventListener('input', function() {
+    emailErr.classList.remove('show');
+    emailInput.classList.remove('error');
+    resultBox.classList.remove('show');
+  });
+
+  /* ── submit subscription ── */
+  function submitSubscribe() {
+    if (!validateForm()) return;
+
+    var chatId = (chatIdInput.value || '').trim();
+    var email  = (emailInput.value || '').trim();
+
+    // loading state
+    submitBtn.disabled = true;
+    submitBtn.classList.add('loading');
+    resultBox.classList.remove('show', 'success', 'error');
+
+    fetch('/api/bot/subscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, email: email }),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      submitBtn.disabled = false;
+      submitBtn.classList.remove('loading');
+
+      if (data.ok && data.data) {
+        // show subscribed state
+        showSubscribed(data.data);
+      } else {
+        // show error
+        var errMsg = data.error || '订阅失败，请稍后重试';
+        resultBox.className = 'wiz-result show error';
+        resultBox.innerHTML = '<div class="result-title">❌ 订阅失败</div><div class="result-body">' + escapeHtml(errMsg) + '</div>';
+      }
+    })
+    .catch(function(err) {
+      submitBtn.disabled = false;
+      submitBtn.classList.remove('loading');
+      resultBox.className = 'wiz-result show error';
+      resultBox.innerHTML = '<div class="result-title">❌ 网络错误</div><div class="result-body">无法连接到服务器，请检查网络后重试</div>';
+    });
+  }
+
+  /* ── show subscribed state ── */
+  function showSubscribed(data) {
+    // hide form, show subscribed card
+    formCard.style.display = 'none';
+    resultBox.classList.remove('show');
+    subCard.classList.add('show');
+
+    subDetailChatId.textContent = data.chat_id || '—';
+    subDetailEmail.textContent  = data.email || '—';
+    subDetailStatus.textContent = data.status || 'trial';
+
+    var trialEnd = data.trial_end || '';
+    subDetailTrial.textContent = trialEnd ? formatDate(trialEnd) : '—';
+    var subTime = data.subscribed_at || '';
+    subDetailTime.textContent  = subTime ? formatDate(subTime) : '—';
+
+    if (data.status === 'trial' && trialEnd) {
+      subStatusText.textContent = '🎉 7 天免费试用已开启，截止 ' + formatDate(trialEnd);
+    } else if (data.status === 'active') {
+      subStatusText.textContent = '✅ 订阅已激活';
+    } else {
+      subStatusText.textContent = '✅ 订阅成功';
+    }
+
+    // reset form for next use
+    chatIdInput.value = '';
+    emailInput.value = '';
+  }
+
+  /* ── handle resubscribe ── */
+  resubBtn.addEventListener('click', function() {
+    subCard.classList.remove('show');
+    formCard.style.display = 'block';
+    resultBox.classList.remove('show');
+    unsubForm.classList.remove('show');
+    unsubResult.classList.remove('show');
+  });
+
+  /* ── unsubscribe toggle ── */
+  unsubToggle.addEventListener('click', function() {
+    unsubForm.classList.toggle('show');
+    unsubResult.classList.remove('show');
+  });
+
+  /* ── unsubscribe submit ── */
+  unsubBtn.addEventListener('click', function() {
+    var val = (unsubInput.value || '').trim();
+    if (!val) {
+      unsubErr.classList.add('show');
+      return;
+    }
+    unsubErr.classList.remove('show');
+    unsubBtn.disabled = true;
+    unsubBtn.textContent = '处理中...';
+    unsubResult.classList.remove('show', 'success', 'error');
+
+    var body = /^\d+$/.test(val)
+      ? { chat_id: val }
+      : { email: val };
+
+    fetch('/api/bot/unsubscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      unsubBtn.disabled = false;
+      unsubBtn.textContent = '取消订阅';
+      if (data.ok) {
+        unsubResult.className = 'wiz-result show success';
+        unsubResult.innerHTML = '<div class="result-title">✅ ' + escapeHtml(data.message || '已取消订阅') + '</div>';
+        // go back to form after 2.5s
+        setTimeout(function() {
+          subCard.classList.remove('show');
+          formCard.style.display = 'block';
+          unsubForm.classList.remove('show');
+          unsubResult.classList.remove('show');
+          unsubInput.value = '';
+        }, 2500);
+      } else {
+        unsubResult.className = 'wiz-result show error';
+        unsubResult.innerHTML = '<div class="result-title">❌ 取消失败</div><div class="result-body">' + escapeHtml(data.error || '未知错误') + '</div>';
+      }
+    })
+    .catch(function() {
+      unsubBtn.disabled = false;
+      unsubBtn.textContent = '取消订阅';
+      unsubResult.className = 'wiz-result show error';
+      unsubResult.innerHTML = '<div class="result-title">❌ 网络错误</div><div class="result-body">无法连接到服务器</div>';
+    });
+  });
+
+  /* ── navigation events ── */
+  nextBtn.addEventListener('click', function() {
+    goToStep(currentStep + 1);
+  });
+
+  prevBtn.addEventListener('click', function() {
+    goToStep(currentStep - 1);
+  });
+
+  submitBtn.addEventListener('click', submitSubscribe);
+
+  /* ── enter key on form fields ── */
+  chatIdInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') emailInput.focus();
+  });
+  emailInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') submitSubscribe();
+  });
+
+  /* ── helpers ── */
+  function escapeHtml(str) {
+    var div = document.createElement('div');
+    div.appendChild(document.createTextNode(str));
+    return div.innerHTML;
+  }
+
+  function formatDate(dateStr) {
+    // ISO format -> "2026-06-28" short display
+    if (!dateStr) return '—';
+    try {
+      var d = new Date(dateStr);
+      if (isNaN(d.getTime())) return dateStr.slice(0, 10);
+      var y = d.getFullYear();
+      var m = String(d.getMonth() + 1).padStart(2, '0');
+      var day = String(d.getDate()).padStart(2, '0');
+      return y + '-' + m + '-' + day;
+    } catch(_) {
+      return dateStr.slice(0, 10);
+    }
+  }
+
+  /* ── init ── */
+  goToStep(0);
+
+})();
+</script>
 
 </body>
 </html>

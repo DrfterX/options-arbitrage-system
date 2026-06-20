@@ -1914,7 +1914,7 @@ setTimeout(function() { location.reload(); }, 3600000); // 1h fallback
 
 // ── Premium — Check subscription status ──
 function checkPremiumStatus() {
-  var token = localStorage.getItem('premium_token');
+  var token = getAuthToken();
   var pricingCard = document.getElementById('pricingCard');
   var premiumContent = document.getElementById('premiumContent');
 
@@ -1940,7 +1940,7 @@ function checkPremiumStatus() {
       loadBreakoutAlerts();
       loadTopOptions();
     } else {
-      localStorage.removeItem('premium_token');
+      clearAuthToken();
       pricingCard.style.display = '';
       premiumContent.style.display = 'none';
     }
@@ -2099,7 +2099,7 @@ function handleSubscribe() {
       .then(function(r) { return r.json(); })
       .then(function(d) {
         if (d.token) {
-          localStorage.setItem('premium_token', d.token);
+          setAuthToken(d.token);
         }
         // Clean URL — remove query params
         window.history.replaceState({}, '', window.location.pathname);
@@ -2132,7 +2132,7 @@ function handleFreeTrial() {
 
     if (d.token) {
       // 存储 Token → 自动验证 → 解锁 Premium
-      localStorage.setItem('premium_token', d.token);
+      setAuthToken(d.token);
       resultEl.style.color = '#22c55e';
       resultEl.innerHTML = '✅ 7 天免费试用已激活！Token: <strong>' + esc(d.token.slice(0, 12)) + '…</strong><br><span style="color:var(--text3);font-size:.52rem;">到期: ' + esc(d.expires_at) + ' · 已自动解锁 Premium</span>';
 
@@ -2188,7 +2188,7 @@ function verifyManualToken() {
     if (d.valid) {
       resultEl.style.color = 'var(--short)';
       resultEl.textContent = '✅ Token 验证成功! Premium 已解锁';
-      localStorage.setItem('premium_token', token);
+      setAuthToken(token);
       // Switch to premium content view
       document.getElementById('pricingCard').style.display = 'none';
       document.getElementById('premiumContent').style.display = '';
