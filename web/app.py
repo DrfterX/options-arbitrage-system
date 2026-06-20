@@ -22,7 +22,7 @@ import hashlib
 import bcrypt
 from datetime import datetime, timedelta, timezone
 from functools import wraps
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, abort
 
 from core import PositionTracker
 from core.db import Database
@@ -260,6 +260,12 @@ def sitemap_xml():
   </url>
   <url>
     <loc>https://signals.drifter.indevs.in/blog/options-iv-analysis</loc>
+    <lastmod>2026-06-20</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://signals.drifter.indevs.in/blog/multi-timeframe-signals</loc>
     <lastmod>2026-06-20</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.9</priority>
@@ -534,6 +540,12 @@ def blog_article_n_structure():
 def blog_article_iv():
     """期权 IV 分析：用隐含波动率识别定价偏差。"""
     return render_template("blog_post_iv.html")
+
+
+@app.route("/blog/multi-timeframe-signals")
+def blog_article_mtf():
+    """多周期共振实战：15m/1h/日线三级信号过滤噪音。"""
+    return render_template("blog_post_mtf.html")
 
 
 # ── N 型结构动态重算辅助 ───────────────────────────────────────
@@ -2754,6 +2766,24 @@ try:
     start_incremental_heartbeat(db)
 except Exception as e:
     logger.warning("增量心跳启动失败（非致命）: %s", e)
+
+# ─── Google Search Console 验证文件 ──────────────────────
+# Google 的 HTML 文件验证方法要求在站点根目录放置 googleXXXXX.html 文件。
+# 本路由将请求映射到 web/verification/ 目录，用户只需将验证文件放入该目录即可。
+
+VERIFICATION_DIR = os.path.join(os.path.dirname(__file__), "verification")
+
+
+@app.route("/<path:catch_path>")
+def catch_all_verification(catch_path):
+    """Catch-all: serve Google Search Console verification files at the root."""
+    if re.match(r"^google[0-9a-f]{16,}\.html$", catch_path):
+        fpath = os.path.join(VERIFICATION_DIR, catch_path)
+        if os.path.exists(fpath):
+            with open(fpath) as f:
+                return f.read(), 200, {"Content-Type": "text/html"}
+    abort(404)
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5100))
