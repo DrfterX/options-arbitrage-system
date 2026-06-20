@@ -289,7 +289,8 @@
 .skeleton-chart .sk-y-grid .sk-grid-line {
   height: 1px;
   width: 100%;
-  /* ── First-visit Welcome Guide ── */
+}
+/* ── First-visit Welcome Guide ── */
 .welcome-overlay {
   position: fixed;
   inset: 0;
@@ -1000,6 +1001,12 @@
 // ── Remove CSS-only initial skeleton (loaded before JS) ──
 document.getElementById('initialSkeleton')?.remove();
 
+// ── Global HTML escape helper (XSS prevention) ──
+function esc(s) {
+  if (s == null) return '';
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 // ── SKELETON LOADING: matrix table placeholder (text-free, geometry-aligned) ──
 function createMatrixSkeleton(n, hasSectors) {
   // Build skeleton rows that mirror the real 6-column matrix structure
@@ -1265,11 +1272,11 @@ function loadFilterLog() {
         var levelLabel = entry.push_level || '—';
         var reason = entry.reason || '';
         if (reason.length > 45) reason = reason.substring(0, 42) + '…';
-        html += '<tr><td style="color:var(--text3);font-size:.6rem">' + (entry.created_at || '') + '</td>'
-             + '<td>' + entry.symbol + '</td>'
+        html += '<tr><td style="color:var(--text3);font-size:.6rem">' + esc(entry.created_at) + '</td>'
+             + '<td>' + esc(entry.symbol) + '</td>'
              + '<td>' + score + '</td>'
-             + '<td class="' + cls + '">' + levelLabel + '</td>'
-             + '<td style="color:var(--text3)">' + reason + '</td></tr>';
+             + '<td class="' + cls + '">' + esc(levelLabel) + '</td>'
+             + '<td style="color:var(--text3)">' + esc(reason) + '</td></tr>';
       });
       tbody.innerHTML = html;
     })
@@ -1795,7 +1802,7 @@ document.addEventListener('visibilitychange', function() {
       days.forEach(function(dd) { lvlHtml += '<th>' + dd + 'd</th>'; });
       lvlHtml += '<th>样本</th></tr>';
       (d.by_level || []).forEach(function(l) {
-        lvlHtml += '<tr><td class="bt-lvl">' + l.level + '</td>';
+        lvlHtml += '<tr><td class="bt-lvl">' + esc(l.level) + '</td>';
         days.forEach(function(dd) {
           var k = dd + 'd_acc';
           var v = l[k] || 0;
@@ -1811,7 +1818,7 @@ document.addEventListener('visibilitychange', function() {
       days.forEach(function(dd) { bandHtml += '<th>' + dd + 'd</th>'; });
       bandHtml += '<th>样本</th></tr>';
       (d.by_score_band || []).forEach(function(b) {
-        bandHtml += '<tr><td class="bt-lvl">' + b.band + '</td>';
+        bandHtml += '<tr><td class="bt-lvl">' + esc(b.band) + '</td>';
         days.forEach(function(dd) {
           var k = dd + 'd_acc';
           var v = b[k] || 0;
@@ -1827,7 +1834,7 @@ document.addEventListener('visibilitychange', function() {
       days.forEach(function(dd) { secHtml += '<th>' + dd + 'd</th>'; });
       secHtml += '<th>品种数</th></tr>';
       (d.by_sector || []).slice(0, 8).forEach(function(x) {
-        secHtml += '<tr><td class="bt-lvl">' + x.sector + '</td>';
+        secHtml += '<tr><td class="bt-lvl">' + esc(x.sector) + '</td>';
         days.forEach(function(dd) {
           var k = dd + 'd_acc';
           var v = x[k] || 0;
@@ -1884,7 +1891,7 @@ document.addEventListener('visibilitychange', function() {
       var rq = p.remaining_quantity !== undefined ? p.remaining_quantity : null;
       html += '<div class="pos-card">'
         + '<div class="pc-header">'
-        + '<div><span class="pc-sym">' + (p.symbol || '—') + '</span><span class="pc-contract">' + (p.contract || '') + '</span></div>'
+        + '<div><span class="pc-sym">' + esc(p.symbol || '—') + '</span><span class="pc-contract">' + esc(p.contract || '') + '</span></div>'
         + '<span class="pc-dir ' + dirClass + '">' + dir + '</span>'
         + '</div>'
         + '<div class="pc-body">'
@@ -1919,12 +1926,12 @@ document.addEventListener('visibilitychange', function() {
       var closeTime = p.closed_at || '—';
       var entryStr = p.entry_price ? p.entry_price.toFixed(1) : '—';
       html += '<tr>'
-        + '<td style="text-align:left">' + (p.symbol || '—') + ' <span style="color:var(--text3);font-size:.6rem">' + (p.contract || '') + '</span></td>'
+        + '<td style="text-align:left">' + esc(p.symbol || '—') + ' <span style="color:var(--text3);font-size:.6rem">' + esc(p.contract || '') + '</span></td>'
         + '<td><span class="pt-dir ' + dirClass + '">' + dir + '</span></td>'
         + '<td style="color:var(--text3);font-size:.62rem">' + entryStr + '</td>'
         + '<td class="' + pnlCls + '">' + pnlStr + '</td>'
         + '<td class="pt-reason">' + reasonLabel(p.close_reason || 'manual') + '</td>'
-        + '<td class="pt-time">' + closeTime + '</td>'
+        + '<td class="pt-time">' + esc(closeTime) + '</td>'
         + '</tr>';
     });
     tbody.innerHTML = html;
@@ -2004,7 +2011,7 @@ document.addEventListener('visibilitychange', function() {
           Object.keys(d.tables).forEach(function(k) {
             var cnt = d.tables[k];
             var cls = cnt > 0 ? 'ht-ok' : 'ht-empty';
-            html += '<div class="ht-card ' + cls + '"><span class="ht-name">' + k + '</span><span class="ht-count">' + cnt.toLocaleString() + '</span></div>';
+            html += '<div class="ht-card ' + cls + '"><span class="ht-name">' + esc(k) + '</span><span class="ht-count">' + cnt.toLocaleString() + '</span></div>';
           });
           htGrid.innerHTML = html;
         }
@@ -2012,7 +2019,7 @@ document.addEventListener('visibilitychange', function() {
         var listEl = document.getElementById('h-issue-list');
         if (d.issues && d.issues.length) {
           issuesEl.style.display = 'block';
-          listEl.innerHTML = d.issues.map(function(msg) { return '<li>' + msg + '</li>'; }).join('');
+          listEl.innerHTML = d.issues.map(function(msg) { return '<li>' + esc(msg) + '</li>'; }).join('');
         } else {
           issuesEl.style.display = 'none';
         }
@@ -2181,12 +2188,12 @@ function dismissWelcome() {
 <!-- ─── AUTH: token management & login modal logic ─── -->
 <script>
 /* ── Auth Token Helpers ── */
-function getAuthToken() { try { return localStorage.getItem('auth_token'); } catch(e) { return null; } }
+function getAuthToken() { try { return localStorage.getItem('session_token'); } catch(e) { return null; } }
 function setAuthToken(token, email) {
-  try { localStorage.setItem('auth_token', token); if (email) localStorage.setItem('auth_email', email); } catch(e) {}
+  try { localStorage.setItem('session_token', token); if (email) localStorage.setItem('auth_email', email); } catch(e) {}
 }
 function clearAuthToken() {
-  try { localStorage.removeItem('auth_token'); localStorage.removeItem('auth_email'); } catch(e) {}
+  try { localStorage.removeItem('session_token'); localStorage.removeItem('auth_email'); } catch(e) {}
 }
 
 /* ── Login Modal ── */

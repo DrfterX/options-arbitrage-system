@@ -50,60 +50,12 @@
   border-radius: 1px;
 }
 
-/* ── tab-style nav ── */
+/* ── tab-style nav (layout only — shared styles in style.css) ── */
 .nav-tabs {
-  display: flex;
-  gap: 4px;
   margin-left: 14px;
 }
-.nav-tab {
-  font-size: .65rem;
-  color: var(--text3);
-  text-decoration: none;
-  padding: 4px 12px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  transition: all .2s var(--ease-out);
-  font-family: var(--font-ui);
-  letter-spacing: .03em;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-.nav-tab.active {
-  color: var(--brand);
-  border-color: var(--border-light);
-  background: rgba(240, 180, 41, .06);
-}
-.nav-tab:not(.active):hover {
-  color: var(--text2);
-  border-color: var(--border);
-  background: rgba(30, 38, 50, .3);
-}
 
-/* ── register button in topbar ── */
-.reg-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 10px;
-  font-size: .62rem;
-  font-weight: 600;
-  font-family: var(--font-ui);
-  letter-spacing: .04em;
-  color: var(--short);
-  background: rgba(34, 197, 94, .08);
-  border: 1px solid rgba(34, 197, 94, .2);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: all .2s var(--ease-out);
-}
-.reg-btn:hover {
-  background: rgba(34, 197, 94, .15);
-  border-color: rgba(34, 197, 94, .35);
-  box-shadow: 0 0 12px rgba(34, 197, 94, .08);
-}
-.reg-btn:active { transform: scale(.96); }
+/* ── register button styles in /static/style.css ── */
 
 /* ── register modal ── */
 .reg-overlay {
@@ -245,8 +197,6 @@
   line-height: 1.5;
   opacity: .6;
 }
-.nav-tab-icon { font-size: .7rem; opacity: .7; }
-
 /* ── Delay warning bar (copied from futures) ── */
 .delay-bar {
   display: flex; align-items: center; gap: 6px;
@@ -917,36 +867,8 @@
 }
 
 /* ── Skeleton loading ── */
-@keyframes skeleton-shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
-}
-.skeleton {
-  background: linear-gradient(90deg,
-    rgba(90, 97, 115, 0.07) 25%,
-    rgba(90, 97, 115, 0.18) 50%,
-    rgba(90, 97, 115, 0.07) 75%);
-  background-size: 200% 100%;
-  animation: skeleton-shimmer 1.5s ease-in-out infinite;
-  border-radius: 3px;
-  color: transparent !important;
-  display: inline-block;
-  line-height: 1;
-  pointer-events: none;
-  user-select: none;
-  vertical-align: middle;
-}
-.skeleton-inline {
-  display: inline-block;
-  height: .85em;
-  width: 100%;
-}
-.skeleton-block {
-  display: block;
-  height: 12px;
-  margin: 6px 0;
-  width: 100%;
-}
+/* .skeleton / .skeleton-inline / .skeleton-block moved to style.css */
+/* Keep .skeleton-chart (portal-specific IV mini-chart skeleton) */
 .skeleton-chart {
   width: 100%;
   height: 100%;
@@ -957,22 +879,6 @@
   background-size: 200% 100%;
   animation: skeleton-shimmer 1.5s ease-in-out infinite;
   border-radius: 2px;
-}
-
-/* ── Premium tab — gold accent ── */
-.nav-tab.premium-tab {
-  color: var(--brand);
-  font-weight: 600;
-  letter-spacing: .05em;
-}
-.nav-tab.premium-tab.active {
-  color: #fff;
-  background: linear-gradient(135deg, rgba(240, 180, 41, .15), rgba(240, 180, 41, .05));
-  border-color: rgba(240, 180, 41, .3);
-  box-shadow: 0 0 12px rgba(240, 180, 41, .08);
-}
-.nav-tab.premium-tab .nav-tab-icon {
-  color: var(--brand);
 }
 
 /* ── Pricing card modal ── */
@@ -1733,6 +1639,12 @@
 </div><!-- /.app -->
 
 <script>
+// ── Global HTML escape helper (XSS prevention) ──
+function esc(s) {
+  if (s == null) return '';
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 // ═══════════════════════════════════════════════════════════════════
 //  Portal Live Data Loader  —  fetches from existing API endpoints
 // ═══════════════════════════════════════════════════════════════════
@@ -1754,9 +1666,9 @@ function loadFuturesData() {
       (d.sectors || []).slice(0, 6).forEach(function(s) {
         var biasColor = s.bias === '多' ? 'var(--long)' : (s.bias === '空' ? 'var(--short)' : 'var(--text3)');
         secHtml += '<div class="portal-sector">'
-          + '<div class="ps-name">' + s.name + '</div>'
+          + '<div class="ps-name">' + esc(s.name) + '</div>'
           + '<div class="ps-detail"><span class="l">多' + s.long + '</span> <span class="s">空' + s.short + '</span></div>'
-          + '<div class="ps-bias" style="color:' + biasColor + '">' + s.bias + '</div>'
+          + '<div class="ps-bias" style="color:' + biasColor + '">' + esc(s.bias) + '</div>'
           + '</div>';
       });
       if (secHtml) document.getElementById('fs-sectors').innerHTML = secHtml;
@@ -1840,8 +1752,8 @@ function loadOptionsStrats() {
         else if (s.iv_level === '偏低') ivLevelClass = 'iv-low';
         else if (s.iv_level === '极端低') ivLevelClass = 'iv-extreme';
         html += '<div class="portal-strat-item">'
-          + '<span class="si-sym">' + s.symbol + '</span>'
-          + '<span class="si-strat">' + stratLabel + ((s.contract) ? ' · ' + s.contract : '') + '</span>'
+          + '<span class="si-sym">' + esc(s.symbol) + '</span>'
+          + '<span class="si-strat">' + esc(stratLabel) + ((s.contract) ? ' · ' + esc(s.contract) : '') + '</span>'
           + '<span class="si-greeks">' + thetaStr + '</span>'
           + '<span class="si-iv ' + ivLevelClass + '">' + (s.iv_avg ? (s.iv_avg * 100).toFixed(1) + '%' : '—') + '</span>'
           + '</div>';
@@ -2001,8 +1913,7 @@ function loadRecommendations() {
   if (!el) return;
   el.innerHTML = '<div class="pcc-label">📊 今日推荐</div>';
 
-  var token = localStorage.getItem('premium_token') || '';
-  fetch('/api/premium/recommendations?token=' + encodeURIComponent(token), { cache: 'no-cache' })
+  fetch('/api/premium/recommendations', { cache: 'no-cache' })
     .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
     .then(function(d) {
       var recs = d.recommendations || [];
@@ -2015,8 +1926,8 @@ function loadRecommendations() {
         var dirLabel = item.direction === 'LONG' ? '▲ 多' : '▼ 空';
         var dirClass = item.direction === 'LONG' ? 'long' : 'short';
         html += '<div class="pcc-item">'
-          + '<span class="pi-sym">' + item.symbol + '</span>'
-          + '<span class="pi-name">' + item.name + '</span>'
+          + '<span class="pi-sym">' + esc(item.symbol) + '</span>'
+          + '<span class="pi-name">' + esc(item.name) + '</span>'
           + '<span class="pi-dir ' + dirClass + '">' + dirLabel + '</span>'
           + '<span class="pi-score">' + item.resonance + '周期</span>'
           + '<span class="pi-price" style="color:var(--brand);font-weight:600;">' + item.score + '</span>'
@@ -2035,8 +1946,7 @@ function loadBreakoutAlerts() {
   if (!el) return;
   el.innerHTML = '<div class="pcc-label">⚡ 突破预警</div>';
 
-  var token = localStorage.getItem('premium_token') || '';
-  fetch('/api/premium/breakout-alerts?token=' + encodeURIComponent(token), { cache: 'no-cache' })
+  fetch('/api/premium/breakout-alerts', { cache: 'no-cache' })
     .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
     .then(function(d) {
       var alerts = d.alerts || [];
@@ -2050,9 +1960,9 @@ function loadBreakoutAlerts() {
         var dirClass = item.direction === 'LONG' ? 'long' : 'short';
         var dirLabel = item.direction === 'LONG' ? '▲' : '▼';
         html += '<div class="pcc-item">'
-          + '<span class="pi-sym">' + item.symbol + '</span>'
-          + '<span class="pi-name">' + item.name + '</span>'
-          + '<span class="pi-price">' + item.level + ' ' + item.level_price + '</span>'
+          + '<span class="pi-sym">' + esc(item.symbol) + '</span>'
+          + '<span class="pi-name">' + esc(item.name) + '</span>'
+          + '<span class="pi-price">' + esc(item.level) + ' ' + esc(String(item.level_price)) + '</span>'
           + '<span class="pi-dist ' + distClass + '">' + item.distance_pct.toFixed(2) + '%</span>'
           + '<span class="pi-dir ' + dirClass + '">' + dirLabel + '</span>'
           + '</div>';
@@ -2070,8 +1980,7 @@ function loadTopOptions() {
   if (!el) return;
   el.innerHTML = '<div class="pcc-label">🎯 TOP 期权策略</div>';
 
-  var token = localStorage.getItem('premium_token') || '';
-  fetch('/api/premium/top-options?token=' + encodeURIComponent(token), { cache: 'no-cache' })
+  fetch('/api/premium/top-options', { cache: 'no-cache' })
     .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
     .then(function(d) {
       var opts = d.options || [];
@@ -2084,11 +1993,11 @@ function loadTopOptions() {
         var thetaClass = item.net_theta >= 0 ? 'pos' : 'neg';
         html += '<div class="pcc-item-options">'
           + '<div class="po-header">'
-          + '<span class="po-sym">' + item.symbol + ' · ' + item.name + '</span>'
-          + '<span class="po-strat">' + item.strategy + '</span>'
+          + '<span class="po-sym">' + esc(item.symbol) + ' · ' + esc(item.name) + '</span>'
+          + '<span class="po-strat">' + esc(item.strategy) + '</span>'
           + '</div>'
           + '<div class="po-detail">'
-          + '<span>IV ' + item.iv_pct + '% (' + item.iv_level + ')</span>'
+          + '<span>IV ' + esc(String(item.iv_pct)) + '% (' + esc(item.iv_level) + ')</span>'
           + '<span class="' + thetaClass + '">Θ ' + item.net_theta.toFixed(2) + '</span>'
           + '<span>Δ ' + item.net_delta.toFixed(2) + '</span>'
           + '<span class="po-score">评分 ' + item.score + '</span>'
@@ -2185,7 +2094,7 @@ function handleFreeTrial() {
       // 存储 Token → 自动验证 → 解锁 Premium
       localStorage.setItem('premium_token', d.token);
       resultEl.style.color = '#22c55e';
-      resultEl.innerHTML = '✅ 7 天免费试用已激活！Token: <strong>' + d.token.slice(0, 12) + '…</strong><br><span style="color:var(--text3);font-size:.52rem;">到期: ' + d.expires_at + ' · 已自动解锁 Premium</span>';
+      resultEl.innerHTML = '✅ 7 天免费试用已激活！Token: <strong>' + esc(d.token.slice(0, 12)) + '…</strong><br><span style="color:var(--text3);font-size:.52rem;">到期: ' + esc(d.expires_at) + ' · 已自动解锁 Premium</span>';
 
       // 自动切换到 Premium 视图
       document.getElementById('pricingCard').style.display = 'none';
@@ -2372,13 +2281,13 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 });
 
-/* ── Auth Token Helpers (copied from futures) ── */
-function getAuthToken() { try { return localStorage.getItem('auth_token'); } catch(e) { return null; } }
+/* ── Auth Token Helpers ── */
+function getAuthToken() { try { return localStorage.getItem('session_token'); } catch(e) { return null; } }
 function setAuthToken(token, email) {
-  try { localStorage.setItem('auth_token', token); if (email) localStorage.setItem('auth_email', email); } catch(e) {}
+  try { localStorage.setItem('session_token', token); if (email) localStorage.setItem('auth_email', email); } catch(e) {}
 }
 function clearAuthToken() {
-  try { localStorage.removeItem('auth_token'); localStorage.removeItem('auth_email'); } catch(e) {}
+  try { localStorage.removeItem('session_token'); localStorage.removeItem('auth_email'); } catch(e) {}
 }
 
 /* ── Login Modal ── */
