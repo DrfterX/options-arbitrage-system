@@ -458,6 +458,21 @@ def index() -> str:
 # ─── 公开 API 文档页面 ───────────────────────────────────────────────
 
 
+@app.route("/pricing")
+def pricing_page():
+    """定价/订阅页面 — 三档定价卡（免费 / Pro / Premium），Stripe Checkout 集成。"""
+    return render_template("pricing.html")
+
+
+@app.route("/premium/success")
+def premium_success_page():
+    """支付成功页 — 显示订阅确认信息。"""
+    session_id = request.args.get("session_id", "")
+    from web.stripe_handler import check_premium_status
+    status = check_premium_status(db, session_id=session_id)
+    return render_template("pricing.html", payment_success=status.get("premium", False))
+
+
 @app.route("/subscribe")
 def subscribe_page():
     """Bot 订阅着落页 — 引导用户通过 Telegram 订阅信号推送服务。"""
@@ -1617,12 +1632,24 @@ def api_premium_top_options():
 
 @app.route("/api/create-checkout-session", methods=["POST"])
 def api_create_checkout_session():
-    """创建 Stripe Checkout Session 并返回支付链接。"""
+    """创建 Stripe Checkout Session 并返回支付链接。
+
+    POST JSON body:
+        email (str): 用户邮箱
+        tier (str): "pro" 或 "premium"，默认 "premium"
+
+    Returns:
+        {"url": "checkout.stripe.com/..."}
+    """
     import os
     from web.stripe_handler import create_checkout_session, ensure_premium_table
 
     data = request.get_json() or {}
     email = data.get("email", "")
+    tier = data.get("tier", "premium")
+
+    if tier not in ("pro", "premium"):
+        return jsonify({"error": "无效 tier，可选: pro / premium"}), 400
 
     ensure_premium_table(db)
 
@@ -1631,7 +1658,7 @@ def api_create_checkout_session():
         "https://signals.drifter.indevs.in",
     )
 
-    result = create_checkout_session(db, email=email, base_url=base_url)
+    result = create_checkout_session(db, email=email, tier=tier, base_url=base_url)
     if "error" in result:
         return jsonify(result), 500
     return jsonify(result)
@@ -2202,6 +2229,97 @@ def api_auth_verify():
         return jsonify({"valid": True, "email": row["email"]})
 
     return jsonify({"valid": False})
+
+
+# ─── 定价/订阅用户状态 API ────────────────────────────────────────
+
+
+@app.route("/api/pricing/user-status")
+def api_pricing_user_status():
+    """查询当前用户的定价/订阅状态。
+
+    Uses Authorization: Bearer <token> header (same as dashboard auth).
+
+    Returns:
+        {"logged_in": bool, "email": str, "plan": str,
+         "trial_days_remaining": int, "registered_at": str,
+         "premium": {"active": bool, "status": str, ...} or null}
+    """
+    token = ""
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        token = auth[7:]
+    if not token:
+        token = request.args.get("token", "")
+
+    # 未登录
+    if not token:
+        return jsonify({
+            "logged_in": False,
+            "plan": "free",
+            "trial_days_remaining": 0,
+            "premium": None,
+        })
+
+    conn = db.get_conn()
+    row = conn.execute(
+        """SELECT u.email, u.created_at FROM user_sessions s
+           JOIN user_registrations u ON s.user_id = u.id
+           WHERE s.token = ? AND s.is_active = 1 AND s.expires_at > datetime('now', '+8 hours')""",
+        (token,),
+    ).fetchone()
+
+    if not row:
+        return jsonify({
+            "logged_in": False,
+            "plan": "free",
+            "trial_days_remaining": 0,
+            "premium": None,
+        })
+
+    email = row["email"]
+    registered_at = row["created_at"] or ""
+
+    # 计算剩余试用天数（注册日起 7 天）
+    trial_days = 0
+    if registered_at:
+        try:
+            reg_dt = datetime.strptime(registered_at, "%Y-%m-%d %H:%M")
+            now_bj = datetime.now()
+            elapsed = (now_bj - reg_dt).days
+            trial_days = max(0, 7 - elapsed)
+        except (ValueError, TypeError):
+            trial_days = 0
+
+    # 查询 Premium 订阅状态（按 email 匹配）
+    premium = None
+    try:
+        p_row = conn.execute(
+            """SELECT status, created_at, session_id, subscription_id, customer_id
+               FROM premium_subscriptions WHERE email = ? AND status = 'active'
+               ORDER BY id DESC LIMIT 1""",
+            (email,),
+        ).fetchone()
+        if p_row:
+            premium = {
+                "active": True,
+                "status": p_row["status"],
+                "created_at": p_row["created_at"],
+                "session_id": p_row["session_id"],
+            }
+    except Exception:
+        pass
+
+    plan = "premium" if premium else "free"
+
+    return jsonify({
+        "logged_in": True,
+        "email": email,
+        "plan": plan,
+        "trial_days_remaining": trial_days,
+        "registered_at": registered_at,
+        "premium": premium,
+    })
 
 
 # ─── Bot 订阅管理 API ──────────────────────────────────────────

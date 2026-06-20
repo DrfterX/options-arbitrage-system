@@ -99,16 +99,23 @@ def ensure_premium_table(db) -> None:
 STARTER_PRICE = 1900  # $19.00 in cents
 
 
+def get_pro_price_id() -> str:
+    """获取 Pro 订阅 Price ID。"""
+    return os.environ.get("PRO_PRICE_ID", "price_pro_monthly")
+
+
 def create_checkout_session(
     db,
     email: str = "",
+    tier: str = "premium",
     base_url: str = "https://signals.drifter.indevs.in",
 ) -> dict:
-    """创建 Stripe Checkout Session（$19/月订阅）。
+    """创建 Stripe Checkout Session。
 
     Args:
         db: Database 实例。
         email: 用户邮箱（可选）。
+        tier: "pro" ($9/mo) 或 "premium" ($19/mo)，默认 "premium"。
         base_url: 成功/取消回调 URL 的 base。
 
     Returns:
@@ -116,29 +123,33 @@ def create_checkout_session(
     """
     _ensure_configured()
 
+    price_id = get_pro_price_id() if tier == "pro" else get_price_id()
+    tier_label = "Pro" if tier == "pro" else "Premium"
+
     try:
         session = stripe.checkout.Session.create(
             mode="subscription",
             customer_email=email or None,
             line_items=[{
-                "price": get_price_id(),
+                "price": price_id,
                 "quantity": 1,
             }],
             success_url=f"{base_url}/premium/success?session_id={{CHECKOUT_SESSION_ID}}",
-            cancel_url=f"{base_url}/?canceled=1",
+            cancel_url=f"{base_url}/pricing?canceled=1",
             metadata={
                 "source": "signals_premium",
+                "tier": tier,
             },
             subscription_data={
-                "metadata": {"source": "signals_premium"},
+                "metadata": {"source": "signals_premium", "tier": tier},
             },
         )
 
-        logger.info("Stripe Checkout Session 创建: %s (email=%s)", session.id, email)
+        logger.info("Stripe Checkout Session 创建: %s (tier=%s email=%s)", session.id, tier, email)
         return {"url": session.url}
 
     except stripe.StripeError as e:
-        logger.error("Stripe Checkout Session 创建失败: %s", e)
+        logger.error("Stripe Checkout Session 创建失败(%s): %s", tier_label, e)
         return {"error": str(e)}
 
 
