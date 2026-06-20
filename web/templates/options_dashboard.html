@@ -46,38 +46,7 @@
   border-radius: 1px;
 }
 
-.nav-tabs {
-  display: flex;
-  gap: 2px;
-}
-.nav-tab {
-  font-size: .65rem;
-  color: var(--text3);
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 12px;
-  border-radius: var(--radius-sm);
-  transition: all .15s var(--ease-out);
-  font-family: var(--font-ui);
-  letter-spacing: .03em;
-  cursor: pointer;
-  line-height: 1.2;
-}
-.nav-tab:hover {
-  color: var(--text);
-  background: rgba(90, 97, 115, .08);
-}
-.nav-tab.active {
-  color: var(--brand);
-  background: var(--brand-bg);
-  font-weight: 500;
-}
-.nav-tab-icon {
-  font-size: .7rem;
-  opacity: .7;
-}
+/* — nav-tab styles in shared style.css — */
 
 /* ── IV Section: full-width top half ── */
 .iv-section {
@@ -464,25 +433,7 @@
 }
 
 /* ── Skeleton loading ── */
-@keyframes skeleton-shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
-}
-.skeleton {
-  background: linear-gradient(90deg,
-    rgba(90, 97, 115, 0.07) 25%,
-    rgba(90, 97, 115, 0.18) 50%,
-    rgba(90, 97, 115, 0.07) 75%);
-  background-size: 200% 100%;
-  animation: skeleton-shimmer 1.5s ease-in-out infinite;
-  border-radius: 3px;
-  color: transparent !important;
-  display: inline-block;
-  line-height: 1;
-  pointer-events: none;
-  user-select: none;
-  vertical-align: middle;
-}
+/* Shared .skeleton + @keyframes from style.css; only per-section overrides remain */
 
 /* Strategy panel loading state */
 .strategy-panel.is-loading .strat-table { opacity: .5; transition: opacity .2s var(--ease-out); }
@@ -490,26 +441,7 @@
 .strategy-panel.is-loading .options-cards { opacity: .5; transition: opacity .2s var(--ease-out); }
 .strategy-panel .options-cards { transition: opacity .3s var(--ease-out); }
 
-.loading-dot {
-  display: none;
-  width: 6px; height: 6px;
-  border-radius: 50%;
-  background: var(--brand);
-  margin-left: 6px;
-  animation: loading-pulse .8s ease-in-out infinite alternate;
-}
-.strategy-panel.is-loading .loading-dot { display: inline-block; }
-@keyframes loading-pulse {
-  0% { opacity: .2; transform: scale(.7); }
-  100% { opacity: 1; transform: scale(1.1); }
-}
-.is-loading .skeleton {
-  animation: skeleton-shimmer 1.5s ease-in-out infinite, skeleton-fade-in .3s ease-out both;
-}
-@keyframes skeleton-fade-in {
-  0% { opacity: 0; transform: translateY(2px); }
-  100% { opacity: 1; transform: translateY(0); }
-}
+/* .loading-dot / @keyframes loading-pulse / @keyframes skeleton-fade-in moved to style.css */
 
 /* ── Filter section skeleton loading ── */
 .filter-section .filter-stats { transition: opacity .25s var(--ease-out); }
@@ -862,7 +794,8 @@
       <a href="https://signals.drifter.indevs.in" class="nav-tab"><span class="nav-tab-icon">◈</span> 总览</a>
       <a href="https://futures.drifter.indevs.in" class="nav-tab"><span class="nav-tab-icon">📈</span> 期货</a>
       <span class="nav-tab active"><span class="nav-tab-icon">📉</span> 期权</span>
-	      <a href="https://signals.drifter.indevs.in/api/docs" class="nav-tab"><span class="nav-tab-icon">⎔</span> API</a>
+      <a href="https://signals.drifter.indevs.in" class="nav-tab premium-tab"><span class="nav-tab-icon">✦</span> Premium</a>
+	      <a href="/api/docs" class="nav-tab"><span class="nav-tab-icon">⎔</span> API</a>
     </div>
     <span class="data-badge" id="optionCount">{{ options|length }} 策略</span>
     <span class="topbar-time">{{ now }}</span>
@@ -1059,6 +992,12 @@
 </div>
 
 <script>
+// ── Global HTML escape helper (XSS prevention) ──
+function esc(s) {
+  if (s == null) return '';
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 // ── Remove CSS-only initial skeleton ──
 document.getElementById('initialSkeleton')?.remove();
 
@@ -1093,19 +1032,19 @@ var IV_DATA = JSON.parse('{{ iv_json|safe }}');
   var chart = echarts.init(el, null, { renderer: 'canvas' });
   chart.setOption({
     backgroundColor: 'transparent',
-    grid: { top: 20, right: 24, bottom: 42, left: 52 },
+    grid: { top: 20, right: 24, bottom: 140, left: 52 },
     xAxis: {
       type: 'category',
       data: IV_DATA.map(function(d){ return (d.symbol||'').toUpperCase(); }),
       axisLabel: {
-        color: '#8b92a5', fontSize: 8, interval: 0, rotate: 30,
-        lineHeight: 12, margin: 3,
+        color: '#8b92a5', fontSize: 7, interval: 0, rotate: 35,
+        lineHeight: 15, margin: 3,
         formatter: function(val, idx) {
           var d = IV_DATA[idx];
           if (!d) return val;
           var sym = (d.symbol || '').toUpperCase();
           var cname = (d.name && d.name !== d.symbol) ? d.name : '';
-          return cname ? sym + ' ' + cname : sym;
+          return cname ? sym + '\n' + cname : sym;
         },
       },
       axisLine: { lineStyle: { color: 'rgba(26,32,64,.5)' } },
@@ -1237,11 +1176,11 @@ function loadFilterLog() {
                 : entry.push_level === 'LOW' ? 'fs-low'
                 : entry.push_level === 'NORMAL' ? 'fs-normal'
                 : 'fs-high';
-        html += '<tr><td style="color:var(--text3);font-size:.6rem">' + (entry.created_at || '') + '</td>'
-             + '<td>' + entry.symbol + '</td>'
+        html += '<tr><td style="color:var(--text3);font-size:.6rem">' + esc(entry.created_at) + '</td>'
+             + '<td>' + esc(entry.symbol) + '</td>'
              + '<td>' + (entry.score || 0).toFixed(2) + '</td>'
-             + '<td class="' + cls + '">' + (entry.push_level || '—') + '</td>'
-             + '<td style="color:var(--text3)">' + (entry.reason || '') + '</td></tr>';
+             + '<td class="' + cls + '">' + esc(entry.push_level || '—') + '</td>'
+             + '<td style="color:var(--text3)">' + esc(entry.reason || '') + '</td></tr>';
       });
       tbody.innerHTML = html;
     })
@@ -1313,10 +1252,10 @@ function showStratDetail(el) {
     }
   }
   if (detail.legs_detail) {
-    html += '<div class="strat-popup-desc"><strong>腿组合:</strong> ' + detail.legs_detail + '</div>';
+    html += '<div class="strat-popup-desc"><strong>腿组合:</strong> ' + esc(detail.legs_detail) + '</div>';
   }
   if (detail.description) {
-    html += '<div class="strat-popup-desc"><strong>描述:</strong> ' + detail.description + '</div>';
+    html += '<div class="strat-popup-desc"><strong>描述:</strong> ' + esc(detail.description) + '</div>';
   }
   if (detail.strikes && detail.strikes.length) {
     html += '<div class="strat-popup-desc"><strong>行权价:</strong> ' + detail.strikes.map(function(s) { return s.toFixed(0); }).join(', ') + '</div>';
@@ -1367,7 +1306,7 @@ document.addEventListener('click', function(e) {
           Object.keys(d.tables).forEach(function(k) {
             var cnt = d.tables[k];
             var cls = cnt > 0 ? 'ht-ok' : 'ht-empty';
-            html += '<div class="ht-card ' + cls + '"><span class="ht-name">' + k + '</span><span class="ht-count">' + cnt.toLocaleString() + '</span></div>';
+            html += '<div class="ht-card ' + cls + '"><span class="ht-name">' + esc(k) + '</span><span class="ht-count">' + cnt.toLocaleString() + '</span></div>';
           });
           htGrid.innerHTML = html;
         }
@@ -1375,7 +1314,7 @@ document.addEventListener('click', function(e) {
         var listEl = document.getElementById('h-issue-list');
         if (d.issues && d.issues.length) {
           issuesEl.style.display = 'block';
-          listEl.innerHTML = d.issues.map(function(msg) { return '<li>' + msg + '</li>'; }).join('');
+          listEl.innerHTML = d.issues.map(function(msg) { return '<li>' + esc(msg) + '</li>'; }).join('');
         } else {
           issuesEl.style.display = 'none';
         }
@@ -1489,8 +1428,8 @@ function renderOptionsSignals(signals) {
     var score = s.unified_score || 0;
     var scoreClr = score >= 70 ? 'var(--brand)' : (score >= 50 ? '#f0b429' : 'var(--text3)');
     theadHtml += '<tr>'
-      + '<td><span class="strat-sym">' + sym + '</span> <span class="strat-name">' + contract + '</span></td>'
-      + '<td><span class="strat-type ' + stratClass + '">' + strategy + '</span></td>'
+      + '<td><span class="strat-sym">' + esc(sym) + '</span> <span class="strat-name">' + esc(contract) + '</span></td>'
+      + '<td><span class="strat-type ' + stratClass + '">' + esc(strategy) + '</span></td>'
       + '<td class="' + ivClass + '">' + ivPct + '%</td>'
       + '<td class="strat-greeks">Δ:' + (s.net_delta != null ? s.net_delta.toFixed(2) : '0.00') + '<br>Θ:' + (s.net_theta != null ? s.net_theta.toFixed(2) : '0.00') + '</td>'
       + '<td><span class="strat-pnl-pos">+' + (s.max_profit != null ? s.max_profit.toFixed(0) : '0') + '</span> / <span class="strat-pnl-neg">' + (s.max_loss != null ? s.max_loss.toFixed(0) : '0') + '</span></td>'
@@ -1527,8 +1466,8 @@ function renderOptionCards(signals) {
     var reason = s.reason || '';
     html += '<div class="option-card ' + strengthCls + '">'
       + '<div class="option-card-header">'
-      + '<div><span class="option-card-sym">' + (s.symbol || '') + '</span> <span class="option-card-contract">' + (s.contract || '') + '</span></div>'
-      + '<span class="option-card-strat">' + (s.strategy || '').replace(/_/g, ' ') + '</span>'
+      + '<div><span class="option-card-sym">' + esc(s.symbol || '') + '</span> <span class="option-card-contract">' + esc(s.contract || '') + '</span></div>'
+      + '<span class="option-card-strat">' + esc((s.strategy || '').replace(/_/g, ' ')) + '</span>'
       + '</div>'
       + '<div class="option-card-iv">'
       + '<span>' + (s.iv_avg ? (s.iv_avg * 100).toFixed(1) : '—') + '% IV</span>'
@@ -1540,7 +1479,7 @@ function renderOptionCards(signals) {
       + '<span class="strat-pnl-neg">L' + (s.max_loss != null ? s.max_loss.toFixed(0) : '0') + '</span>'
       + '<span class="strat-strength" style="color:' + scoreClr + '">' + (s.unified_score != null ? s.unified_score.toFixed(1) : '—') + '</span>'
       + '</div>'
-      + '<div class="option-card-detail">' + reason + '</div>'
+      + '<div class="option-card-detail">' + esc(reason) + '</div>'
       + '</div>';
   });
   container.innerHTML = html;
