@@ -55,10 +55,11 @@
   <h1><span class="dot"></span><span class="accent">▣</span> 信号矩阵 <span class="data-badge">期货 × 期权</span></h1>
   <div class="topbar-right">
     <div class="nav-tabs">
-      <a href="https://signals.drifter.indevs.in" class="nav-tab" data-nav="overview"><span class="nav-tab-icon">◈</span> 总览</a>
-      <a href="https://futures.drifter.indevs.in" class="nav-tab" data-nav="futures"><span class="nav-tab-icon">📈</span> 期货</a>
-      <a href="https://options.drifter.indevs.in" class="nav-tab" data-nav="options"><span class="nav-tab-icon">📉</span> 期权</a>
-      <a href="/pricing" class="nav-tab premium-tab" data-nav="pricing"><span class="nav-tab-icon">✦</span> 定价</a>
+      <a href="https://signals.drifter.indevs.in" class="nav-tab {{ 'active' if active_tab == 'overview' }}"><span class="nav-tab-icon">◈</span> 总览</a>
+      <a href="https://futures.drifter.indevs.in" class="nav-tab {{ 'active' if active_tab == 'futures' }}"><span class="nav-tab-icon">📈</span> 期货</a>
+      <a href="https://options.drifter.indevs.in" class="nav-tab {{ 'active' if active_tab == 'options' }}"><span class="nav-tab-icon">📉</span> 期权</a>
+      <a href="/api/docs" class="nav-tab {{ 'active' if active_tab == 'api' }}"><span class="nav-tab-icon">⎔</span> API</a>
+      <a href="/pricing" class="nav-tab premium-tab {{ 'active' if active_tab == 'pricing' }}"><span class="nav-tab-icon">✦</span> 定价</a>
     </div>
     <span class="user-plan-badge" id="userPlanBadge"></span>
     <span class="data-badge">{{ total_signals }} 品种</span>
@@ -68,19 +69,6 @@
   </div>
 </div>
 
-<script>
-// ── Navigation tab auto-active ──
-(function(){
-  var host = window.location.hostname;
-  var sel;
-  if (host.includes('futures')) sel = 'futures';
-  else if (host.includes('options')) sel = 'options';
-  else sel = 'overview';
-  document.querySelectorAll('.nav-tab').forEach(function(el) {
-    if (el.dataset.nav === sel) el.classList.add('active');
-  });
-})();
-</script>
 
 <div class="main">
 

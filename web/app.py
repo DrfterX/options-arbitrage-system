@@ -486,7 +486,8 @@ def index() -> str:
                 long_count=long_count, short_count=short_count,
                 total_signals=len(signal_list), max_score=max_score,
                 sector_stats=sector_stats,
-                delayed_warning=delayed_warning)
+                delayed_warning=delayed_warning,
+                active_tab='futures')
         elif "options.drifter.indevs.in" in host:
             # 期权独立面板 — 只加载期权/IV 数据
             hub = _get_hub()
@@ -498,10 +499,12 @@ def index() -> str:
             return render_template("options_dashboard.html",
                 now=now, options=options,
                 iv_status=iv_status, iv_json=json.dumps(iv_status, ensure_ascii=False),
-                delayed_warning=delayed_warning)
+                delayed_warning=delayed_warning,
+                active_tab='options')
         elif "signals.drifter.indevs.in" in host:
             # 信号矩阵门户页 — 期货×期权入口，数据由 JS 实时拉取
-            return render_template("portal.html", now=now, delayed_warning=delayed_warning)
+            return render_template("portal.html", now=now, delayed_warning=delayed_warning,
+                active_tab='overview')
         else:
             # 统一看板（默认）— 含期权信号 + IV 状态
             hub = _get_hub()
@@ -516,7 +519,8 @@ def index() -> str:
                 total_signals=len(signal_list), max_score=max_score,
                 sector_stats=sector_stats, options=options,
                 iv_status=iv_status, iv_json=json.dumps(iv_status, ensure_ascii=False),
-                delayed_warning=delayed_warning)
+                delayed_warning=delayed_warning,
+                active_tab='overview')
     finally:
         pass  # 连接由 Database 管理生命周期
 
@@ -527,7 +531,8 @@ def index() -> str:
 @app.route("/pricing")
 def pricing_page():
     """定价/订阅页面 — 三档定价卡（免费 / Pro / Premium），Stripe Checkout 集成。"""
-    return render_template("pricing.html")
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    return render_template("pricing.html", now=now, active_tab='pricing')
 
 
 @app.route("/premium/success")
@@ -536,7 +541,9 @@ def premium_success_page():
     session_id = request.args.get("session_id", "")
     from web.stripe_handler import check_premium_status
     status = check_premium_status(db, session_id=session_id)
-    return render_template("pricing.html", payment_success=status.get("premium", False))
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    return render_template("pricing.html", payment_success=status.get("premium", False),
+        now=now, active_tab='pricing')
 
 
 @app.route("/subscribe")
@@ -548,7 +555,8 @@ def subscribe_page():
 @app.route("/api/docs")
 def api_docs():
     """公开数据 API v1 文档页面。"""
-    return render_template("api_docs.html")
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    return render_template("api_docs.html", now=now, active_tab='api')
 
 
 # ─── Blog 路由 ─────────────────────────────────────────────

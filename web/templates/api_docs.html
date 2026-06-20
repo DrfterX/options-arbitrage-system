@@ -516,15 +516,18 @@
 </head>
 <body>
 
-<!-- ═══ Topbar ═══ -->
+<!-- ═══ Unified Topbar ═══ -->
 <div class="topbar">
-  <div class="topbar-inner">
-    <h1><span class="accent">Status</span>Hub <span class="thin">| API 文档</span></h1>
-    <div class="nav-tabs" style="margin-left:auto">
-      <a href="/" class="nav-tab"><span class="nav-tab-icon">◈</span> 信号矩阵</a>
-      <a href="/api/docs" class="nav-tab active"><span class="nav-tab-icon">⎔</span> API 文档</a>
+  <h1><span class="dot"></span><span class="accent">▣</span> 信号矩阵 <span class="data-badge" style="color:var(--brand)">API 文档</span></h1>
+  <div class="topbar-right">
+    <div class="nav-tabs">
+      <a href="https://signals.drifter.indevs.in" class="nav-tab {{ 'active' if active_tab == 'overview' }}"><span class="nav-tab-icon">◈</span> 总览</a>
+      <a href="https://futures.drifter.indevs.in" class="nav-tab {{ 'active' if active_tab == 'futures' }}"><span class="nav-tab-icon">📈</span> 期货</a>
+      <a href="https://options.drifter.indevs.in" class="nav-tab {{ 'active' if active_tab == 'options' }}"><span class="nav-tab-icon">📉</span> 期权</a>
+      <a href="/api/docs" class="nav-tab {{ 'active' if active_tab == 'api' }}"><span class="nav-tab-icon">⎔</span> API</a>
+      <a href="/pricing" class="nav-tab premium-tab {{ 'active' if active_tab == 'pricing' }}"><span class="nav-tab-icon">✦</span> 定价</a>
     </div>
-    <span class="topbar-time">v1 &mdash; REST</span>
+    <span class="topbar-time">{{ now }}</span>
   </div>
 </div>
 

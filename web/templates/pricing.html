@@ -493,6 +493,22 @@
 </head>
 <body>
 
+<!-- ═══ Unified Topbar ═══ -->
+<div class="topbar">
+  <h1><span class="dot"></span><span class="accent">▣</span> 信号矩阵 <span class="data-badge" style="color:var(--brand)">定价</span></h1>
+  <div class="topbar-right">
+    <div class="nav-tabs">
+      <a href="https://signals.drifter.indevs.in" class="nav-tab {{ 'active' if active_tab == 'overview' }}"><span class="nav-tab-icon">◈</span> 总览</a>
+      <a href="https://futures.drifter.indevs.in" class="nav-tab {{ 'active' if active_tab == 'futures' }}"><span class="nav-tab-icon">📈</span> 期货</a>
+      <a href="https://options.drifter.indevs.in" class="nav-tab {{ 'active' if active_tab == 'options' }}"><span class="nav-tab-icon">📉</span> 期权</a>
+      <a href="/api/docs" class="nav-tab {{ 'active' if active_tab == 'api' }}"><span class="nav-tab-icon">⎔</span> API</a>
+      <a href="/pricing" class="nav-tab premium-tab {{ 'active' if active_tab == 'pricing' }}"><span class="nav-tab-icon">✦</span> 定价</a>
+    </div>
+    <span class="user-plan-badge" id="userPlanBadge"></span>
+    <span class="topbar-time">{{ now }}</span>
+  </div>
+</div>
+
 <div class="pricing-wrap pr-animate">
 
   <!-- ── Status Bar (filled by JS) ── -->
@@ -936,6 +952,23 @@ document.addEventListener('keydown', function(e) {
     }
   }
 });
+
+// ── Fetch user plan status & render plan badge in topbar ──
+function fetchUserStatus() {
+  var badge = document.getElementById('userPlanBadge');
+  if (!badge) return;
+  fetch('/api/premium/status', { cache: 'no-cache' })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.plan) {
+        if (d.plan === 'premium') badge.innerHTML = '<span class="up-badge premium">✦ PREMIUM</span>';
+        else if (d.plan === 'pro') badge.innerHTML = '<span class="up-badge pro">◆ PRO</span>';
+        else badge.innerHTML = '';
+      } else { badge.innerHTML = ''; }
+    })
+    .catch(function() { badge.innerHTML = ''; });
+}
+fetchUserStatus();
 </script>
 
 </body>

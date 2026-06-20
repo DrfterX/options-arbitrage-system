@@ -1418,13 +1418,13 @@
   <h1><span class="dot"></span><span class="accent">▣</span> 信号矩阵 <span class="data-badge" style="color:var(--brand)">期货 × 期权</span></h1>
   <div class="topbar-right">
     <div class="nav-tabs">
-      <span class="nav-tab active" data-tab="overview"><span class="nav-tab-icon">◈</span> 总览</span>
-      <span class="nav-tab" data-tab="futures"><span class="nav-tab-icon">📈</span> 期货</span>
-      <span class="nav-tab" data-tab="options"><span class="nav-tab-icon">📉</span> 期权</span>
-      <a href="/api/docs" class="nav-tab"><span class="nav-tab-icon">⎔</span> API</a>
-      <span class="nav-tab premium-tab" data-tab="premium"><span class="nav-tab-icon">✦</span> Premium</span>
+      <a href="https://signals.drifter.indevs.in" class="nav-tab {{ 'active' if active_tab == 'overview' }}"><span class="nav-tab-icon">◈</span> 总览</a>
+      <a href="https://futures.drifter.indevs.in" class="nav-tab {{ 'active' if active_tab == 'futures' }}"><span class="nav-tab-icon">📈</span> 期货</a>
+      <a href="https://options.drifter.indevs.in" class="nav-tab {{ 'active' if active_tab == 'options' }}"><span class="nav-tab-icon">📉</span> 期权</a>
+      <a href="/api/docs" class="nav-tab {{ 'active' if active_tab == 'api' }}"><span class="nav-tab-icon">⎔</span> API</a>
+      <a href="/pricing" class="nav-tab premium-tab {{ 'active' if active_tab == 'pricing' }}"><span class="nav-tab-icon">✦</span> 定价</a>
     </div>
-    <button class="reg-btn" id="regBtn" onclick="showRegisterModal()"><span>注册</span></button>
+    <span class="user-plan-badge" id="userPlanBadge"></span>
     <span class="data-badge" id="totalBadge"><span class="skeleton" style="width:72px;height:.7em">&nbsp;</span></span>
     <span class="topbar-time">{{ now }}</span>
     <button class="density-btn" onclick="toggleDensity()" title="切换显示密度" id="densityBtn">▣ 舒适</button>
@@ -1912,68 +1912,6 @@ setInterval(function() {
 setTimeout(function() { location.reload(); }, 3600000); // 1h fallback
 
 
-// ── Tab Switching — Unified nav (总览 / 期货 / 期权 / Premium) ──
-document.querySelectorAll('.nav-tab[data-tab]').forEach(function(tab) {
-  tab.addEventListener('click', function(e) {
-    e.preventDefault();
-    var target = this.getAttribute('data-tab');
-    // Update active state
-    document.querySelectorAll('.nav-tab').forEach(function(t) { t.classList.remove('active'); });
-    this.classList.add('active');
-
-    // Hide all panels
-    ['overview', 'futures', 'options', 'premium'].forEach(function(id) {
-      var panel = document.getElementById('panel-' + id);
-      if (panel) panel.style.display = 'none';
-    });
-    document.getElementById('premiumSection').style.display = 'none';
-    document.querySelector('.portal-tagline').style.display = 'none';
-
-    if (target === 'overview') {
-      document.getElementById('panel-overview').style.display = '';
-      document.querySelector('.portal-tagline').style.display = '';
-    } else if (target === 'futures') {
-      lazyLoadIframe('futures', 'https://futures.drifter.indevs.in');
-    } else if (target === 'options') {
-      lazyLoadIframe('options', 'https://options.drifter.indevs.in');
-    } else if (target === 'premium') {
-      document.getElementById('premiumSection').style.display = '';
-      checkPremiumStatus();
-    }
-  });
-});
-
-// ── Lazy-load iframe for futures/options panels ──
-var iframeCache = {};
-function lazyLoadIframe(name, src) {
-  var container = document.getElementById('panel-' + name);
-  if (!container) return;
-  container.style.display = '';
-
-  if (iframeCache[name]) {
-    // Already created — just ensure visible
-    return;
-  }
-
-  var iframe = document.createElement('iframe');
-  iframe.className = 'panel-frame';
-  iframe.src = src;
-  iframe.setAttribute('frameborder', '0');
-  iframe.setAttribute('allowtransparency', 'true');
-  iframe.setAttribute('loading', 'lazy');
-  iframe.onload = function() {
-    // Hide loading state
-    var loading = document.getElementById(name + '-loading');
-    if (loading) loading.style.display = 'none';
-    // Fade in after load
-    iframe.style.opacity = '1';
-  };
-  iframe.style.opacity = '0';
-
-  container.appendChild(iframe);
-  iframeCache[name] = true;
-}
-
 // ── Premium — Check subscription status ──
 function checkPremiumStatus() {
   var token = localStorage.getItem('premium_token');
@@ -2165,11 +2103,7 @@ function handleSubscribe() {
         }
         // Clean URL — remove query params
         window.history.replaceState({}, '', window.location.pathname);
-        // If user is on Premium tab, refresh status
-        var activeTab = document.querySelector('.nav-tab.active');
-        if (activeTab && activeTab.getAttribute('data-tab') === 'premium') {
-          checkPremiumStatus();
-        }
+        // Premium tab is now a direct link to /pricing — no refresh needed
       })
       .catch(function(e) { /* silent — token retrieval best-effort */ });
   }

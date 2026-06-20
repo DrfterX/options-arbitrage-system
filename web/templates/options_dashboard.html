@@ -832,11 +832,11 @@
   <h1><span class="dot"></span><span class="accent">◈</span> 期权信号仪表盘 <span class="data-badge">IV · 策略信号</span></h1>
   <div class="topbar-right">
     <div class="nav-tabs">
-      <a href="https://signals.drifter.indevs.in" class="nav-tab"><span class="nav-tab-icon">◈</span> 总览</a>
-      <a href="https://futures.drifter.indevs.in" class="nav-tab"><span class="nav-tab-icon">📈</span> 期货</a>
-      <span class="nav-tab active"><span class="nav-tab-icon">📉</span> 期权</span>
-      <a href="/pricing" class="nav-tab premium-tab"><span class="nav-tab-icon">✦</span> 定价</a>
-	      <a href="/api/docs" class="nav-tab"><span class="nav-tab-icon">⎔</span> API</a>
+      <a href="https://signals.drifter.indevs.in" class="nav-tab {{ 'active' if active_tab == 'overview' }}"><span class="nav-tab-icon">◈</span> 总览</a>
+      <a href="https://futures.drifter.indevs.in" class="nav-tab {{ 'active' if active_tab == 'futures' }}"><span class="nav-tab-icon">📈</span> 期货</a>
+      <a href="https://options.drifter.indevs.in" class="nav-tab {{ 'active' if active_tab == 'options' }}"><span class="nav-tab-icon">📉</span> 期权</a>
+      <a href="/api/docs" class="nav-tab {{ 'active' if active_tab == 'api' }}"><span class="nav-tab-icon">⎔</span> API</a>
+      <a href="/pricing" class="nav-tab premium-tab {{ 'active' if active_tab == 'pricing' }}"><span class="nav-tab-icon">✦</span> 定价</a>
     </div>
     <span class="user-plan-badge" id="userPlanBadge"></span>
     <span class="data-badge" id="optionCount">{{ options|length }} 策略</span>
