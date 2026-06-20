@@ -2342,22 +2342,30 @@ def symbol_page(symbol: str):
         # 6. 期权 IV 状态
         iv_status = None
         iv_row = conn.execute(
-            """SELECT symbol, iv_percentile, iv_rank, iv_current, iv_high, iv_low
+            """SELECT symbol, avg_iv, atm_call_iv, atm_put_iv, top5_avg_iv, date
                FROM iv_history
-               WHERE symbol=? ORDER BY created_at DESC LIMIT 1""",
+               WHERE symbol=? ORDER BY date DESC LIMIT 1""",
             (sym,),
         ).fetchone()
         if iv_row:
             iv_status = dict(iv_row)
+            # IV 数据库存小数（0.318），转百分比展示
+            for k in ("avg_iv", "atm_call_iv", "atm_put_iv", "top5_avg_iv"):
+                if iv_status.get(k) is not None:
+                    iv_status[k] = round(iv_status[k] * 100, 1)
 
         # 6b. 期权信号评分
         opt_row = conn.execute(
-            """SELECT score, direction, created_at
+            """SELECT unified_score, strategy, signal_type, created_at
                FROM options_signals
                WHERE symbol=? ORDER BY created_at DESC LIMIT 1""",
             (sym,),
         ).fetchone()
         opt_signal = dict(opt_row) if opt_row else None
+        # 映射 signal_type → CSS 风格类名
+        if opt_signal:
+            dir_map = {"BUY": "BULLISH", "SELL": "BEARISH"}
+            opt_signal["dir_class"] = dir_map.get(opt_signal.get("signal_type", ""), "NEUTRAL")
 
         # 7. 同板块品种列表（含简要信号方向）
         related = []

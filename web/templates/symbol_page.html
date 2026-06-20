@@ -314,25 +314,23 @@
 
 <!-- ═══ IV 状态 ═══ -->
 {% if iv_status %}
-<div class="sym-section-title">期权 · 隐含波动率</div>
+<div class="sym-section-title">期权 · 隐含波动率（{{ iv_status.date }}）</div>
 <div class="sym-iv-card">
   <div class="sym-iv-metric">
-    <div class="sym-iv-value {{ 'high' if iv_status.iv_percentile and iv_status.iv_percentile > 80 else 'mid' if iv_status.iv_percentile and iv_status.iv_percentile > 20 else 'low' }}">
-      {{ (iv_status.iv_percentile * 100)|round|int if iv_status.iv_percentile is not none else '—' }}%
-    </div>
-    <div class="sym-iv-label">IV 百分位</div>
+    <div class="sym-iv-value">{{ iv_status.avg_iv }}%</div>
+    <div class="sym-iv-label">平均 IV</div>
   </div>
   <div class="sym-iv-metric">
-    <div class="sym-iv-value">{{ (iv_status.iv_current|float|round(1)) if iv_status.iv_current else '—' }}%</div>
-    <div class="sym-iv-label">当前 IV</div>
+    <div class="sym-iv-value">{{ iv_status.atm_call_iv }}%</div>
+    <div class="sym-iv-label">ATM Call IV</div>
   </div>
   <div class="sym-iv-metric">
-    <div class="sym-iv-value" style="color:var(--text2)">{{ (iv_status.iv_high|float|round(1)) if iv_status.iv_high else '—' }}%</div>
-    <div class="sym-iv-label">最高 IV</div>
+    <div class="sym-iv-value" style="color:var(--text2)">{{ iv_status.atm_put_iv }}%</div>
+    <div class="sym-iv-label">ATM Put IV</div>
   </div>
   <div class="sym-iv-metric">
-    <div class="sym-iv-value" style="color:var(--text2)">{{ (iv_status.iv_low|float|round(1)) if iv_status.iv_low else '—' }}%</div>
-    <div class="sym-iv-label">最低 IV</div>
+    <div class="sym-iv-value" style="color:var(--text2)">{{ iv_status.top5_avg_iv }}%</div>
+    <div class="sym-iv-label">Top5 平均 IV</div>
   </div>
 </div>
 {% endif %}
@@ -341,11 +339,11 @@
 {% if opt_signal %}
 <div class="sym-section-title">期权策略评分</div>
 <div class="sym-opt-card">
-  <span class="sym-opt-dir {{ opt_signal.direction }}">
-    {{ opt_signal.direction }}
+  <span class="sym-opt-dir {{ opt_signal.dir_class }}">
+    {{ opt_signal.strategy }}
   </span>
   <span style="font-family:var(--font-mono);font-weight:600;font-size:1rem;">
-    {{ opt_signal.score|round(2) if opt_signal.score else '—' }}
+    {{ opt_signal.unified_score|round(2) if opt_signal.unified_score else '—' }}
   </span>
   <span style="color:var(--text3);font-size:.78rem;">
     更新于 {{ opt_signal.created_at[:16] if opt_signal.created_at else '' }}
