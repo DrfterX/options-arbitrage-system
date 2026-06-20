@@ -247,9 +247,6 @@ def index() -> str:
         delay_sig = _delay_filter("s.created_at")
         delay_n = _delay_filter("updated_at", "text", 15)  # futures_n_structures 用 updated_at
 
-        # 0. 动态重算：所有活跃 N 型结构（确保初始页面显示最新数据）
-        _restructure_active_structures(conn)
-
         # 1. 信号矩阵数据
         sig_rows = conn.execute(f'''
             SELECT s.symbol, s.contract, s.direction, s.signal_type,
@@ -413,24 +410,6 @@ def api_docs():
 # ── N 型结构动态重算辅助 ───────────────────────────────────────
 
 
-def _restructure_active_structures(conn):
-    """对所有有活跃 N 型结构的品种执行动态重算（A 突破迁移）。
-
-    委托 ``futures.n_structure.restructure_all_active()`` 执行，
-    与数据采集器共享同一套重算逻辑。
-
-    KISS 原则：在 API 读取 N 型结构前按需刷新，不引入后台进程。
-    仅对活跃（非 COMPLETED/IDLE）结构执行，开销可控。
-
-    修复 v2：在 dynamic_restructure 前先增量更新极值点（swing points），
-    确保 N 型检测基于最新 K 线数据，而非上次 pipeline 运行时的快照。
-    """
-    try:
-        from futures.n_structure import restructure_all_active
-        restructure_all_active(db)
-    except Exception:
-        pass  # 动态重算整体失败不阻塞矩阵渲染
-
 
 def _get_futures_contract(conn, symbol: str) -> str:
     """获取品种的主力合约代码。"""
@@ -454,9 +433,6 @@ def api_matrix():
         delay_sig = _delay_filter("s.created_at")
         delay_n = _delay_filter("updated_at")
 
-        # 0. 动态重算：对所有有活跃结构的品种执行 A 突破迁移
-        _restructure_active_structures(conn)
-
         # 最新信号（每个品种取最新一条）
         rows = conn.execute(f'''
             SELECT s.symbol, s.contract, s.direction, s.signal_type,
@@ -477,8 +453,14 @@ def api_matrix():
             }
 
         # N型结构（每个品种×周期最新状态）
+        # 构建信号合约映射，用于过滤 N 型结构只取同合约数据
+        # 使用 _clean_contract_n_prefix 标准化合约名（去 n 前缀）
+        signal_contracts = {
+            sym: _clean_contract_n_prefix(info.get("contract", "")).upper()
+            for sym, info in signals.items() if info.get("contract")
+        }
         n_rows = conn.execute(f'''
-            SELECT symbol, timeframe, direction, state,
+            SELECT symbol, contract, timeframe, direction, state,
                    point_a_price, point_b_price, point_c_price,
                    point_a_time, point_b_time, point_c_time, updated_at
             FROM futures_n_structures
@@ -489,9 +471,18 @@ def api_matrix():
         structures = {}
         for r in n_rows:
             d = dict(r)
+            sym = d["symbol"]
+
+            # 按合约过滤：只取与信号同合约的 N 型结构
+            # 标准化合约名再比较，确保 n 前缀不影响匹配
+            n_contract = _clean_contract_n_prefix(d.get("contract") or "").upper()
+            sig_contract = signal_contracts.get(sym)
+            if sig_contract and n_contract and n_contract != sig_contract:
+                continue  # 跳过与信号合约不匹配的结构（防止远期合约覆盖主力合约）
+
             if d.get("timeframe") in ("1d", "1w"):
                 _normalize_n_ts(d)
-            structures.setdefault(d["symbol"], {})[d["timeframe"]] = {
+            structures.setdefault(sym, {})[d["timeframe"]] = {
                 "dir": d["direction"], "state": d["state"],
                 "a": d["point_a_price"], "b": d["point_b_price"], "c": d["point_c_price"],
                 "at": d["point_a_time"], "bt": d["point_b_time"], "ct": d["point_c_time"],
@@ -553,7 +544,6 @@ def api_n_structures():
     """
     conn = db.get_conn()
     try:
-        _restructure_active_structures(conn)
         is_delayed = _is_delayed_user()
         delay_n = _delay_filter("updated_at")
         delay_sig = _delay_filter("s.created_at")
@@ -755,16 +745,7 @@ def api_klines():
         is_delayed = _is_delayed_user()
         delay_klines = _delay_filter("k.timestamp", "int")
 
-        # 0. 先刷新极值点，再动态重算该品种的 N 型结构（确保标记线基于最新 swing points）
-        contract = ""
-        try:
-            from futures.n_structure import restructure_active_for_symbol
-            contract = _get_futures_contract(conn, sym)
-            if contract:
-                restructure_active_for_symbol(sym, contract, db, timeframes=[tf], force_full_recalc=True)
-        except Exception:
-            pass  # 重算失败不阻塞 K 线返回
-
+        contract = _get_futures_contract(conn, sym)
         rows = conn.execute(f'''
             SELECT k.timestamp, k.open, k.high, k.low, k.close, k.volume
             FROM futures_klines k
@@ -1298,7 +1279,6 @@ def api_premium_recommendations():
     """Premium: 今日推荐 3 品种（基于 N 型结构共振 + 信号评分）。"""
     conn = db.get_conn()
     try:
-        _restructure_active_structures(conn)
 
         # 所有活跃（非 COMPLETED/IDLE）N型结构
         n_rows = conn.execute('''
@@ -1381,7 +1361,6 @@ def api_premium_breakout_alerts():
     """
     conn = db.get_conn()
     try:
-        _restructure_active_structures(conn)
 
         # 活跃结构（含已完成的，因为突破可能发生在已形成的结构上）
         n_rows = conn.execute('''
