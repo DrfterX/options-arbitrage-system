@@ -815,18 +815,48 @@ def api_klines():
         delay_klines = _delay_filter("k.timestamp", "int")
 
         contract = _get_futures_contract(conn, sym)
-        rows = conn.execute(f'''
-            SELECT k.timestamp, k.open, k.high, k.low, k.close, k.volume
-            FROM futures_klines k
-            INNER JOIN (
-                SELECT symbol, timeframe, timestamp, MAX(rowid) as max_rowid
-                FROM futures_klines
-                WHERE symbol=? AND timeframe=?
-                GROUP BY symbol, timeframe, timestamp
-            ) sub ON k.rowid = sub.max_rowid
-            WHERE 1=1 {delay_klines}
-            ORDER BY k.timestamp DESC
-        ''', (sym, tf)).fetchall()
+        if contract:
+            # 先尝试按合约过滤（bars 与 N-structure 同源），支持最佳对齐
+            rows = conn.execute(f'''
+                SELECT k.timestamp, k.open, k.high, k.low, k.close, k.volume
+                FROM futures_klines k
+                INNER JOIN (
+                    SELECT symbol, timeframe, timestamp, contract, MAX(rowid) as max_rowid
+                    FROM futures_klines
+                    WHERE symbol=? AND timeframe=? AND contract=?
+                    GROUP BY symbol, timeframe, timestamp, contract
+                ) sub ON k.rowid = sub.max_rowid
+                WHERE 1=1 {delay_klines}
+                ORDER BY k.timestamp DESC
+            ''', (sym, tf, contract)).fetchall()
+            if not rows:
+                # 合约过滤无数据时回退 symbol-only（如旧合约已无 klines 数据）
+                rows = conn.execute(f'''
+                    SELECT k.timestamp, k.open, k.high, k.low, k.close, k.volume
+                    FROM futures_klines k
+                    INNER JOIN (
+                        SELECT symbol, timeframe, timestamp, MAX(rowid) as max_rowid
+                        FROM futures_klines
+                        WHERE symbol=? AND timeframe=?
+                        GROUP BY symbol, timeframe, timestamp
+                    ) sub ON k.rowid = sub.max_rowid
+                    WHERE 1=1 {delay_klines}
+                    ORDER BY k.timestamp DESC
+                ''', (sym, tf)).fetchall()
+        else:
+            # 无合约时回退到 symbol-only 查询
+            rows = conn.execute(f'''
+                SELECT k.timestamp, k.open, k.high, k.low, k.close, k.volume
+                FROM futures_klines k
+                INNER JOIN (
+                    SELECT symbol, timeframe, timestamp, MAX(rowid) as max_rowid
+                    FROM futures_klines
+                    WHERE symbol=? AND timeframe=?
+                    GROUP BY symbol, timeframe, timestamp
+                ) sub ON k.rowid = sub.max_rowid
+                WHERE 1=1 {delay_klines}
+                ORDER BY k.timestamp DESC
+            ''', (sym, tf)).fetchall()
         
         bars = []
         for r in rows:
