@@ -268,26 +268,59 @@ def index() -> str:
                 "l1": bool(d["level1_pass"]), "l2": bool(d["level2_pass"]), "l3": bool(d["level3_pass"]),
             }
 
-        n_rows = conn.execute(f'''
-            SELECT symbol, timeframe, direction, state,
-                   point_a_price, point_b_price, point_c_price,
-                   point_a_time, point_b_time, point_c_time, updated_at
-            FROM futures_n_structures
-            WHERE 1=1 {delay_n}
-            ORDER BY symbol, timeframe
-        ''').fetchall()
-        structures = {}
-        for r in n_rows:
-            d = dict(r)
-            if d.get("timeframe") in ("1d", "1w"):
-                _normalize_n_ts(d)
-            structures.setdefault(d["symbol"], {})[d["timeframe"]] = {
-                "dir": d["direction"], "state": d["state"],
-                "a": d["point_a_price"], "b": d["point_b_price"], "c": d["point_c_price"],
-                "at": d["point_a_time"], "bt": d["point_b_time"], "ct": d["point_c_time"],
-            }
+        # N型结构 — 使用 _get_active_n_structure 过滤（与弹窗数据来源一致）
+        # 避免直接读全表导致的 stale/已过期结构出现在矩阵中
+        from futures.shared import _get_active_n_structure as _get_active_ns
+
+        # 构建信号合约映射（标准化合约名，去 n 前缀）
+        signal_contracts = {
+            sym: _clean_contract_n_prefix(info.get("contract", "")).upper()
+            for sym, info in signals.items() if info.get("contract")
+        }
+
+        # 对有信号但缺合约的品种，从 N 结构表补全
+        for sym in signals:
+            if sym not in signal_contracts or not signal_contracts[sym]:
+                row = conn.execute(
+                    "SELECT contract FROM futures_n_structures WHERE symbol=? AND contract!='' ORDER BY updated_at DESC LIMIT 1",
+                    (sym,),
+                ).fetchone()
+                if row and row["contract"]:
+                    signal_contracts[sym] = _clean_contract_n_prefix(row["contract"]).upper()
 
         TIMEFRAMES = ["15m", "1h", "1d", "1w"]
+        structures = {}
+        for sym, contract in signal_contracts.items():
+            for tf in TIMEFRAMES:
+                ns = _get_active_ns(db, sym, contract, tf)
+                if ns:
+                    structures.setdefault(sym, {})[tf] = {
+                        "dir": ns["direction"], "state": ns["state"],
+                        "a": ns["point_a_price"], "b": ns["point_b_price"], "c": ns["point_c_price"],
+                        "at": ns["point_a_time"], "bt": ns["point_b_time"], "ct": ns["point_c_time"],
+                    }
+
+        # 对无信号但有活跃 N 型结构的品种，也纳入矩阵
+        for sector_name, symbols in SECTORS.items():
+            for sym in symbols:
+                if sym in signals or sym in structures:
+                    continue
+                row = conn.execute(
+                    "SELECT contract FROM futures_n_structures WHERE symbol=? AND contract!='' ORDER BY updated_at DESC LIMIT 1",
+                    (sym,),
+                ).fetchone()
+                if not row or not row["contract"]:
+                    continue
+                contract = _clean_contract_n_prefix(row["contract"]).upper()
+                for tf in TIMEFRAMES:
+                    ns = _get_active_ns(db, sym, contract, tf)
+                    if ns:
+                        structures.setdefault(sym, {})[tf] = {
+                            "dir": ns["direction"], "state": ns["state"],
+                            "a": ns["point_a_price"], "b": ns["point_b_price"], "c": ns["point_c_price"],
+                            "at": ns["point_a_time"], "bt": ns["point_b_time"], "ct": ns["point_c_time"],
+                        }
+
         matrix = []
         for sector_name, symbols in SECTORS.items():
             for sym in symbols:
@@ -414,7 +447,25 @@ def api_docs():
 
 
 def _get_futures_contract(conn, symbol: str) -> str:
-    """获取品种的主力合约代码。"""
+    """获取品种的合约代码（与矩阵面板同源）。
+
+    优先级（与 /api/matrix 一致）：
+      1. futures_signals 最新信号的合约（矩阵主数据源）
+      2. futures_n_structures 表最近的合约
+      3. futures_klines 表最近的 1d 合约（历史兼容）
+    """
+    row = conn.execute(
+        "SELECT contract FROM futures_signals WHERE symbol=? AND contract!='' ORDER BY created_at DESC LIMIT 1",
+        (symbol,),
+    ).fetchone()
+    if row and row["contract"]:
+        return _clean_contract_n_prefix(row["contract"]).upper()
+    row = conn.execute(
+        "SELECT contract FROM futures_n_structures WHERE symbol=? AND contract!='' ORDER BY updated_at DESC LIMIT 1",
+        (symbol,),
+    ).fetchone()
+    if row and row["contract"]:
+        return _clean_contract_n_prefix(row["contract"]).upper()
     row = conn.execute(
         "SELECT contract FROM futures_klines WHERE symbol=? AND timeframe='1d' ORDER BY timestamp DESC LIMIT 1",
         (symbol,),
@@ -454,44 +505,60 @@ def api_matrix():
                 "l1": bool(d["level1_pass"]), "l2": bool(d["level2_pass"]), "l3": bool(d["level3_pass"]),
             }
 
-        # N型结构（每个品种×周期最新状态）
-        # 构建信号合约映射，用于过滤 N 型结构只取同合约数据
-        # 使用 _clean_contract_n_prefix 标准化合约名（去 n 前缀）
+        # N型结构 — 使用 _get_active_n_structure 过滤（与弹窗数据来源一致）
+        # 避免直接读全表导致的 stale/已过期结构出现在矩阵中
+        from futures.shared import _get_active_n_structure as _get_active_ns
+
+        # 构建信号合约映射（标准化合约名，去 n 前缀）
         signal_contracts = {
             sym: _clean_contract_n_prefix(info.get("contract", "")).upper()
             for sym, info in signals.items() if info.get("contract")
         }
-        n_rows = conn.execute(f'''
-            SELECT symbol, contract, timeframe, direction, state,
-                   point_a_price, point_b_price, point_c_price,
-                   point_a_time, point_b_time, point_c_time, updated_at
-            FROM futures_n_structures
-            WHERE 1=1 {delay_n}
-            ORDER BY symbol, timeframe
-        ''').fetchall()
 
+        # 对有信号但缺合约的品种，从 N 结构表补全
+        for sym in signals:
+            if sym not in signal_contracts or not signal_contracts[sym]:
+                row = conn.execute(
+                    "SELECT contract FROM futures_n_structures WHERE symbol=? AND contract!='' ORDER BY updated_at DESC LIMIT 1",
+                    (sym,),
+                ).fetchone()
+                if row and row["contract"]:
+                    signal_contracts[sym] = _clean_contract_n_prefix(row["contract"]).upper()
+
+        TIMEFRAMES = ["15m", "1h", "1d", "1w"]
         structures = {}
-        for r in n_rows:
-            d = dict(r)
-            sym = d["symbol"]
+        for sym, contract in signal_contracts.items():
+            for tf in TIMEFRAMES:
+                ns = _get_active_ns(db, sym, contract, tf)
+                if ns:
+                    structures.setdefault(sym, {})[tf] = {
+                        "dir": ns["direction"], "state": ns["state"],
+                        "a": ns["point_a_price"], "b": ns["point_b_price"], "c": ns["point_c_price"],
+                        "at": ns["point_a_time"], "bt": ns["point_b_time"], "ct": ns["point_c_time"],
+                    }
 
-            # 按合约过滤：只取与信号同合约的 N 型结构
-            # 标准化合约名再比较，确保 n 前缀不影响匹配
-            n_contract = _clean_contract_n_prefix(d.get("contract") or "").upper()
-            sig_contract = signal_contracts.get(sym)
-            if sig_contract and n_contract and n_contract != sig_contract:
-                continue  # 跳过与信号合约不匹配的结构（防止远期合约覆盖主力合约）
-
-            if d.get("timeframe") in ("1d", "1w"):
-                _normalize_n_ts(d)
-            structures.setdefault(sym, {})[d["timeframe"]] = {
-                "dir": d["direction"], "state": d["state"],
-                "a": d["point_a_price"], "b": d["point_b_price"], "c": d["point_c_price"],
-                "at": d["point_a_time"], "bt": d["point_b_time"], "ct": d["point_c_time"],
-            }
+        # 对无信号但有活跃 N 型结构的品种，也纳入矩阵
+        for sector_name, symbols in SECTORS.items():
+            for sym in symbols:
+                if sym in signals or sym in structures:
+                    continue
+                row = conn.execute(
+                    "SELECT contract FROM futures_n_structures WHERE symbol=? AND contract!='' ORDER BY updated_at DESC LIMIT 1",
+                    (sym,),
+                ).fetchone()
+                if not row or not row["contract"]:
+                    continue
+                contract = _clean_contract_n_prefix(row["contract"]).upper()
+                for tf in TIMEFRAMES:
+                    ns = _get_active_ns(db, sym, contract, tf)
+                    if ns:
+                        structures.setdefault(sym, {})[tf] = {
+                            "dir": ns["direction"], "state": ns["state"],
+                            "a": ns["point_a_price"], "b": ns["point_b_price"], "c": ns["point_c_price"],
+                            "at": ns["point_a_time"], "bt": ns["point_b_time"], "ct": ns["point_c_time"],
+                        }
 
         # 构建矩阵
-        TIMEFRAMES = ["15m", "1h", "1d", "1w"]
         matrix = []
         for sector_name, symbols in SECTORS.items():
             for sym in symbols:
