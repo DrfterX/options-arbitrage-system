@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="description" content="给期货交易者做的免费多周期信号看板——信号矩阵(SignalHub)集跨周期信号、N型结构自动识别、期权IV分析于一体。免费使用，无需注册。">
+<meta property="og:title" content="给期货交易者做的免费多周期信号看板——我肝了三个月，现在开放给你 | 信号矩阵 Blog">
+<meta property="og:description" content="一个品种，N个周期，每个周期判断多/空/震荡→共振就是信号。信号矩阵集信号看板、N型自动识别、期权IV分析于一体，免费使用。">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://signals.drifter.indevs.in/blog/product-intro">
+<meta property="og:image" content="https://signals.drifter.indevs.in/static/images/signals-dashboard.png">
+<link rel="canonical" href="https://signals.drifter.indevs.in/blog/product-intro">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="给期货交易者做的免费多周期信号看板——我肝了三个月，现在开放给你">
+<meta name="twitter:description" content="一个品种，N个周期，共振就是信号。免费期货/期权信号仪表盘。">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "给期货交易者做的免费多周期信号看板——我肝了三个月，现在开放给你",
+  "description": "一个品种，N个周期，共振就是信号。信号矩阵集信号看板、N型自动识别、期权IV分析于一体。",
+  "image": "https://signals.drifter.indevs.in/static/images/signals-dashboard.png",
+  "author": {"@type": "Organization", "name": "信号矩阵"},
+  "datePublished": "2026-06-21",
+  "publisher": {"@type": "Organization", "name": "信号矩阵"}
+}
+</script>
+<title>给期货交易者做的免费多周期信号看板，我肝了三个月 | 信号矩阵</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css">
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   Blog Post — signals.drifter.indevs.in/blog/*
+   Aesthetic: Terminal Luxe — readable long-form, instrument-cluster
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── topbar ── */
+.blog-topbar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 20px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  backdrop-filter: blur(8px);
+}
+.blog-topbar .logo {
+  font-weight: 800;
+  font-size: .75rem;
+  letter-spacing: .06em;
+  color: var(--text);
+}
+.blog-topbar .logo .accent { color: var(--brand); }
+.blog-topbar .nav-links {
+  margin-left: auto;
+  display: flex; gap: 16px;
+  font-size: .62rem;
+  font-weight: 500;
+}
+.blog-topbar .nav-links a {
+  color: var(--text2);
+  text-decoration: none;
+  transition: color .15s;
+}
+.blog-topbar .nav-links a:hover { color: var(--text); }
+
+/* ── layout ── */
+.blog-wrap {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 40px 24px 80px;
+}
+
+/* ── header ── */
+.blog-header {
+  margin-bottom: 44px;
+}
+.blog-header .meta {
+  font-size: .58rem;
+  color: var(--text3);
+  letter-spacing: .04em;
+  margin-bottom: 8px;
+  display: flex; gap: 12px; align-items: center;
+}
+.blog-header .meta .tag {
+  background: rgba(34, 197, 94, .1);
+  color: var(--brand);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+}
+.blog-header h1 {
+  font-size: 1.4rem;
+  font-weight: 800;
+  letter-spacing: -.02em;
+  line-height: 1.3;
+  margin-bottom: 12px;
+}
+.blog-header .subtitle {
+  font-size: .72rem;
+  color: var(--text2);
+  line-height: 1.6;
+  max-width: 600px;
+}
+
+/* ── body ── */
+.blog-body {
+  font-size: .72rem;
+  line-height: 1.85;
+  color: var(--text);
+}
+.blog-body h2 {
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: -.01em;
+  margin: 36px 0 14px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+.blog-body h3 {
+  font-size: .82rem;
+  font-weight: 600;
+  margin: 28px 0 10px;
+}
+.blog-body p {
+  margin-bottom: 14px;
+}
+.blog-body strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.blog-body blockquote {
+  margin: 18px 0;
+  padding: 12px 16px;
+  background: rgba(34, 197, 94, .04);
+  border-left: 2px solid var(--brand);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  font-size: .68rem;
+  color: var(--text2);
+  line-height: 1.6;
+}
+.blog-body blockquote p { margin-bottom: 0; }
+.blog-body blockquote strong { color: var(--text); }
+.blog-body code {
+  font-family: var(--font-mono);
+  font-size: .65rem;
+  background: rgba(34, 197, 94, .08);
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: var(--brand);
+}
+.blog-body pre {
+  background: rgba(8, 11, 16, .6);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  margin: 16px 0;
+  overflow-x: auto;
+  font-size: .62rem;
+  line-height: 1.6;
+  font-family: var(--font-mono);
+  color: var(--text2);
+}
+.blog-body ul, .blog-body ol {
+  margin: 10px 0 14px;
+  padding-left: 20px;
+}
+.blog-body li {
+  margin-bottom: 6px;
+}
+.blog-body a {
+  color: var(--brand);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color .15s;
+}
+.blog-body a:hover { border-bottom-color: var(--brand); }
+
+/* ── tables ── */
+.blog-body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 16px 0;
+  font-size: .65rem;
+}
+.blog-body th, .blog-body td {
+  padding: 8px 12px;
+  text-align: left;
+  border: 1px solid var(--border);
+}
+.blog-body th {
+  background: rgba(34, 197, 94, .04);
+  font-weight: 600;
+  font-size: .6rem;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--text2);
+}
+.blog-body td {
+  color: var(--text);
+}
+.blog-body tr:nth-child(even) td {
+  background: rgba(255,255,255,.02);
+}
+
+/* ── horizontal rule ── */
+.blog-body hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 32px 0;
+}
+
+/* ── highlight box ── */
+.blog-body .highlight-box {
+  margin: 18px 0;
+  padding: 16px 20px;
+  background: rgba(34, 197, 94, .04);
+  border: 1px solid rgba(34, 197, 94, .12);
+  border-radius: var(--radius-md);
+  font-size: .68rem;
+  line-height: 1.7;
+}
+.blog-body .highlight-box strong {
+  color: var(--brand);
+}
+
+/* ── CTA section ── */
+.blog-cta {
+  margin: 40px 0 0;
+  padding: 24px;
+  background: linear-gradient(135deg, rgba(34, 197, 94, .04), rgba(139, 92, 246, .04));
+  border: 1px solid rgba(34, 197, 94, .12);
+  border-radius: var(--radius-lg);
+  text-align: center;
+}
+.blog-cta h3 {
+  font-size: .82rem;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+.blog-cta p {
+  font-size: .65rem;
+  color: var(--text2);
+  margin-bottom: 14px;
+  line-height: 1.6;
+}
+.blog-cta .btn {
+  display: inline-block;
+  padding: 10px 24px;
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  color: #000;
+  background: var(--brand);
+  border: none;
+  border-radius: var(--radius-md);
+  text-decoration: none;
+  transition: all .2s var(--ease-out);
+  font-family: var(--font-ui);
+  cursor: pointer;
+}
+.blog-cta .btn:hover {
+  box-shadow: 0 2px 20px rgba(34, 197, 94, .2);
+  filter: brightness(1.1);
+}
+.blog-cta .btn:active { transform: scale(.97); }
+
+/* ── footer ── */
+.blog-footer {
+  margin-top: 48px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: .55rem;
+  color: var(--text3);
+}
+.blog-footer a {
+  color: var(--text2);
+  text-decoration: none;
+}
+.blog-footer a:hover { color: var(--text); }
+
+/* ── responsive ── */
+@media (max-width: 540px) {
+  .blog-wrap { padding: 24px 16px 60px; }
+  .blog-header h1 { font-size: 1.1rem; }
+  .blog-body { font-size: .7rem; }
+}
+</style>
+</head>
+<body>
+
+<!-- ═══ topbar ═══ -->
+<nav class="blog-topbar">
+  <a href="/" class="logo" style="text-decoration:none"><span class="accent">信号</span>矩阵</a>
+  <div class="nav-links">
+    <a href="/">仪表盘</a>
+    <a href="/pricing">定价</a>
+    <a href="/blog">Blog</a>
+  </div>
+</nav>
+
+<!-- ═══ article ═══ -->
+<article class="blog-wrap">
+
+  <header class="blog-header">
+    <div class="meta">
+      <span class="tag">产品介绍</span>
+      <span>2026-06-21</span>
+      <span>·</span>
+      <span>信号矩阵团队</span>
+    </div>
+    <h1>给期货交易者做的免费多周期信号看板——我肝了三个月，现在开放给你</h1>
+    <div class="subtitle">
+      做期货的人应该都有这个感受：对着 K 线图，同时打开 15分/1小时/日线三个周期，手动比对信号方向。我忍了很久，最后自己写了个工具。<br>
+      <strong>适用读者</strong>：商品期货/期权交易者；想看干货的先拉到文末快速体验
+    </div>
+  </header>
+
+  <div class="blog-body">
+
+    <blockquote>
+      <strong>先放链接</strong>：<a href="https://signals.drifter.indevs.in">signals.drifter.indevs.in</a>（免费，不用注册就能看）
+    </blockquote>
+
+    <h2>一、为什么是"信号矩阵"？</h2>
+
+    <p>核心思路很简单：</p>
+
+    <p><strong>一个品种，N 个周期，每个周期判断多/空/震荡 → 看哪些周期方向一致 → 共振就是信号。</strong></p>
+
+    <p>比如沪铜当前的状态：</p>
+
+    <p>15分偏多、30分偏多、60分钟震荡、日线偏多、周线偏多。</p>
+
+    <p>5 个周期里有 4 个指向多，这就是<strong>跨周期共振</strong>。</p>
+
+    <p>共振不是预测，是概率信号。周期越多指向同一方向，这个方向的概率优势就越大。</p>
+
+    <hr>
+
+    <h2>二、我们加入了 N 型结构自动识别</h2>
+
+    <p>除了基本的信号矩阵，还做了 N 型结构自动识别。</p>
+
+    <p>啥是 N 型结构？期货价格走势大部分时间不是直线，而是 ABC 三段：</p>
+
+    <ul>
+      <li><strong>上升 N 型</strong>：A 点最低 → 涨到 B 点 → 回调到 C 点（不破 A）→ 准备向上破位</li>
+      <li><strong>下降 N 型</strong>：A 点最高 → 跌到 B 点 → 反弹到 C 点（不过 A）→ 准备向下破位</li>
+    </ul>
+
+    <p>手工画这些线很烦，但算法做这件事一秒都不要。</p>
+
+    <p>K 线上自动标注 ABC 点和线段，一眼看出当前结构状态。目前覆盖 15 个品种 × 5 个周期（15分/30分/60分/日线/周线），打开页面即可查看。</p>
+
+    <hr>
+
+    <h2>三、期权数据也放上去了</h2>
+
+    <p>商品期权这几年越来越火，但散户能用的 IV 分析工具几乎为零。</p>
+
+    <p>我们做了 IV 百分位柱状图，看当前波动率在历史中的位置：</p>
+
+    <ul>
+      <li><strong>🟢 低 IV（&lt; 20%）</strong>：期权便宜 → 适合买入策略</li>
+      <li><strong>🟡 中 IV（20% – 80%）</strong>：价格适中 → 方向性价差</li>
+      <li><strong>🔴 高 IV（&gt; 80%）</strong>：期权溢价高 → 适合卖出策略</li>
+    </ul>
+
+    <p>还有策略评分系统，对常见期权策略打分——不构成交易建议，就是帮你过滤掉明显不划算的策略。</p>
+
+    <div class="highlight-box">
+      <strong>三个看板，一个账号通用：</strong> 信号主看板（多周期信号矩阵 + 共振检测）— 期货 K 线（N 型结构标注 + K 线图）— 期权分析（IV 百分位 + 策略评分）
+    </div>
+
+    <hr>
+
+    <h2>四、为什么免费？</h2>
+
+    <p>说实话：</p>
+
+    <ol>
+      <li><strong>我想要真实用户</strong> — 早点暴露问题比晚点好</li>
+      <li><strong>目前还在积攒数据量</strong> — 足够多的历史数据才能让信号更有参考价值</li>
+      <li><strong>等有了真实用户再看做付费层的方向</strong></li>
+    </ol>
+
+    <p>目前免费层能用所有核心功能。以后如果加高级功能（自定义告警、回测、API），那部分可能会收费。但<strong>核心信号矩阵永久免费</strong>。</p>
+
+    <hr>
+
+    <h2>五、现在有什么？</h2>
+
+    <table>
+      <tr><th>看板</th><th>作用</th><th>入口</th></tr>
+      <tr><td><strong>信号主看板</strong></td><td>多周期信号矩阵、共振检测</td><td><code>/dashboard</code></td></tr>
+      <tr><td><strong>期货 K 线</strong></td><td>N 型结构标注、ABC 标点</td><td><code>/futures</code></td></tr>
+      <tr><td><strong>期权分析</strong></td><td>IV 百分位、策略评分</td><td><code>/options</code></td></tr>
+    </table>
+
+    <p>所有数据实时更新，覆盖大商所、上期所、郑商所主要品种。</p>
+
+    <hr>
+
+    <h2>快速上手：3 分钟学会怎么用</h2>
+
+    <h3>第一步：打开信号主看板</h3>
+    <p>地址栏输入 <a href="https://signals.drifter.indevs.in">signals.drifter.indevs.in</a>。首页是信号矩阵总览：所有品种自动按信号强度排序。看哪些品种的共振分数最高。</p>
+
+    <h3>第二步：发现高共振品种</h3>
+    <p>假设看到「沪铜」分数最高，点击进入品种详情页。这里展示 5 个周期各自的信号方向：偏多/偏空/震荡 + 信号置信度。</p>
+
+    <h3>第三步：切换到 N 型结构验证</h3>
+    <p>切换到期货 K 线面板，沪铜当前 K 线图上自动标注了 ABC 三点和线段。如果多周期 N 型方向一致，就是高频信号。</p>
+
+    <h3>第四步：结合期权 IV 数据</h3>
+    <p>如果该品种有期权，切换到期权面板看 IV 百分位。低 IV + 强 N 型 = 低成本买入良机。</p>
+
+    <p>整个流程从传统的手工翻图 30 分钟，缩短到 <strong>2 分钟</strong>。</p>
+
+    <!-- CTA -->
+    <div class="blog-cta">
+      <h3>立即体验信号矩阵</h3>
+      <p>打开即可使用，无需注册，无需下载。覆盖 15+ 品种 × 5 个周期的实时信号矩阵 + N 型结构 + 期权 IV 分析。</p>
+      <a href="https://signals.drifter.indevs.in" class="btn">打开信号矩阵 →</a>
+    </div>
+
+  </div>
+
+  <footer class="blog-footer">
+    <span>文章编号：SIG-2026-006 · 数据截止：2026-06-21</span>
+    <span><strong>免责声明</strong>：本文所有信号数据仅作技术分析参考，不构成投资建议。期货/期权交易具有高风险，请根据自身风险承受能力谨慎决策。</span>
+    <a href="/blog">← 返回 Blog</a>
+  </footer>
+
+</article>
+
+</body>
+</html>

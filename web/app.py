@@ -283,6 +283,12 @@ def sitemap_xml():
     <priority>0.9</priority>
   </url>
   <url>
+    <loc>https://signals.drifter.indevs.in/blog/product-intro</loc>
+    <lastmod>2026-06-21</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
     <loc>https://futures.drifter.indevs.in/</loc>
     <lastmod>{futures_lastmod}</lastmod>
     <changefreq>daily</changefreq>
@@ -570,6 +576,12 @@ def blog_article_iv_nstructure():
 def blog_article_options_strategies():
     """期权策略实战：用 IV 百分位数据选策略。"""
     return render_template("blog_post_options_strategies.html")
+
+
+@app.route("/blog/product-intro")
+def blog_article_intro():
+    """产品介绍：免费多周期信号看板。"""
+    return render_template("blog_post_intro.html")
 
 
 # ── N 型结构动态重算辅助 ───────────────────────────────────────
