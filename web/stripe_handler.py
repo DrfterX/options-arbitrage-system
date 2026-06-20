@@ -87,10 +87,12 @@ def ensure_premium_table(db) -> None:
     """创建 premium_subscriptions 表（如不存在），并执行增量迁移。"""
     conn = db.get_conn()
     conn.execute(PREMIUM_TABLE_DDL)
-    # 增量迁移：为旧表补 subscription_id 列（CREATE TABLE IF NOT EXISTS 不会更新已存在的表）
+    # 增量迁移：为旧表补 subscription_id 列
     cols = {row[1] for row in conn.execute("PRAGMA table_info(premium_subscriptions)")}
     if "subscription_id" not in cols:
         conn.execute("ALTER TABLE premium_subscriptions ADD COLUMN subscription_id TEXT DEFAULT ''")
+    if "tier" not in cols:
+        conn.execute("ALTER TABLE premium_subscriptions ADD COLUMN tier TEXT DEFAULT 'premium'")
     conn.commit()
 
 
@@ -208,6 +210,7 @@ def _handle_checkout_completed(db, session: dict) -> None:
     email = session.get("customer_details", {}).get("email", "") or ""
     status = session.get("status", "complete")
     token = _generate_token()
+    tier = (session.get("metadata") or {}).get("tier", "premium")
 
     ensure_premium_table(db)
     conn = db.get_conn()
@@ -215,13 +218,13 @@ def _handle_checkout_completed(db, session: dict) -> None:
     try:
         conn.execute(
             """INSERT OR IGNORE INTO premium_subscriptions
-               (session_id, customer_id, subscription_id, email, status, token)
-               VALUES (?, ?, ?, ?, ?, ?)""",
+               (session_id, customer_id, subscription_id, email, status, token, tier)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
             (session_id, customer_id, subscription_id, email,
-             "active" if status == "complete" else status, token),
+             "active" if status == "complete" else status, token, tier),
         )
         conn.commit()
-        logger.info("订阅记录已写入: session=%s email=%s token=%s", session_id, email, token[:8] + "...")
+        logger.info("订阅记录已写入: session=%s email=%s tier=%s token=%s", session_id, email, tier, token[:8] + "...")
     except Exception as e:
         logger.error("写入订阅记录失败: %s", e)
 
@@ -256,6 +259,52 @@ def _update_subscription_status(db, subscription_id: str, status: str) -> None:
         (status, subscription_id, subscription_id),
     )
     conn.commit()
+
+
+# ─── 客户门户（管理订阅/取消/升级） ──────────────────────────
+
+
+def create_customer_portal_session(
+    db,
+    email: str,
+    base_url: str = "https://signals.drifter.indevs.in",
+) -> dict:
+    """创建 Stripe Customer Portal Session，返回管理门户链接。
+
+    Args:
+        db: Database 实例。
+        email: 用户邮箱。
+        base_url: 门户返回 URL。
+
+    Returns:
+        dict: {"url": "billing.stripe.com/..."} 或 {"error": "..."}
+    """
+    _ensure_configured()
+
+    # 查询该 email 的 Stripe customer_id
+    ensure_premium_table(db)
+    conn = db.get_conn()
+    row = conn.execute(
+        "SELECT customer_id FROM premium_subscriptions WHERE email=? AND status='active' ORDER BY id DESC LIMIT 1",
+        (email,),
+    ).fetchone()
+
+    customer_id = row["customer_id"] if row and row["customer_id"] else ""
+    if not customer_id:
+        logger.warning("未找到 %s 的 Stripe Customer，尝试创建临时门户", email)
+        # Stripe 允许传入 email 自动关联或创建客户
+        customer_id = email  # fallback: pass email as customer reference
+
+    try:
+        session = stripe.billing_portal.Session.create(
+            customer=customer_id,
+            return_url=f"{base_url}/pricing",
+        )
+        logger.info("Customer Portal 创建: email=%s url=%s", email, session.url)
+        return {"url": session.url}
+    except stripe.StripeError as e:
+        logger.error("Customer Portal 创建失败: %s", e)
+        return {"error": str(e)}
 
 
 # ─── 状态查询 ──────────────────────────────────────────────────

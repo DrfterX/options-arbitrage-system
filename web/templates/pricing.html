@@ -808,6 +808,30 @@ function doCheckout(tier) {
 function handleProCheckout() { doCheckout('pro'); }
 function handlePremiumCheckout() { doCheckout('premium'); }
 
+/* ── Subscription Management Portal ── */
+function openCustomerPortal() {
+  var token = getAuthToken();
+  if (!token) { showLoginModal(); return; }
+  fetch('/api/pricing/user-status', {
+    headers: {'Authorization': 'Bearer ' + token}
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (!d.logged_in || !d.email) { showToast('请重新登录', '⚠️'); return; }
+    return fetch('/api/customer-portal', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token},
+      body: JSON.stringify({email: d.email})
+    });
+  })
+  .then(function(r) { return r ? r.json() : null; })
+  .then(function(d) {
+    if (d && d.url) { window.location.href = d.url; }
+    else { showToast(d && d.error ? d.error : '创建管理链接失败', '❌'); }
+  })
+  .catch(function() { showToast('网络错误，请稍后重试', '❌'); });
+}
+
 /* ── Auto-detect auth state on load ── */
 (function() {
   var token = getAuthToken();
@@ -837,26 +861,37 @@ function handlePremiumCheckout() { doCheckout('premium'); }
 
     greeting.textContent = '👋 ' + d.email;
 
-    if (d.plan === 'premium') {
-      // 后端 plan:'premium' = 我们的 Pro 付费订阅（$19/月）
+    if (d.plan === 'pro') {
       planDisplay.innerHTML = '当前方案: <span class="psb-plan">Pro</span>';
       trialDisplay.textContent = '';
-      actions.innerHTML = '<span class="psb-btn" style="cursor:pointer" onclick="clearAuthToken();window.location.reload()">退出登录</span>';
+      actions.innerHTML = '<a href="/subscribe" class="psb-btn" target="_blank">🤖 Bot 订阅</a> <span class="psb-btn" style="cursor:pointer" onclick="openCustomerPortal()">⚙️ 管理订阅</span> <span class="psb-btn" style="cursor:pointer" onclick="clearAuthToken();window.location.reload()">退出登录</span>';
       document.getElementById('proBadge').style.display = '';
       document.getElementById('proCta').textContent = '✓ 已订阅';
       document.getElementById('proCta').disabled = true;
       document.getElementById('freeCta').textContent = '降级至免费';
-      document.getElementById('freeCta').onclick = function() { showToast('如需降级，请联系 support', 'ℹ️'); };
+      document.getElementById('freeCta').onclick = function() { showToast('如需降级，请使用「管理订阅」', 'ℹ️'); };
+      document.getElementById('premiumCta').textContent = '升级 Premium →';
+    } else if (d.plan === 'premium') {
+      planDisplay.innerHTML = '当前方案: <span class="psb-plan">Premium</span>';
+      trialDisplay.textContent = '';
+      actions.innerHTML = '<a href="/subscribe" class="psb-btn" target="_blank">🤖 Bot 订阅</a> <span class="psb-btn" style="cursor:pointer" onclick="openCustomerPortal()">⚙️ 管理订阅</span> <span class="psb-btn" style="cursor:pointer" onclick="clearAuthToken();window.location.reload()">退出登录</span>';
+      document.getElementById('premiumBadge').style.display = '';
+      document.getElementById('premiumCta').textContent = '✓ 已订阅';
+      document.getElementById('premiumCta').disabled = true;
+      document.getElementById('freeCta').textContent = '降级至免费';
+      document.getElementById('freeCta').onclick = function() { showToast('如需降级，请使用「管理订阅」', 'ℹ️'); };
+      document.getElementById('proCta').textContent = '⚡ Pro';
+      document.getElementById('proCta').disabled = false;
     } else if (d.trial_days_remaining > 0) {
       planDisplay.innerHTML = '当前方案: <span class="psb-plan">免费试用</span>';
       trialDisplay.innerHTML = '<span class="psb-trial">剩余 ' + d.trial_days_remaining + ' 天</span>';
-      actions.innerHTML = '<span class="psb-btn" style="cursor:pointer;color:var(--brand)" onclick="doCheckout(\'pro\')">升级 Pro →</span> <span class="psb-btn" style="cursor:pointer" onclick="clearAuthToken();window.location.reload()">退出登录</span>';
+      actions.innerHTML = '<span class="psb-btn" style="cursor:pointer;color:var(--brand)" onclick="doCheckout(\'pro\')">升级 Pro →</span> <span class="psb-btn" style="cursor:pointer;color:var(--purple)" onclick="doCheckout(\'premium\')">升级 Premium →</span> <span class="psb-btn" style="cursor:pointer" onclick="clearAuthToken();window.location.reload()">退出登录</span>';
       document.getElementById('freeCta').textContent = '✓ 试用中 (' + d.trial_days_remaining + '天)';
       document.getElementById('freeCta').disabled = true;
     } else {
       planDisplay.innerHTML = '当前方案: <span class="psb-plan">免费版</span>';
       trialDisplay.innerHTML = '<span class="psb-trial">(试用已过期)</span>';
-      actions.innerHTML = '<span class="psb-btn" style="cursor:pointer;color:var(--brand)" onclick="doCheckout(\'pro\')">升级 Pro →</span> <span class="psb-btn" style="cursor:pointer" onclick="clearAuthToken();window.location.reload()">退出登录</span>';
+      actions.innerHTML = '<span class="psb-btn" style="cursor:pointer;color:var(--brand)" onclick="doCheckout(\'pro\')">升级 Pro →</span> <span class="psb-btn" style="cursor:pointer;color:var(--purple)" onclick="doCheckout(\'premium\')">升级 Premium →</span> <span class="psb-btn" style="cursor:pointer" onclick="clearAuthToken();window.location.reload()">退出登录</span>';
       document.getElementById('freeCta').textContent = '✓ 当前方案';
       document.getElementById('freeCta').disabled = true;
     }

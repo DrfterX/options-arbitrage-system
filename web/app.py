@@ -1678,6 +1678,34 @@ def api_stripe_webhook():
     return jsonify(result)
 
 
+@app.route("/api/customer-portal", methods=["POST"])
+def api_customer_portal():
+    """创建 Stripe Customer Portal 会话（管理订阅/取消/升级）。
+
+    POST JSON body:
+        email (str): 用户邮箱
+
+    Returns:
+        {"url": "billing.stripe.com/..."}
+    """
+    from web.stripe_handler import create_customer_portal_session
+
+    data = request.get_json() or {}
+    email = data.get("email", "")
+    if not email:
+        return jsonify({"error": "缺少 email"}), 400
+
+    import os
+    base_url = os.environ.get(
+        "SIGNALS_BASE_URL",
+        "https://signals.drifter.indevs.in",
+    )
+    result = create_customer_portal_session(db, email=email, base_url=base_url)
+    if "error" in result:
+        return jsonify(result), 500
+    return jsonify(result)
+
+
 @app.route("/api/premium/status")
 def api_premium_status():
     """查询付费订阅状态。
@@ -2295,7 +2323,7 @@ def api_pricing_user_status():
     premium = None
     try:
         p_row = conn.execute(
-            """SELECT status, created_at, session_id, subscription_id, customer_id
+            """SELECT status, created_at, session_id, subscription_id, customer_id, tier
                FROM premium_subscriptions WHERE email = ? AND status = 'active'
                ORDER BY id DESC LIMIT 1""",
             (email,),
@@ -2306,11 +2334,16 @@ def api_pricing_user_status():
                 "status": p_row["status"],
                 "created_at": p_row["created_at"],
                 "session_id": p_row["session_id"],
+                "tier": p_row.get("tier", "premium"),
             }
     except Exception:
         pass
 
-    plan = "premium" if premium else "free"
+    # 根据实际 tier 返回计划名称
+    if premium:
+        plan = premium.get("tier", "premium")
+    else:
+        plan = "free"
 
     return jsonify({
         "logged_in": True,
