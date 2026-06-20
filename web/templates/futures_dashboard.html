@@ -580,18 +580,11 @@
   opacity: .5;
   cursor: not-allowed;
 }
-.lm-toggle {
-  text-align: center;
-  margin-top: 14px;
-  font-size: .62rem;
-  color: var(--text3);
-}
-.lm-toggle a {
-  color: var(--brand);
-  text-decoration: none;
-  font-weight: 600;
-}
-.lm-toggle a:hover { text-decoration: underline; }
+/* ── Auth tabs (login / register) ── */
+.auth-tabs { display:flex; gap:0; margin-bottom:12px; border-bottom:1px solid var(--border); }
+.auth-tab { font-size:.7rem; color:var(--text3); padding:5px 14px 6px; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; font-weight:600; letter-spacing:.03em; transition:all .2s; font-family:var(--font-ui); }
+.auth-tab:hover { color:var(--text); }
+.auth-tab.active { color:var(--brand); border-bottom-color:var(--brand); }
 
 /* Position panel error state — skeleton + light red hint */
 .pos-error {
@@ -2168,24 +2161,38 @@ function dismissWelcome() {
 (function(){var b=document.getElementById('densityBtn'),d=localStorage.getItem('density');if(d){document.body.setAttribute('data-density',d);if(b)b.textContent='▣ '+(d==='compact'?'紧凑':'舒适')}window.toggleDensity=function(){var c=document.body.getAttribute('data-density'),n=c==='compact'?'comfortable':'compact';document.body.setAttribute('data-density',n);localStorage.setItem('density',n);if(b)b.textContent='▣ '+(n==='compact'?'紧凑':'舒适')}})();
 </script>
 
-<!-- ─── LOGIN MODAL ─── -->
+<!-- ─── LOGIN / REGISTER MODAL ─── -->
 <div class="login-overlay" id="loginOverlay" style="display:none;">
   <div class="login-modal">
     <button class="login-close" onclick="hideLoginModal()">✕</button>
-    <div class="lm-title">🔑 登录信号矩阵</div>
-    <div class="lm-sub">登录后即可解锁 15 分钟实时数据</div>
-    <div class="lm-error" id="loginError" style="display:none"></div>
-    <input class="lm-input" id="loginEmail" type="email" placeholder="邮箱" autocomplete="email" onkeydown="if(event.key==='Enter')handleLogin()">
-    <input class="lm-input" id="loginPassword" type="password" placeholder="密码" autocomplete="current-password" onkeydown="if(event.key==='Enter')handleLogin()">
-    <button class="lm-btn" id="loginBtn" onclick="handleLogin()">🔑 登录 → 解锁实时数据</button>
-    <div class="lm-toggle">
-      <span>还没有账号？</span>
-      <a href="https://signals.drifter.indevs.in">前往注册 →</a>
+    <!-- Tab bar -->
+    <div class="auth-tabs">
+      <span class="auth-tab active" id="tabLogin" onclick="switchAuthTab('login')">登录</span>
+      <span class="auth-tab" id="tabRegister" onclick="switchAuthTab('register')">注册</span>
+    </div>
+
+    <!-- ── Login form ── -->
+    <div id="authLoginForm">
+      <div class="lm-sub">登录后即可解锁 15 分钟实时数据</div>
+      <div class="lm-error" id="loginError" style="display:none"></div>
+      <input class="lm-input" id="loginEmail" type="email" placeholder="邮箱" autocomplete="email">
+      <input class="lm-input" id="loginPassword" type="password" placeholder="密码" autocomplete="current-password">
+      <button class="lm-btn" id="loginBtn" onclick="handleLogin()">🔑 登录 → 解锁实时数据</button>
+    </div>
+
+    <!-- ── Register form ── -->
+    <div id="authRegisterForm" style="display:none">
+      <div class="lm-sub">创建账号，即享 7 天免费试用</div>
+      <div class="lm-error" id="regError" style="display:none"></div>
+      <input class="lm-input" id="regEmail" type="email" placeholder="邮箱" autocomplete="email">
+      <input class="lm-input" id="regPassword" type="password" placeholder="至少 6 位密码" autocomplete="new-password">
+      <input class="lm-input" id="regConfirm" type="password" placeholder="再次输入密码" autocomplete="new-password">
+      <button class="lm-btn" id="regBtn" onclick="handleRegister()">✨ 注册并开始试用 →</button>
     </div>
   </div>
 </div>
 
-<!-- ─── AUTH: token management & login modal logic ─── -->
+<!-- ─── AUTH: token management & login/register modal logic ─── -->
 <script>
 /* ── Auth Token Helpers ── */
 function getAuthToken() { try { return localStorage.getItem('session_token'); } catch(e) { return null; } }
@@ -2196,10 +2203,32 @@ function clearAuthToken() {
   try { localStorage.removeItem('session_token'); localStorage.removeItem('auth_email'); } catch(e) {}
 }
 
+/* ── Tab switching ── */
+function switchAuthTab(tab) {
+  document.getElementById('tabLogin').classList.toggle('active', tab === 'login');
+  document.getElementById('tabRegister').classList.toggle('active', tab === 'register');
+  document.getElementById('authLoginForm').style.display = tab === 'login' ? '' : 'none';
+  document.getElementById('authRegisterForm').style.display = tab === 'register' ? '' : 'none';
+  var le = document.getElementById('loginError'); if (le) le.style.display = 'none';
+  var re = document.getElementById('regError'); if (re) re.style.display = 'none';
+  if (tab === 'login') {
+    var le2 = document.getElementById('loginEmail'); if (le2) le2.focus();
+  } else {
+    var re2 = document.getElementById('regEmail'); if (re2) re2.focus();
+  }
+}
+
 /* ── Login Modal ── */
 function showLoginModal() {
   var el = document.getElementById('loginOverlay');
   if (el) el.style.display = '';
+  switchAuthTab('login');
+  ['loginEmail','loginPassword','regEmail','regPassword','regConfirm'].forEach(function(id) {
+    var f = document.getElementById(id); if (f) f.value = '';
+  });
+  var le = document.getElementById('loginError'); if (le) le.style.display = 'none';
+  var re = document.getElementById('regError'); if (re) re.style.display = 'none';
+  var le2 = document.getElementById('loginEmail'); if (le2) le2.focus();
 }
 function hideLoginModal() {
   var el = document.getElementById('loginOverlay');
@@ -2259,6 +2288,76 @@ function handleLogin() {
   });
 }
 
+/* ── Handle Register ── */
+function showToast(msg, icon) {
+  var t = document.getElementById('authToast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'authToast';
+    t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:10001;background:var(--card);border:1px solid var(--border-light);border-radius:var(--radius-md);padding:10px 20px;font-size:.7rem;color:var(--text);box-shadow:0 4px 24px rgba(0,0,0,.4);opacity:0;transition:opacity .3s;font-family:var(--font-ui);display:flex;align-items:center;gap:8px;pointer-events:none';
+    document.body.appendChild(t);
+  }
+  t.innerHTML = (icon || '✅') + ' ' + msg;
+  t.style.opacity = '1';
+  setTimeout(function() { t.style.opacity = '0'; }, 4000);
+}
+
+function handleRegister() {
+  var email = document.getElementById('regEmail').value.trim();
+  var password = document.getElementById('regPassword').value;
+  var confirm = document.getElementById('regConfirm').value;
+  var btn = document.getElementById('regBtn');
+  var errorEl = document.getElementById('regError');
+  if (errorEl) errorEl.style.display = 'none';
+  if (!email) { if (errorEl) { errorEl.textContent = '请输入邮箱'; errorEl.style.display = ''; } return; }
+  if (!password) { if (errorEl) { errorEl.textContent = '请输入密码'; errorEl.style.display = ''; } return; }
+  if (password.length < 6) { if (errorEl) { errorEl.textContent = '密码至少需要 6 个字符'; errorEl.style.display = ''; } return; }
+  if (password !== confirm) { if (errorEl) { errorEl.textContent = '两次密码输入不一致'; errorEl.style.display = ''; } return; }
+  btn.disabled = true;
+  btn.textContent = '⏳ 注册中...';
+  fetch('/api/auth/register', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({email: email, password: password})
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d.ok) {
+      btn.textContent = '✅ 注册成功，正在登录...';
+      // Auto-login after successful registration
+      return fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({email: email, password: password})
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(loginD) {
+        if (loginD.ok && loginD.token) {
+          setAuthToken(loginD.token, loginD.email);
+          hideLoginModal();
+          var db = document.getElementById('delayBar');
+          if (db) db.classList.add('hidden');
+          showToast('7 天试用已激活', '🎉');
+          setTimeout(function() { window.location.reload(); }, 1000);
+        } else {
+          btn.disabled = false;
+          btn.textContent = '✨ 注册并开始试用 →';
+          if (errorEl) { errorEl.textContent = loginD.error || '自动登录失败，请手动登录'; errorEl.style.display = ''; }
+        }
+      });
+    } else {
+      btn.disabled = false;
+      btn.textContent = '✨ 注册并开始试用 →';
+      if (errorEl) { errorEl.textContent = d.error || '注册失败'; errorEl.style.display = ''; }
+    }
+  })
+  .catch(function() {
+    btn.disabled = false;
+    btn.textContent = '✨ 注册并开始试用 →';
+    if (errorEl) { errorEl.textContent = '网络错误，请稍后重试'; errorEl.style.display = ''; }
+  });
+}
+
 /* ── Patch window.fetch to include auth token on all /api/ calls ── */
 (function() {
   var origFetch = window.fetch;
@@ -2272,6 +2371,20 @@ function handleLogin() {
     return origFetch.call(this, url, opts);
   };
 })();
+
+/* ── Enter key handlers for login/register fields ── */
+document.addEventListener('DOMContentLoaded', function() {
+  var le = document.getElementById('loginEmail');
+  if (le) le.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); document.getElementById('loginPassword').focus(); } });
+  var lp = document.getElementById('loginPassword');
+  if (lp) lp.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); handleLogin(); } });
+  var re = document.getElementById('regEmail');
+  if (re) re.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); document.getElementById('regPassword').focus(); } });
+  var rp = document.getElementById('regPassword');
+  if (rp) rp.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); document.getElementById('regConfirm').focus(); } });
+  var rc = document.getElementById('regConfirm');
+  if (rc) rc.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); handleRegister(); } });
+});
 
 /* ── Verify token on page load ── */
 (function() {

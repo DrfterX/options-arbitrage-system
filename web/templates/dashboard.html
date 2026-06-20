@@ -40,6 +40,12 @@
 .nav-tab:hover { color:var(--text); background:rgba(90,97,115,.08); }
 .nav-tab.active { color:var(--brand); background:var(--brand-bg); font-weight:500; }
 .nav-tab-icon { font-size:.7rem; opacity:.7; }
+/* ─── Auth tabs (login / register) ─── */
+.auth-tabs { display:flex; gap:0; margin-bottom:14px; border-bottom:1px solid var(--border); }
+.auth-tab { font-size:.7rem; color:var(--text3); padding:6px 16px 7px; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; font-weight:500; letter-spacing:.03em; transition:all .2s; font-family:var(--font-ui); }
+.auth-tab:hover { color:var(--text); }
+.auth-tab.active { color:var(--brand); border-bottom-color:var(--brand); }
+.auth-tab-sub { font-size:.6rem; color:var(--text3); margin-bottom:14px; line-height:1.4; }
 </style>
 </head>
 <body>
@@ -1115,46 +1121,91 @@ setInterval(function() {
 (function(){var b=document.getElementById('densityBtn'),d=localStorage.getItem('density');if(d){document.body.setAttribute('data-density',d);if(b)b.textContent='▣ '+(d==='compact'?'紧凑':'舒适')}window.toggleDensity=function(){var c=document.body.getAttribute('data-density'),n=c==='compact'?'comfortable':'compact';document.body.setAttribute('data-density',n);localStorage.setItem('density',n);if(b)b.textContent='▣ '+(n==='compact'?'紧凑':'舒适')}})();
 </script>
 
-<!-- ─── Login Modal ─── -->
+<!-- ─── Login / Register Modal ─── -->
 <div class="login-modal" id="loginModal">
   <div class="login-modal-box">
     <button class="login-modal-close" onclick="closeLoginModal()">✕</button>
-    <div class="login-modal-title">🔑 登录</div>
-    <div class="login-modal-sub">登录后解锁实时数据</div>
-    <div class="login-field">
-      <label>邮箱</label>
-      <input type="email" id="loginEmail" placeholder="your@email.com" autocomplete="email">
+    <!-- Tab bar -->
+    <div class="auth-tabs">
+      <span class="auth-tab active" id="tabLogin" onclick="switchAuthTab('login')">登录</span>
+      <span class="auth-tab" id="tabRegister" onclick="switchAuthTab('register')">注册</span>
     </div>
-    <div class="login-field">
-      <label>密码</label>
-      <input type="password" id="loginPassword" placeholder="密码" autocomplete="current-password">
+
+    <!-- ── Login form ── -->
+    <div id="authLoginForm">
+      <div class="auth-tab-sub">登录后解锁实时数据</div>
+      <div class="login-field">
+        <label>邮箱</label>
+        <input type="email" id="loginEmail" placeholder="your@email.com" autocomplete="email">
+      </div>
+      <div class="login-field">
+        <label>密码</label>
+        <input type="password" id="loginPassword" placeholder="密码" autocomplete="current-password">
+      </div>
+      <button class="login-modal-btn" id="loginBtn" onclick="handleLogin()">登录 →</button>
+      <div class="login-modal-error" id="loginError">邮箱或密码错误</div>
     </div>
-    <button class="login-modal-btn" id="loginBtn" onclick="handleLogin()">登录 →</button>
-    <div class="login-modal-error" id="loginError">邮箱或密码错误</div>
-    <div class="login-modal-switch">
-      还没有账号？<a href="https://signals.drifter.indevs.in" onclick="closeLoginModal()">去注册 →</a>
+
+    <!-- ── Register form ── -->
+    <div id="authRegisterForm" style="display:none">
+      <div class="auth-tab-sub">创建账号，即享 7 天免费试用</div>
+      <div class="login-field">
+        <label>邮箱</label>
+        <input type="email" id="regEmail" placeholder="your@email.com" autocomplete="email">
+      </div>
+      <div class="login-field">
+        <label>密码</label>
+        <input type="password" id="regPassword" placeholder="至少 6 位密码" autocomplete="new-password">
+      </div>
+      <div class="login-field">
+        <label>确认密码</label>
+        <input type="password" id="regConfirm" placeholder="再次输入密码" autocomplete="new-password">
+      </div>
+      <button class="login-modal-btn" id="regBtn" onclick="handleRegister()">注册并开始试用 →</button>
+      <div class="login-modal-error" id="regError">注册失败</div>
     </div>
   </div>
 </div>
 
 <script>
-/* ── AUTH: Token management & login modal ── */
+/* ── AUTH: Token management & login/register modal ── */
 
 function getAuthToken() { return localStorage.getItem('session_token'); }
 function setAuthToken(t) { localStorage.setItem('session_token', t); }
 function clearAuthToken() { localStorage.removeItem('session_token'); }
 
+/* ── Tab switching ── */
+function switchAuthTab(tab) {
+  document.getElementById('tabLogin').classList.toggle('active', tab === 'login');
+  document.getElementById('tabRegister').classList.toggle('active', tab === 'register');
+  document.getElementById('authLoginForm').style.display = tab === 'login' ? '' : 'none';
+  document.getElementById('authRegisterForm').style.display = tab === 'register' ? '' : 'none';
+  document.getElementById('loginError').style.display = 'none';
+  document.getElementById('regError').style.display = 'none';
+  if (tab === 'login') {
+    document.getElementById('loginEmail').focus();
+  } else {
+    document.getElementById('regEmail').focus();
+  }
+}
+
 function showLoginModal() {
   document.getElementById('loginModal').classList.add('show');
+  switchAuthTab('login');
   document.getElementById('loginEmail').value = '';
   document.getElementById('loginPassword').value = '';
+  document.getElementById('regEmail').value = '';
+  document.getElementById('regPassword').value = '';
+  document.getElementById('regConfirm').value = '';
   document.getElementById('loginError').style.display = 'none';
+  document.getElementById('regError').style.display = 'none';
   document.getElementById('loginEmail').focus();
 }
 function closeLoginModal() {
   document.getElementById('loginModal').classList.remove('show');
 }
 
+/* ── Handle Login ── */
 function handleLogin() {
   var email = document.getElementById('loginEmail').value.trim();
   var password = document.getElementById('loginPassword').value;
@@ -1191,6 +1242,78 @@ function handleLogin() {
   .catch(function(e) {
     btn.classList.remove('loading');
     btn.textContent = '登录 →';
+    errorEl.textContent = '网络错误，请稍后重试';
+    errorEl.style.display = '';
+  });
+}
+
+/* ── Handle Register ── */
+function showToast(msg, icon) {
+  var t = document.getElementById('authToast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'authToast';
+    t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:10001;background:var(--card);border:1px solid var(--border-light);border-radius:var(--radius-md);padding:10px 20px;font-size:.7rem;color:var(--text);box-shadow:0 4px 24px rgba(0,0,0,.4);opacity:0;transition:opacity .3s;font-family:var(--font-ui);display:flex;align-items:center;gap:8px;pointer-events:none';
+    document.body.appendChild(t);
+  }
+  t.innerHTML = (icon || '✅') + ' ' + msg;
+  t.style.opacity = '1';
+  setTimeout(function() { t.style.opacity = '0'; }, 4000);
+}
+
+function handleRegister() {
+  var email = document.getElementById('regEmail').value.trim();
+  var password = document.getElementById('regPassword').value;
+  var confirm = document.getElementById('regConfirm').value;
+  var btn = document.getElementById('regBtn');
+  var errorEl = document.getElementById('regError');
+  errorEl.style.display = 'none';
+  if (!email) { errorEl.textContent = '请输入邮箱'; errorEl.style.display = ''; return; }
+  if (!password) { errorEl.textContent = '请输入密码'; errorEl.style.display = ''; return; }
+  if (password.length < 6) { errorEl.textContent = '密码至少需要 6 个字符'; errorEl.style.display = ''; return; }
+  if (password !== confirm) { errorEl.textContent = '两次密码输入不一致'; errorEl.style.display = ''; return; }
+  btn.textContent = '⏳ 注册中…';
+  btn.classList.add('loading');
+  fetch('/api/auth/register', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({email: email, password: password})
+  })
+  .then(function(r) { return r.json().then(function(d) { d._status = r.status; return d; }); })
+  .then(function(d) {
+    btn.classList.remove('loading');
+    if (d.ok) {
+      btn.textContent = '✅ 注册成功，正在登录…';
+      // Auto-login after successful registration
+      return fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({email: email, password: password})
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(loginD) {
+        if (loginD.ok && loginD.token) {
+          setAuthToken(loginD.token);
+          closeLoginModal();
+          var db = document.getElementById('delayBar');
+          if (db) db.classList.add('hidden');
+          showToast('7 天试用已激活', '🎉');
+          setTimeout(function() { window.location.reload(); }, 1000);
+        } else {
+          btn.textContent = '注册并开始试用 →';
+          errorEl.textContent = loginD.error || '自动登录失败，请手动登录';
+          errorEl.style.display = '';
+        }
+      });
+    } else {
+      btn.textContent = '注册并开始试用 →';
+      errorEl.textContent = d.error || '注册失败';
+      errorEl.style.display = '';
+    }
+  })
+  .catch(function(e) {
+    btn.classList.remove('loading');
+    btn.textContent = '注册并开始试用 →';
     errorEl.textContent = '网络错误，请稍后重试';
     errorEl.style.display = '';
   });
@@ -1243,6 +1366,25 @@ document.addEventListener('DOMContentLoaded', function() {
   if (emailInput) {
     emailInput.addEventListener('keydown', function(e) {
       if (e.key === 'Enter') { e.preventDefault(); document.getElementById('loginPassword').focus(); }
+    });
+  }
+  /* Register form Enter keys */
+  var regPw = document.getElementById('regPassword');
+  if (regPw) {
+    regPw.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') { e.preventDefault(); document.getElementById('regConfirm').focus(); }
+    });
+  }
+  var regConfirm = document.getElementById('regConfirm');
+  if (regConfirm) {
+    regConfirm.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') { e.preventDefault(); handleRegister(); }
+    });
+  }
+  var regEmail = document.getElementById('regEmail');
+  if (regEmail) {
+    regEmail.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') { e.preventDefault(); document.getElementById('regPassword').focus(); }
     });
   }
 });
