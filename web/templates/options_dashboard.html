@@ -1035,19 +1035,19 @@ var IV_DATA = JSON.parse('{{ iv_json|safe }}');
   var chart = echarts.init(el, null, { renderer: 'canvas' });
   chart.setOption({
     backgroundColor: 'transparent',
-    grid: { top: 20, right: 24, bottom: 140, left: 52 },
+    grid: { top: 20, right: 24, bottom: Math.max(60, Math.min(200, 50 + IV_DATA.length * 2.5)), left: 52 },
     xAxis: {
       type: 'category',
       data: IV_DATA.map(function(d){ return (d.symbol||'').toUpperCase(); }),
       axisLabel: {
-        color: '#8b92a5', fontSize: 8, interval: Math.max(0, Math.floor(IV_DATA.length / 18)), rotate: 30,
+        color: '#8b92a5', fontSize: 8, interval: IV_DATA.length > 50 ? Math.floor(IV_DATA.length / 30) : 0, rotate: 30,
         lineHeight: 16, margin: 4,
         formatter: function(val, idx) {
           var d = IV_DATA[idx];
           if (!d) return val;
           var sym = (d.symbol || '').toUpperCase();
           var cname = (d.name && d.name !== d.symbol) ? d.name : '';
-          return cname ? sym + '\n' + cname : sym;
+          return cname ? sym + ' · ' + cname : sym;
         },
       },
       axisLine: { lineStyle: { color: 'rgba(26,32,64,.5)' } },
@@ -1091,7 +1091,7 @@ var IV_DATA = JSON.parse('{{ iv_json|safe }}');
         }
         return { value: d.percentile, itemStyle: { color: color, borderRadius: [3, 3, 0, 0] } };
       }),
-      barWidth: '70%',
+      barWidth: Math.min(70, Math.max(30, 2800 / IV_DATA.length)) + '%',
       barCategoryGap: '25%',
     }]
   });
