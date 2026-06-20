@@ -1560,6 +1560,43 @@ table tbody tr {
 }
 .reg-btn:active { transform: scale(.96); }
 
+/* ── User plan status badge (topbar) ── */
+.user-plan-badge { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.plan-badge-pill {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 2px 8px; border-radius: 3px;
+  font-size: .58rem; font-weight: 600; font-family: var(--font-ui);
+  letter-spacing: .03em; white-space: nowrap;
+  cursor: default;
+}
+.plan-badge-pill.trial { color: #f0b429; background: rgba(240,180,41,.1); border: 1px solid rgba(240,180,41,.15); }
+.plan-badge-pill.pro { color: #60a5fa; background: rgba(96,165,250,.08); border: 1px solid rgba(96,165,250,.15); }
+.plan-badge-pill.premium { color: #f0b429; background: rgba(240,180,41,.1); border: 1px solid rgba(240,180,41,.2); }
+.upgrade-btn {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 2px 9px; border-radius: 3px;
+  font-size: .58rem; font-weight: 600; font-family: var(--font-ui);
+  letter-spacing: .03em; white-space: nowrap;
+  color: #000; background: var(--brand);
+  cursor: pointer; text-decoration: none;
+  transition: all .15s var(--ease-out);
+  border: none;
+}
+.upgrade-btn:hover { background: #f5c542; box-shadow: 0 0 10px rgba(240,180,41,.25); }
+.upgrade-btn:active { transform: scale(.95); }
+.upgrade-btn .icon { font-size: .5rem; }
+
+/* ── Upgrade CTA link in delay bar ── */
+.delay-bar .dl-upgrade {
+  flex-shrink: 0;
+  font-size: .58rem; padding: 2px 9px; border-radius: 3px;
+  color: #000; background: var(--brand);
+  text-decoration: none; font-weight: 600; font-family: var(--font-ui);
+  transition: all .15s var(--ease-out);
+  white-space: nowrap;
+}
+.delay-bar .dl-upgrade:hover { background: #f5c542; box-shadow: 0 0 8px rgba(240,180,41,.2); }
+
 /* ═══════════════════════════════════════════════════════════════
    B.4.3 — 微交互打磨：Stagger Reveal / Hover 增强 / 数字过渡
    ═══════════════════════════════════════════════════════════════ */

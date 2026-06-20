@@ -837,6 +837,7 @@
       <a href="/pricing" class="nav-tab premium-tab"><span class="nav-tab-icon">✦</span> 定价</a>
 	      <a href="/api/docs" class="nav-tab"><span class="nav-tab-icon">⎔</span> API</a>
     </div>
+    <span class="user-plan-badge" id="userPlanBadge"></span>
     <span class="data-badge" id="optionCount">{{ options|length }} 策略</span>
     <span class="topbar-time">{{ now }}</span>
     <button class="density-btn" onclick="toggleDensity()" title="切换显示密度" id="densityBtn">▣ 舒适</button>
@@ -851,6 +852,7 @@
 <div class="delay-bar" id="delayBar">
   <span class="dl-icon">⏱️</span>
   <span class="dl-text">{{ delayed_warning }}</span>
+  <a href="/pricing" class="dl-upgrade">升级 Pro ✦</a>
   <span class="dl-close" onclick="document.getElementById('delayBar').classList.add('hidden')">✕</span>
 </div>
 {% endif %}
@@ -1916,6 +1918,40 @@ function handleRegister() {
   });
 }
 
+/* ── Fetch user plan status & render plan badge in topbar ── */
+function fetchUserStatus() {
+  var badge = document.getElementById('userPlanBadge');
+  if (!badge) return;
+  var token = getAuthToken();
+  if (!token) {
+    badge.innerHTML = '<a href="/pricing" class="upgrade-btn">✦ 升级 Pro</a>';
+    return;
+  }
+  fetch('/api/pricing/user-status', {
+    headers: {'Authorization': 'Bearer ' + token}
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (!d.logged_in) {
+      badge.innerHTML = '<a href="/pricing" class="upgrade-btn">✦ 升级 Pro</a>';
+      return;
+    }
+    if (d.plan === 'premium') {
+      badge.innerHTML = '<span class="plan-badge-pill premium">✦ Premium</span>';
+    } else if (d.plan === 'pro') {
+      badge.innerHTML = '<span class="plan-badge-pill pro">✦ Pro</span>';
+    } else if (d.trial_days_remaining > 0) {
+      badge.innerHTML = '<span class="plan-badge-pill trial">✦ 试用 ' + d.trial_days_remaining + '天</span>'
+        + '<a href="/pricing" class="upgrade-btn">升级 ✦</a>';
+    } else {
+      badge.innerHTML = '<a href="/pricing" class="upgrade-btn">✦ 升级 Pro</a>';
+    }
+  })
+  .catch(function() {
+    badge.innerHTML = '<a href="/pricing" class="upgrade-btn">✦ 升级 Pro</a>';
+  });
+}
+
 // Auto-attach Bearer token to all fetch requests
 (function() {
   var token = getAuthToken();
@@ -1953,6 +1989,7 @@ document.addEventListener('click', function(e) {
 });
 
 document.addEventListener('DOMContentLoaded', function() {
+  fetchUserStatus();
   var pwInput = document.getElementById('loginPassword');
   if (pwInput) {
     pwInput.addEventListener('keydown', function(e) {
