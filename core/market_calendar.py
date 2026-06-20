@@ -28,7 +28,7 @@ import os
 import pickle
 import sys
 import time
-from typing import Optional
+from typing import Optional, Literal
 
 import akshare as ak
 import pandas as pd
@@ -153,6 +153,57 @@ def has_night_session(dt: Optional[datetime.date] = None) -> bool:
     # 明天如果是非交易日 → 今晚夜盘取消
     tomorrow = dt + datetime.timedelta(days=1)
     return is_trading_day(tomorrow)
+
+
+# ============================================================
+# 交易时段检测
+# ============================================================
+
+# 日盘交易时间窗口（北京时间）
+# 上午连续：09:00-11:30（中间不拆分）
+# 下午连续：13:30-15:00
+_DAY_SESSION_WINDOWS = [
+    (9 * 60 + 0, 11 * 60 + 30),    # 09:00-11:30
+    (13 * 60 + 30, 15 * 60 + 0),    # 13:30-15:00
+]
+
+# 夜盘交易时间窗口（北京时间）
+# 绝大多数品种统一 21:00-23:00
+_NIGHT_SESSION_WINDOWS = [
+    (21 * 60 + 0, 23 * 60 + 0),     # 21:00-23:00
+]
+
+
+def _current_bj_minutes() -> int:
+    """返回当前北京时间距离 00:00 的分钟数。"""
+    bj_now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=8)))
+    return bj_now.hour * 60 + bj_now.minute
+
+
+def get_current_session() -> Literal["day", "night", "closed"]:
+    """判断当前所在的交易时段。
+
+    返回:
+        "day"   — 日盘交易时段（北京时间 09:00-11:30 或 13:30-15:00，且今天为交易日）
+        "night" — 夜盘交易时段（北京时间 21:00-23:00，且今天有夜盘）
+        "closed" — 非交易时段（非交易日 / 日盘间隙 / 夜盘结束后）
+    """
+    today = datetime.date.today()
+    now_minutes = _current_bj_minutes()
+
+    # 先检查是否在日盘窗口
+    if is_trading_day(today):
+        for start, end in _DAY_SESSION_WINDOWS:
+            if start <= now_minutes < end:
+                return "day"
+
+    # 再检查是否在夜盘窗口（需要有夜盘的交易日）
+    if has_night_session(today):
+        for start, end in _NIGHT_SESSION_WINDOWS:
+            if start <= now_minutes < end:
+                return "night"
+
+    return "closed"
 
 
 def refresh_cache() -> None:

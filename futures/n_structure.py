@@ -28,7 +28,7 @@ from typing import Any, Dict, List, Optional
 
 from core.db import Database
 from config.settings import DETECT_WINDOWS, LEVEL3_TIMEFRAME
-from futures.shared import _get_active_n_structure
+from futures.shared import _get_active_n_structure, cond4_epsilon, FRESHNESS
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +58,45 @@ def _determine_direction(point_a_price: float, point_b_price: float) -> str:
     return "SHORT"
 
 
+def _determine_overall_direction(merged: List[Dict[str, Any]]) -> Optional[str]:
+    """从合并后的极值点序列预判整体方向。
+
+    User Directives 要求「先判断方向（上升/下降），再按方向筛选 ABC」。
+    与 _determine_direction（仅看 A→B 两点）不同，本函数从整体趋势判断方向，
+    确保 ABC 标点的方向与整体趋势一致。
+
+    判断逻辑：
+    1. 取最近的 2 个 PEAK 和 2 个 TROUGH
+    2. 如果最近 PEAK > 前一个 PEAK 且最近 TROUGH > 前一个 TROUGH → LONG
+    3. 如果最近 PEAK < 前一个 PEAK 且最近 TROUGH < 前一个 TROUGH → SHORT
+    4. 数据不足 4 个点或趋势不明 → 返回 None（由调用方退回到 A→B 推断）
+
+    Returns:
+        'LONG' / 'SHORT' / None（不确定）。
+    """
+    if len(merged) < 4:
+        return None  # 数据不足以判断整体趋势
+
+    # 取最近的 2 个 PEAK 和 2 个 TROUGH
+    peaks = [p for p in merged if p["point_type"] == "PEAK"]
+    troughs = [t for t in merged if t["point_type"] == "TROUGH"]
+
+    if len(peaks) >= 2 and len(troughs) >= 2:
+        last_two_peaks = peaks[-2:]
+        last_two_troughs = troughs[-2:]
+
+        peak_up = last_two_peaks[-1]["price"] > last_two_peaks[-2]["price"]
+        trough_up = last_two_troughs[-1]["price"] > last_two_troughs[-2]["price"]
+
+        if peak_up and trough_up:
+            return "LONG"
+        if not peak_up and not trough_up:
+            return "SHORT"
+
+    # 趋势不明 → 由调用方退回到 A→B 推断
+    return None
+
+
 # ─── DB 内部辅助 ─────────────────────────────────────────────
 
 
@@ -68,7 +107,11 @@ def _get_swing_points(
     timeframe: str,
     limit: int = 80,
 ) -> List[Dict[str, Any]]:
-    """读取极值点，按时间升序。"""
+    """读取极值点，按时间升序。
+
+    对 1d/1w 周期的极值点自动执行时间戳归一化（与 K 线归一化一致），
+    确保历史极值点的时间戳与归一化后的 K 线时间戳对齐。
+    """
     with db.get_conn() as conn:
         rows = conn.execute(
             """SELECT * FROM futures_swing_points
@@ -76,7 +119,20 @@ def _get_swing_points(
                ORDER BY timestamp DESC LIMIT ?""",
             (symbol, contract, timeframe, limit),
         ).fetchall()
-    return [dict(r) for r in reversed(rows)]
+    points = [dict(r) for r in reversed(rows)]
+
+    # ── 1d/1w 时间戳归一化（仅午夜线 16:00 UTC = BJT 00:00） ───
+    if timeframe in ("1d", "1w"):
+        BJ_OFFSET = 8 * 3600
+        MIDNIGHT_SEC = 57600  # 16:00 UTC = BJT 00:00
+        TARGET_HOUR_SEC = 20700  # 05:45 UTC = 13:45 BJT
+        for p in points:
+            ts = p["timestamp"]
+            if ts % 86400 == MIDNIGHT_SEC or ts % 86400 == 0:
+                bj_midnight_utc = ((ts + BJ_OFFSET) // 86400) * 86400 - BJ_OFFSET
+                p["timestamp"] = bj_midnight_utc + TARGET_HOUR_SEC
+
+    return points
 
 
 def _get_klines(
@@ -88,6 +144,12 @@ def _get_klines(
     since_timestamp: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     """读取K线数据，按时间升序。
+
+    对 1d/1w 周期自动执行时间戳归一化：
+    AKShare 日线数据的时间戳在北京时间午夜 (16:00 UTC)，
+    而交易时段聚合的 K 线在 01~06 时 UTC。
+    归一化将所有 1d/1w K 线的时间戳对齐到北京时间日期的 13:45 BJT (05:45 UTC)，
+    确保 N 型结构检测到的 A/B/C 点时间戳与前端 K 线图一致。
 
     Args:
         db: Database 实例。
@@ -109,7 +171,82 @@ def _get_klines(
             query += " LIMIT ?"
             params.append(limit)
         rows = conn.execute(query, params).fetchall()
-    return [dict(r) for r in reversed(rows)]
+    klines = [dict(r) for r in reversed(rows)]
+
+    # ── 1d/1w 时间戳归一化 ───────────────────────────────────────
+    # AKShare 日线数据的时间戳在北京午夜（16:00 UTC），
+    # 而交易时段聚合的 K 线在 01:xx~06:xx UTC。
+    # 归一化到北京时间日期的 13:45 BJT (05:45 UTC)，消除歧义。
+    if timeframe in ("1d", "1w"):
+        _normalize_bar_timestamps(klines, timeframe)
+
+    return klines
+
+
+# ─── 时间戳归一化 ────────────────────────────────────────────────
+
+
+def _normalize_bar_timestamps(
+    klines: List[Dict[str, Any]], timeframe: str
+) -> None:
+    """归一化 1d/1w K 线时间戳到标准边界。
+
+    AKShare 日线数据的时间戳在北京时间午夜（16:00 UTC，即北京日期
+    的 00:00），而交易时段聚合的 K 线在 01:xx~06:xx UTC。
+    归一化只修正午夜线：将其时间戳对齐到同一北京日期的 05:45 UTC
+    (13:45 BJT)，与聚合时段线一致。
+
+    对同一北京日期有多根 K 线的场景（AKShare 午夜线 + 聚合时段线），
+    去重保留收盘价更高的一根（含完整交易时段数据）。
+
+    Args:
+        klines: K 线列表（会被原地修改）。
+        timeframe: 周期（仅 1d/1w 执行归一化）。
+    """
+    if timeframe not in ("1d", "1w"):
+        return
+
+    BJ_OFFSET = 8 * 3600  # 北京时间 UTC+8
+    MIDNIGHT_SEC = 57600   # 16:00 UTC = 午夜 BJT
+    TARGET_HOUR_SEC = 20700  # 05:45 UTC = 13:45 BJT
+
+    # 第一遍：仅修正午夜时间戳（16:00 UTC = BJT 00:00）
+    for k in klines:
+        ts = k["timestamp"]
+        if ts % 86400 == MIDNIGHT_SEC or ts % 86400 == 0:
+            bj_midnight_utc = ((ts + BJ_OFFSET) // 86400) * 86400 - BJ_OFFSET
+            k["timestamp"] = bj_midnight_utc + TARGET_HOUR_SEC
+
+    # 第二遍：按相同时间戳去重（保留最近一条——含完整交易时段数据）
+    seen: dict = {}  # timestamp → index (保留最后一条)
+    for idx, k in enumerate(klines):
+        seen[k["timestamp"]] = idx
+    # 重建列表，只保留 seen 中的最后一条
+    kept = [klines[idx] for idx in sorted(seen.values())]
+    klines[:] = kept
+
+
+def _cleanup_stale_structures(symbol: str, contract: str, timeframe: str, db: Database) -> None:
+    """清理残留的旧活跃 LEG3 行，保留最新一条（如有）。
+
+    当 detect_and_save 返回 IDLE（条件 4 不满足等场景）时，
+    不调用 _save_n_structure，但遗留的 LEG3 行需要被清理。
+    """
+    try:
+        with db.get_conn() as conn:
+            conn.execute(
+                """UPDATE futures_n_structures SET state='COMPLETED', updated_at=datetime('now')
+                   WHERE symbol=? AND contract=? AND timeframe=? AND state!='COMPLETED'
+                   AND id NOT IN (
+                       SELECT id FROM futures_n_structures
+                       WHERE symbol=? AND contract=? AND timeframe=? AND state!='COMPLETED'
+                       ORDER BY id DESC LIMIT 1
+                   )""",
+                (symbol, contract, timeframe, symbol, contract, timeframe),
+            )
+            conn.commit()
+    except Exception:
+        pass  # 清理失败不阻塞主流程
 
 
 def _save_n_structure(db: Database, ns: Dict[str, Any]) -> int:
@@ -118,6 +255,27 @@ def _save_n_structure(db: Database, ns: Dict[str, Any]) -> int:
     如果存在同 symbol+contract+timeframe 的活跃结构则更新。
     """
     with db.get_conn() as conn:
+        # ── 防御性清理：先将所有残留的旧活跃结构标记 COMPLETED ──────
+        # 保留最新一条非 COMPLETED 行供后续 UPDATE，其余全部标记 COMPLETED。
+        # 这解决了以下场景的堆积问题：
+        #   1. detect_and_save 因 COMPLETED 判定写入 COMPLETED 状态后，
+        #      下次调用发现无非 COMPLETED 行，走 INSERT 路径产生新行
+        #   2. dynamic_restructure B-反转路径：先标记 COMPLETED 再调
+        #      detect_and_save，每次都新增一行
+        #   3. 多 Database 实例（数据采集器 + API Server）并发写入，
+        #      各自连接未及时看到对方提交的行
+        conn.execute(
+            """UPDATE futures_n_structures SET state='COMPLETED', updated_at=datetime('now')
+               WHERE symbol=? AND contract=? AND timeframe=? AND state!='COMPLETED'
+               AND id NOT IN (
+                   SELECT id FROM futures_n_structures
+                   WHERE symbol=? AND contract=? AND timeframe=? AND state!='COMPLETED'
+                   ORDER BY id DESC LIMIT 1
+               )""",
+            (ns["symbol"], ns["contract"], ns["timeframe"],
+             ns["symbol"], ns["contract"], ns["timeframe"]),
+        )
+
         existing = conn.execute(
             """SELECT id FROM futures_n_structures
                WHERE symbol=? AND contract=? AND timeframe=? AND state!='COMPLETED'
@@ -179,8 +337,23 @@ def _merge_same_type(swing_points: List[Dict[str, Any]]) -> List[Dict[str, Any]]
 
 def _find_n_structure_forward(
     merged: List[Dict[str, Any]],
+    overall_direction: Optional[str] = None,
+    current_price: Optional[float] = None,
 ) -> Optional[Dict[str, Any]]:
     """前向非重叠扫描，返回最后一个有效的 N 型结构。
+
+    方向优先（P0.2 改进）：
+      1. 调用方先通过 _determine_overall_direction() 预判整体方向
+      2. 本函数根据整体方向过滤 A 点类型：
+         - LONG → 只选 TROUGH 作为 A
+         - SHORT → 只选 PEAK 作为 A
+      3. 如果 overall_direction 为 None（趋势不明），退回到 A→B 推断
+
+    条件 4（第三笔方向确认）整合到扫描中（P0.2 改进）：
+      - 当提供 current_price 时，优先选择满足条件 4 的 C 点
+      - LONG：最新价 > C（第三笔向上破位）
+      - SHORT：最新价 < C（第三笔向下破位）
+      - 如果没有 C 满足条件 4，接受第一个有效的 ABC（由 detect_and_save 硬过滤）
 
     N 型结构的正确定义（上升 N 型示例）：
         A = 第一笔起点（最低点）
@@ -205,51 +378,95 @@ def _find_n_structure_forward(
         a = merged[i]
         found = False
 
+        # ── 方向优先过滤 ─────────────────────────────────────────
+        # 如果预判了整体方向，A 的类型必须与方向匹配：
+        #   LONG → A 必须是 TROUGH
+        #   SHORT → A 必须是 PEAK
+        if overall_direction == "LONG" and a["point_type"] != "TROUGH":
+            i += 1
+            continue
+        if overall_direction == "SHORT" and a["point_type"] != "PEAK":
+            i += 1
+            continue
+
         for b_idx in range(i + 1, merged_len):
             if merged[b_idx]["point_type"] == a["point_type"]:
                 continue  # 同类型，不是 B
             b = merged[b_idx]
-            direction = _determine_direction(a["price"], b["price"])
+
+            # ── 方向判定 ──────────────────────────────────────────
+            # 优先使用整体方向（已由 _determine_overall_direction 预判）
+            # 如果整体方向不确定，退回到 A→B 价格比较
+            if overall_direction is not None:
+                direction = overall_direction
+            else:
+                direction = _determine_direction(a["price"], b["price"])
 
             # ── 方向-点类型一致性校验 ────────────────────────────
             # User Directives 要求：LONG→A=TROUGH, SHORT→A=PEAK
-            # 如果方向与 A 的类型不匹配（如 TROUGH→SHORT 或 PEAK→LONG），
-            # 说明当前 A 不适合做该方向起点，尝试下一个 B（不同 B 可能产生不同方向）。
             if (direction == "LONG" and a["point_type"] != "TROUGH") or \
                (direction == "SHORT" and a["point_type"] != "PEAK"):
                 continue
+
+            # ── 扫描 C 点（条件 4 整合）────────────────────────
+            best_candidate: Optional[Dict[str, Any]] = None  # 退选候选人
 
             for c_idx in range(b_idx + 1, merged_len):
                 if merged[c_idx]["point_type"] != a["point_type"]:
                     continue  # 不是与 A 同类型，不是 C
                 c = merged[c_idx]
 
-                # C 不可突破 A
+                # 条件 3：C 不可突破 A
                 if direction == "LONG" and c["price"] <= a["price"]:
                     continue
                 if direction == "SHORT" and c["price"] >= a["price"]:
                     continue
 
-                # 条件 2 显式检查：B→C 方向一致性
+                # 条件 2：B→C 方向一致性（第二笔确认）
                 # LONG: C 必须低于 B（第二笔下跌确认）
-                # SHORT: C 必须高于 B（第二笔上涨确认）
                 if direction == "LONG" and c["price"] >= b["price"]:
                     continue
+                # SHORT: C 必须高于 B（第二笔上涨确认）
                 if direction == "SHORT" and c["price"] <= b["price"]:
                     continue
 
-                # 有效结构！记录后跳到 C 之后继续扫描
-                structures.append({
+                # 记录当前 C 为有效候选人
+                candidate = {
                     "direction": direction,
                     "a": a, "b": b, "c": c,
                     "a_idx": i, "b_idx": b_idx, "c_idx": c_idx,
-                })
-                i = c_idx + 1  # 非重叠：下一结构从 C 之后开始
-                found = True
-                break  # c loop → 找到 C 即可
+                }
+
+                # 条件 4（第三笔方向确认）整合，带 ε 缓冲区防闪烁：
+                # LONG: 最新价 > C - ε（允许小幅回撤到 C 以下）
+                # SHORT: 最新价 < C + ε（允许小幅反弹到 C 以上）
+                cond4_ok = True
+                if current_price is not None:
+                    eps = cond4_epsilon(c["price"])
+                    if direction == "LONG" and current_price <= c["price"] - eps:
+                        cond4_ok = False
+                    if direction == "SHORT" and current_price >= c["price"] + eps:
+                        cond4_ok = False
+
+                if cond4_ok:
+                    # 条件 4 满足 → 立即接受此候选人
+                    structures.append(candidate)
+                    i = c_idx + 1  # 非重叠：从 C 之后继续
+                    found = True
+                    break  # c loop
+                elif best_candidate is None:
+                    # 条件 4 未满足，但记录为退选候选人
+                    best_candidate = candidate
 
             if found:
-                break  # b loop → 找到 B 和 C 即可
+                break  # b loop → 已找到 B+C
+
+            # 遍历所有 C 后无满足条件 4 的候选人，使用退选候选人
+            if best_candidate is not None:
+                structures.append(best_candidate)
+                i = best_candidate["c_idx"] + 1
+                found = True
+                break  # b loop
 
         if not found:
             i += 1  # 当前点不适合做 A，试下一个
@@ -291,16 +508,36 @@ def detect_and_save(
     swing_points = _get_swing_points(db, symbol, contract, timeframe, limit=limit * 2)
 
     if len(swing_points) < 3:
+        _cleanup_stale_structures(symbol, contract, timeframe, db)
         return {"state": NState.IDLE.value, "is_active": False}
 
     merged = _merge_same_type(swing_points)
 
     if len(merged) < 3:
+        _cleanup_stale_structures(symbol, contract, timeframe, db)
         return {"state": NState.IDLE.value, "is_active": False}
 
-    best = _find_n_structure_forward(merged)
+    # ── P0.2 方向优先改进 ──────────────────────────────────────
+    # 1. 预判整体方向（上升/下降），确保 ABC 标点方向与整体趋势一致
+    overall_direction = _determine_overall_direction(merged)
+
+    # 2. 读取最新价，传递给扫描函数（条件 4 整合到 scan 内）
+    current_price: Optional[float] = None
+    try:
+        klines = _get_klines(db, symbol, contract, timeframe, limit=1)
+        if klines:
+            current_price = klines[-1]["close"]
+    except Exception as exc:
+        logger.warning(
+            "[detect_and_save] %s/%s %s: 读取最新价失败（%s）",
+            symbol, contract, timeframe, exc,
+        )
+
+    # 3. 方向优先扫描：传入整体方向和最新价
+    best = _find_n_structure_forward(merged, overall_direction, current_price)
 
     if best is None:
+        _cleanup_stale_structures(symbol, contract, timeframe, db)
         return {
             "state": NState.IDLE.value,
             "is_active": False,
@@ -310,23 +547,26 @@ def detect_and_save(
     pa, pb, pc = best["a"], best["b"], best["c"]
     direction = best["direction"]
 
-    # ── 条件 4（第三笔方向确认）：最新价必须与 C 点保持方向一致性 ──
-    # LONG: 最新价 > C（第三笔向上破位）；SHORT: 最新价 < C（第三笔向下破位）
+    # ── 条件 4 硬过滤（带 ε 缓冲区防闪烁）───────────────────────
+    # scan 内是"优先选满足条件 4 的 C"，但没有候选时接受第一个有效 C
+    # 此处是硬过滤：不符合条件 4（带 ε 缓冲）→ IDLE
+    # ε 防止「价格在 C 附近微小波动」导致 IDLE↔ACTIVE 闪烁
     try:
-        klines = _get_klines(db, symbol, contract, timeframe, limit=1)
-        if klines:
-            current_close = klines[-1]["close"]
-            if direction == "LONG" and current_close <= pc["price"]:
+        if current_price is not None:
+            eps = cond4_epsilon(pc["price"])
+            if direction == "LONG" and current_price <= pc["price"] - eps:
+                _cleanup_stale_structures(symbol, contract, timeframe, db)
                 return {
                     "state": NState.IDLE.value,
                     "is_active": False,
-                    "reason": f"条件4不满足：最新价{current_close}不高于C点{pc['price']}",
+                    "reason": f"条件4不满足：最新价{current_price}<=(C{pc['price']}-ε{eps:.2f})",
                 }
-            if direction == "SHORT" and current_close >= pc["price"]:
+            if direction == "SHORT" and current_price >= pc["price"] + eps:
+                _cleanup_stale_structures(symbol, contract, timeframe, db)
                 return {
                     "state": NState.IDLE.value,
                     "is_active": False,
-                    "reason": f"条件4不满足：最新价{current_close}不低于C点{pc['price']}",
+                    "reason": f"条件4不满足：最新价{current_price}>=(C{pc['price']}+ε{eps:.2f})",
                 }
     except Exception as exc:
         logger.warning(
@@ -335,11 +575,12 @@ def detect_and_save(
         )
 
     # 状态判定 — 已有有效3点交替结构 → LEG3（第三段运行中）
+    # P0.2 修复：移除了过度严格的 COMPLETED 判定。
+    # 旧逻辑：A 之前还有同类型极值点 → COMPLETED
+    # 问题：merge 后序列严格交替，此条件本质不会触发（死代码）。
+    # 即使触发，也不意味着结构已结束——只有行情实际突破才意味着结束，
+    # 而这由 dynamic_restructure 负责。
     state = NState.LEG3.value
-
-    # COMPLETED 判定：A 之前还有同类型极值点 → 旧结构已结束
-    if best["a_idx"] > 0 and merged[best["a_idx"] - 1]["point_type"] == pa["point_type"]:
-        state = NState.COMPLETED.value
 
     ns = {
         "symbol": symbol,
@@ -448,6 +689,41 @@ def _update_c_point(active: dict, swing_points: list, db: Database) -> Optional[
         active["symbol"], active["contract"], active["timeframe"],
         old_price, latest["price"], c_type,
     )
+
+    # ── C 滑动后结构优度验证 ──────────────────────────────────
+    # C 更新后，旧 A→B→C 组合可能因新极值点不再是全局最优。
+    # 用全量极值点（limit=40）做前向非重叠扫描，验证当前结构
+    # 的 A 点是否仍为最优起点。
+    try:
+        verify_sp = _get_swing_points(
+            db, active["symbol"], active["contract"], active["timeframe"], limit=40,
+        )
+        if len(verify_sp) >= 3:
+            merged = _merge_same_type(verify_sp)
+            if len(merged) >= 3:
+                best = _find_n_structure_forward(merged)
+                if best is not None:
+                    best_a = best["a"]
+                    curr_a_price = active["point_a_price"]
+                    curr_a_time = active["point_a_time"]
+                    if best_a["price"] != curr_a_price or best_a["timestamp"] != curr_a_time:
+                        logger.info(
+                            "[_update_c_point] %s/%s %s: C slid to %.2f but better "
+                            "structure exists (A %.2f@%s → %.2f@%s), "
+                            "marking COMPLETED + fallback to detect_and_save",
+                            active["symbol"], active["contract"], active["timeframe"],
+                            latest["price"],
+                            curr_a_price, curr_a_time,
+                            best_a["price"], best_a["timestamp"],
+                        )
+                        _mark_completed(active, db)
+                        return None
+    except Exception as exc:
+        logger.warning(
+            "[_update_c_point] %s/%s %s: C-slide verification skipped (%s)",
+            active["symbol"], active["contract"], active["timeframe"], exc,
+        )
+
     return active
 
 
@@ -593,6 +869,39 @@ def dynamic_restructure(
     # 4d. 方向重算
     new_direction = _determine_direction(new_a_price, new_b["price"])
 
+    # 4d.25 A_type 一致性检查：新方向必须与 new_A 的 swing type 匹配
+    # LONG → A=TROUGH, SHORT → A=PEAK
+    # new_A 来自 old_B：原 LONG→old_B=PEAK→new_A=PEAK, 原 SHORT→old_B=TROUGH→new_A=TROUGH
+    # 当新方向与 new_A 的类型不匹配时（如 LONG 方向但 A=PEAK），迁移结果无效，
+    # 必须回退到 detect_and_save 重新从极值点扫描。
+    new_a_type = old_b_type  # PEAK (原 LONG) 或 TROUGH (原 SHORT)
+    if (new_direction == "LONG" and new_a_type != "TROUGH") or \
+       (new_direction == "SHORT" and new_a_type != "PEAK"):
+        logger.info(
+            "[dynamic_restructure] %s/%s %s: A_type mismatch "
+            "(direction=%s but A_type=%s) → fallback to detect_and_save",
+            symbol, contract, timeframe, new_direction, new_a_type,
+        )
+        return detect_and_save(symbol, contract, timeframe, db)
+    # 4d.5 C2 方向一致性检查：迁移后的 B→C 必须与方向定义一致
+    #   LONG (A=T→B=P→C=T): 第二笔下跌 → C < B
+    #   SHORT (A=P→B=T→C=P): 第二笔上涨 → C > B
+    #   C2 不符 → 迁移结果无效，回退全量重算
+    if new_direction == "LONG" and new_c["price"] >= new_b["price"]:
+        logger.info(
+            "[dynamic_restructure] %s/%s %s: C2 check failed "
+            "(LONG C=%.2f >= B=%.2f) → fallback to detect_and_save",
+            symbol, contract, timeframe, new_c["price"], new_b["price"],
+        )
+        return detect_and_save(symbol, contract, timeframe, db)
+    if new_direction == "SHORT" and new_c["price"] <= new_b["price"]:
+        logger.info(
+            "[dynamic_restructure] %s/%s %s: C2 check failed "
+            "(SHORT C=%.2f <= B=%.2f) → fallback to detect_and_save",
+            symbol, contract, timeframe, new_c["price"], new_b["price"],
+        )
+        return detect_and_save(symbol, contract, timeframe, db)
+
     # 4e. 状态重判 — 迁移后的3点交替结构已有效，直接LEG3
     state = NState.LEG3.value
 
@@ -632,9 +941,9 @@ def dynamic_restructure(
 
 # ─── 共享重算入口（API + Data Collector 共用）───────────────────
 
-# 频率控制：每 symbol/tf 全量重算最多每 30 秒一次
+# 频率控制：每 symbol/tf 全量重算最多每 15 秒一次
 _last_detect_save: dict = {}
-_DETECT_SAVE_INTERVAL = 30
+_DETECT_SAVE_INTERVAL = 5
 
 
 def _should_full_recalc(symbol: str, timeframe: str, min_interval: int = _DETECT_SAVE_INTERVAL) -> bool:
@@ -646,7 +955,7 @@ def _should_full_recalc(symbol: str, timeframe: str, min_interval: int = _DETECT
     Args:
         symbol: 品种代码。
         timeframe: 周期。
-        min_interval: 最小间隔（秒），默认 30。
+        min_interval: 最小间隔（秒），默认 15。
 
     Returns:
         True=应执行全量重算，False=跳过（距离上次不足 min_interval）。
@@ -658,6 +967,162 @@ def _should_full_recalc(symbol: str, timeframe: str, min_interval: int = _DETECT
         _last_detect_save[key] = now
         return True
     return False
+
+
+# ─── IDLE→ACTIVE 重激活 ───────────────────────────────────────
+
+
+def _reactive_idle_structures(
+    symbol: str,
+    contract: str,
+    timeframe: str,
+    db: Database,
+) -> Optional[Dict[str, Any]]:
+    """检查 IDLE 结构是否可重激活（新行情满足条件 4）。
+
+    P0.4 新增。detect_and_save 的条件 4 硬过滤会因行情回撤将结构标记为
+    IDLE。当行情恢复后（价格回到 C 附近），此函数负责重新激活。
+
+    重激活条件（带 ε 缓冲区）：
+    - LONG: 最新价 > C_price - ε
+    - SHORT: 最新价 < C_price + ε
+    - 同时确保条件 3 仍然满足（C 未突破 A）
+
+    Args:
+        symbol: 品种代码。
+        contract: 合约代码。
+        timeframe: 周期。
+        db: Database 实例。
+
+    Returns:
+        重激活后的结构字典，或 None（无需重激活）。
+    """
+    # 1. 读取当前结构（skip_condition4=True 排除条件 4 干扰）
+    active = _get_active_n_structure(
+        db, symbol, contract, timeframe, skip_condition4=True,
+    )
+    if not active:
+        return None
+
+    # 2. 仅处理 detect_and_save 返回 IDLE 但 DB 中仍为 LEG3 的结构
+    # _get_active_n_structure(skip_condition4=True) 会返回所有未 COMPLETED
+    # 的结构，包括条件 4 不满足的。条件是 detect_and_save 写了 IDLE 状态
+    # 到返回字典但没写 DB（_save_n_structure 没调），所以 active["state"]
+    # 仍然是 LEG3。我们通过 _get_active_n_structure 返回 None 的条件 4 检查
+    # 来判断结构是否处于 IDLE 状态。
+
+    # 3. 读取最新价
+    klines = _get_klines(db, symbol, contract, timeframe, limit=1)
+    if not klines:
+        return None
+    current_price = klines[-1]["close"]
+
+    direction = active["direction"]
+    c_price = active["point_c_price"]
+    a_price = active["point_a_price"]
+
+    # 4. 条件 3 检查（C 不可突破 A）— 以防 detect_and_save 的清扫遗漏
+    if direction == "LONG" and c_price is not None and a_price is not None and c_price <= a_price:
+        return None
+    if direction == "SHORT" and c_price is not None and a_price is not None and c_price >= a_price:
+        return None
+
+    # 5. 带 ε 的条件 4 检查
+    eps = cond4_epsilon(c_price)
+    cond4_ok = False
+    if direction == "LONG" and current_price > c_price - eps:
+        cond4_ok = True
+    if direction == "SHORT" and current_price < c_price + eps:
+        cond4_ok = True
+
+    if not cond4_ok:
+        return None  # 仍不满足条件 4，保持 IDLE
+
+    # 6. 条件 4 已满足 → 全量重算确保标点最优
+    # 使用 detect_and_save 重新执行完整的前向扫描，因为价格恢复后可能有
+    # 更优的 A/B/C 标点组合。重算后会写 DB 并返回新的活跃结构。
+    result = detect_and_save(symbol, contract, timeframe, db)
+    if result.get("is_active"):
+        logger.info(
+            "[idle_reactive] %s/%s %s: IDLE→ACTIVE (price=%.2f, C=%.2f, eps=%.4f)",
+            symbol, contract, timeframe, current_price, c_price, eps,
+        )
+    return result
+
+
+# ─── Stale 结构清扫 ───────────────────────────────────────────
+
+
+def _sweep_stale_structures(db: Database) -> int:
+    """清扫 stale N 型结构 — 条件 3 违规的直接标记 COMPLETED。
+
+    P0.4 新增。detect_and_save 基于当前行情扫描，对不满足条件 3 的
+    结构返回 IDLE 但不修改 DB 状态（不调 _save_n_structure）。
+    导致条件 3 违规（C 破 A）的结构在 DB 中仍保持 LEG3 状态残留。
+
+    _sweep_stale_structures 主动扫描所有非 COMPLETED 的结构，
+    检测条件 3 违规并标记 COMPLETED。
+
+    Returns:
+        清扫并标记 COMPLETED 的结构数量。
+    """
+    import time as time_module
+
+    now = int(time_module.time())
+    cleaned = 0
+
+    with db.get_conn() as conn:
+        rows = conn.execute(
+            """SELECT * FROM futures_n_structures
+               WHERE state NOT IN ('COMPLETED', 'IDLE')
+               ORDER BY symbol, contract, timeframe"""
+        ).fetchall()
+
+        if not rows:
+            return 0
+
+        for row in rows:
+            ns = dict(row)
+            a_price = ns.get("point_a_price")
+            c_price = ns.get("point_c_price")
+            direction = ns.get("direction", "LONG")
+
+            if a_price is None or c_price is None:
+                continue
+
+            # 条件 3 检查：C 不可突破 A
+            cond3_fail = (
+                (direction == "LONG" and c_price <= a_price)
+                or (direction == "SHORT" and c_price >= a_price)
+            )
+
+            if cond3_fail:
+                conn.execute(
+                    """UPDATE futures_n_structures
+                       SET state='COMPLETED', updated_at=datetime('now')
+                       WHERE id=?""",
+                    (ns["id"],),
+                )
+                cleaned += 1
+                continue
+
+            # 极端新鲜度违规（2× freshness 窗口）→ 也该清扫
+            freshness = FRESHNESS.get(ns.get("timeframe", "1d"), 30 * 86400) * 2
+            latest_ts = ns.get("point_c_time") or ns.get("point_b_time")
+            if latest_ts and (now - latest_ts) > freshness:
+                conn.execute(
+                    """UPDATE futures_n_structures
+                       SET state='COMPLETED', updated_at=datetime('now')
+                       WHERE id=?""",
+                    (ns["id"],),
+                )
+                cleaned += 1
+
+        conn.commit()
+
+    if cleaned:
+        logger.info("[sweep_stale] 清扫完成: %d 个结构标记为 COMPLETED", cleaned)
+    return cleaned
 
 
 def restructure_active_for_symbol(
@@ -712,12 +1177,123 @@ def restructure_active_for_symbol(
         except Exception:
             pass  # 单周期动态重算失败不阻塞整体
 
+    # 3. IDLE→ACTIVE 重激活（P0.4 新增）
+    # detect_and_save 的条件 4 硬过滤会将行情回撤的结构标记 IDLE。
+    # 行情恢复后，_reactive_idle_structures 检查最新价是否重回 C 附近
+    # （带 ε 缓冲区），如是则触发全量重算恢复活跃性。
+    for tf in timeframes:
+        try:
+            _reactive_idle_structures(symbol, contract, tf, db)
+        except Exception:
+            pass  # 单周期重激活失败不阻塞整体
+
+
+def incremental_restructure_only(
+    symbol: str,
+    contract: str,
+    db: Database,
+    timeframes: Optional[list] = None,
+) -> None:
+    """轻量级增量重算：跳过 detect_and_save 全量扫描，仅执行状态迁移。
+
+    管线：incremental_update → aggregate_klines → dynamic_restructure
+    → _reactive_idle_structures
+
+    与 ``restructure_active_for_symbol()`` 的区别：
+    - 不调用 detect_and_save（全量扫描限频 15s，是重算中最重的操作）
+    - 不调用 _should_full_recalc 频率控制（没有 detect_and_save 需限频）
+    - 适合高频调用场景：API 30s 轮询 / 新增心跳线程
+
+    Args:
+        symbol: 品种代码。
+        contract: 合约代码。
+        db: Database 实例。
+        timeframes: 周期列表，默认 ``["15m", "1h", "1d", "1w"]``。
+    """
+    from futures.swing_points import incremental_update
+    from futures.aggregator import aggregate_klines
+
+    if timeframes is None:
+        timeframes = ["15m", "1h", "1d", "1w"]
+
+    # 1. 增量更新极值点
+    for tf in timeframes:
+        try:
+            incremental_update(symbol, contract, tf, db)
+        except Exception:
+            pass
+
+    # 2. 刷新周线聚合
+    try:
+        aggregate_klines(symbol, contract, db, "1d", "1w", limit=14)
+    except Exception:
+        pass
+
+    # 3. 增量状态迁移（跳过 detect_and_save 全量扫描）
+    for tf in timeframes:
+        try:
+            dynamic_restructure(symbol, contract, tf, db)
+        except Exception:
+            pass
+
+    # 4. IDLE→ACTIVE 重激活
+    for tf in timeframes:
+        try:
+            _reactive_idle_structures(symbol, contract, tf, db)
+        except Exception:
+            pass
+
+
+def restructure_all_active_incremental(db: Database) -> None:
+    """对所有活跃品种执行轻量增量重算（跳过全量扫描）。
+
+    读取 ``futures_n_structures`` 表中所有非 COMPLETED/IDLE 的结构，
+    逐个调用 ``incremental_restructure_only()``。
+
+    与 ``restructure_all_active()`` 的区别：
+    - 不调用 detect_and_save 全量扫描
+    - 不调用 _should_full_recalc 频率控制
+    - 适合高频调用（API 30s 轮询 / 5s 心跳）
+
+    Args:
+        db: Database 实例。
+    """
+    try:
+        # 先清扫 stale 结构
+        try:
+            swept = _sweep_stale_structures(db)
+            if swept:
+                logger.info("[restructure_all_active_incremental] 清扫 %d 个 stale 结构", swept)
+        except Exception as exc:
+            logger.warning("[restructure_all_active_incremental] 清扫异常(跳过): %s", exc)
+
+        timeframes = ["15m", "1h", "1d", "1w"]
+
+        active = db.get_conn().execute(
+            """SELECT DISTINCT symbol, contract FROM futures_n_structures
+               WHERE state NOT IN ('COMPLETED', 'IDLE')"""
+        ).fetchall()
+
+        if not active:
+            return
+
+        for row in active:
+            sym, contract = row["symbol"], row["contract"]
+            incremental_restructure_only(
+                sym, contract, db, timeframes=timeframes,
+            )
+    except Exception:
+        pass  # 整体失败不抛出
+
 
 def restructure_all_active(db: Database) -> None:
-    """对所有有活跃 N 型结构的品种执行动态重算。
+    """对所有有活跃 N 型结构的品种执行动态重算 + stale 清扫。
 
     读取 ``futures_n_structures`` 表中所有非 COMPLETED/IDLE 的结构，
     逐个调用 ``restructure_active_for_symbol()``。
+
+    P0.4 新增：调用前先执行 _sweep_stale_structures 清扫条件 3 违规
+    的结构（C 破 A 但 DB 状态仍为 LEG3 的残留）。
 
     供 API 层（替代 ``web/app.py::_restructure_active_structures()``）
     和数据采集层共用。
@@ -726,6 +1302,14 @@ def restructure_all_active(db: Database) -> None:
         db: Database 实例。
     """
     try:
+        # P0.4: Stale 清扫 — 先干掉条件 3 违规的结构
+        try:
+            swept = _sweep_stale_structures(db)
+            if swept:
+                logger.info("[restructure_all_active] 清扫 %d 个 stale 结构", swept)
+        except Exception as exc:
+            logger.warning("[restructure_all_active] 清扫异常(跳过): %s", exc)
+
         timeframes = ["15m", "1h", "1d", "1w"]
 
         # 读活跃结构列表

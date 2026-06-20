@@ -2428,11 +2428,20 @@ _ensure_session_table()
 # ─── 后台数据采集调度器 ─────────────────────────────
 # 作为 daemon 线程与 gunicorn worker 并行运行。
 # DB 级锁保证多 worker 下仅执行一次采集。
-from web.scheduler import start_scheduler
+from web.scheduler import start_scheduler, start_incremental_heartbeat
 try:
     start_scheduler(db)
 except Exception as e:
     logger.warning("调度器启动失败（非致命）: %s", e)
+
+# ─── N 型结构增量重算心跳线程 ───────────────────────
+# 每 5 秒执行轻量增量重算，与主调度器并行运行。
+# 主调度器负责全量数据采集；心跳线程负责新 K 线写入后
+# 的增量 N 型结构状态迁移，最快 5s 内响应。
+try:
+    start_incremental_heartbeat(db)
+except Exception as e:
+    logger.warning("增量心跳启动失败（非致命）: %s", e)
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5100))

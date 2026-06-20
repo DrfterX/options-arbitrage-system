@@ -7,7 +7,10 @@
 
 调度策略：
   - 每 5 分钟检查一次是否达到刷新间隔
-  - 默认刷新间隔：30 分钟
+  - 刷新间隔根据交易时段自适应调整：
+    - 交易时段：30 分钟
+    - 交易日间隙（15:00-21:00 / 23:00-09:00）：2 小时
+    - 非交易日（周末/节假日）：6 小时
   - 启动后随机延迟 0~120s，让多个 worker 错开
 """
 
@@ -19,9 +22,43 @@ import time
 logger = logging.getLogger(__name__)
 
 # ── 配置 ──────────────────────────────────────────────────────────
-REFRESH_INTERVAL = 30 * 60      # 两次刷新之间的最小间隔（秒）
 CHECK_INTERVAL = 5 * 60         # 调度器检查周期（秒）
 STARTUP_DELAY_MAX = 120         # 启动随机延迟上限（秒）
+
+# ── 会话→刷新间隔映射（懒加载，避免 import 环）────────────────────
+_INTERVAL_CACHE = None
+
+def _get_refresh_intervals():
+    """懒加载 REFRESH_INTERVALS（延迟 import，避免模块加载时环依赖）。"""
+    global _INTERVAL_CACHE
+    if _INTERVAL_CACHE is None:
+        from config.settings import REFRESH_INTERVALS as _ri
+        _INTERVAL_CACHE = _ri
+    return _INTERVAL_CACHE
+
+
+def _get_current_session():
+    """懒加载 get_current_session（延迟 import）。"""
+    from core.market_calendar import get_current_session as _gcs
+    return _gcs()
+
+
+def _session_refresh_interval() -> int:
+    """根据当前交易时段返回对应的刷新间隔（秒）。"""
+    session = _get_current_session()
+    intervals = _get_refresh_intervals()
+
+    if session == "day":
+        return intervals["day"]
+    elif session == "night":
+        return intervals["night"]
+    else:
+        # closed — 判断是否为交易日间隙还是非交易日
+        from core.market_calendar import is_trading_day
+        if is_trading_day():
+            return intervals["gap"]    # 交易日间隙（15:00-21:00 或 23:00-09:00）
+        return intervals["holiday"]    # 非交易日（周末/节假日）
+
 
 # system_config key 名称
 _KEY_LAST_RUN = "scheduler_last_run"
@@ -29,7 +66,7 @@ _KEY_RUNNING  = "scheduler_running"
 
 
 def _needs_refresh(db) -> bool:
-    """检查是否到达刷新时间。"""
+    """检查是否到达刷新时间（按当前交易时段对应的间隔判断）。"""
     conn = db.get_conn()
     row = conn.execute(
         "SELECT value FROM system_config WHERE key = ?", (_KEY_LAST_RUN,)
@@ -37,7 +74,8 @@ def _needs_refresh(db) -> bool:
     if row is None:
         return True  # 从未运行过
     last_run = float(row[0])
-    return (time.time() - last_run) >= REFRESH_INTERVAL
+    interval = _session_refresh_interval()
+    return (time.time() - last_run) >= interval
 
 
 def _try_acquire_lock(db) -> bool:
@@ -114,12 +152,28 @@ def _do_refresh(db) -> None:
         logger.error("❌ [调度器] 采集异常: %s", e)
 
 
+def _session_label() -> str:
+    """返回当前会话状态的友好标签（用于日志）。"""
+    session = _get_current_session()
+    interval = _session_refresh_interval()
+    from core.market_calendar import is_trading_day
+    if session == "closed" and is_trading_day():
+        return f"closed (交易日间隙, 刷新间隔: {interval//60}分钟)"
+    elif session == "closed":
+        return f"closed (非交易日, 刷新间隔: {interval//60}分钟)"
+    else:
+        return f"{session} (交易时段, 刷新间隔: {interval//60}分钟)"
+
+
 def _scheduler_loop(db) -> None:
     """调度器主循环。"""
     # 启动随机延迟 — 让多个 gunicorn worker 错开
     delay = random.uniform(0, STARTUP_DELAY_MAX)
     logger.info("⏳ [调度器] 启动延迟 %.0f 秒", delay)
     time.sleep(delay)
+
+    # 启动时输出当前会话状态
+    logger.info("📊 [调度器] 当前会话: %s", _session_label())
 
     while True:
         try:
@@ -140,6 +194,59 @@ def _scheduler_loop(db) -> None:
         time.sleep(CHECK_INTERVAL)
 
 
+# ── 5s 增量重算心跳线程 ──────────────────────────────────────────
+
+HEARTBEAT_INTERVAL = 5  # 心跳间隔（秒）
+
+
+def _incremental_heartbeat_loop(db) -> None:
+    """增量重算心跳循环 — 每 5 秒执行轻量 N 型结构状态迁移。
+
+    独立于 ``_scheduler_loop()`` 运行，两者互不阻塞。
+    本线程仅调用 ``restructure_all_active_incremental()``，跳过
+    ``detect_and_save`` 全量扫描，每轮正常在数毫秒内完成。
+
+    和主调度器的关系：
+    - 主调度器负责全量数据采集 + 全量重算（30min~6h 一次）
+    - 心跳线程负责新 K 线写入后的增量状态迁移（5s 一次）
+    - 采集线程写入新 K 线后，心跳线程最快 5s 内重算 N 型结构
+    """
+    # 延迟 import 避免模块加载时环依赖
+    from futures.n_structure import restructure_all_active_incremental as _recalc
+
+    logger.info("💓 [心跳] 增量重算心跳线程启动（每 %d 秒）", HEARTBEAT_INTERVAL)
+
+    while True:
+        try:
+            _recalc(db)
+        except Exception as e:
+            logger.warning("[心跳] 增量重算异常（已跳过）: %s", e)
+
+        time.sleep(HEARTBEAT_INTERVAL)
+
+
+def start_incremental_heartbeat(db) -> threading.Thread:
+    """启动增量重算心跳线程（daemon 线程）。
+
+    与 ``start_scheduler()`` 并行运行，两者互不阻塞。
+
+    本函数在 :mod:`web.app` 中被调用，用法：:
+
+        from web.scheduler import start_scheduler, start_incremental_heartbeat
+        start_scheduler(db)
+        start_incremental_heartbeat(db)
+    """
+    t = threading.Thread(
+        target=_incremental_heartbeat_loop,
+        args=(db,),
+        daemon=True,
+        name="n-structure-heartbeat",
+    )
+    t.start()
+    logger.info("✅ 增量重算心跳线程已启动（间隔 %d 秒）", HEARTBEAT_INTERVAL)
+    return t
+
+
 def start_scheduler(db) -> threading.Thread:
     """启动后台调度器（daemon 线程）。
 
@@ -153,8 +260,9 @@ def start_scheduler(db) -> threading.Thread:
         name="data-refresh-scheduler",
     )
     t.start()
+    session_info = _session_label()
     logger.info(
-        "✅ 数据刷新调度器已启动（每 %d 分钟检查一次，采集间隔 %d 分钟）",
-        CHECK_INTERVAL // 60, REFRESH_INTERVAL // 60,
+        "✅ 自适应调度器已启动（每 %d 分钟检查一次，当前会话: %s）",
+        CHECK_INTERVAL // 60, session_info,
     )
     return t
