@@ -247,6 +247,18 @@ def sitemap_xml():
     <priority>0.5</priority>
   </url>
   <url>
+    <loc>https://signals.drifter.indevs.in/blog</loc>
+    <lastmod>2026-06-20</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://signals.drifter.indevs.in/blog/n-structure-practical</loc>
+    <lastmod>2026-06-20</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
     <loc>https://futures.drifter.indevs.in/</loc>
     <lastmod>{futures_lastmod}</lastmod>
     <changefreq>daily</changefreq>
@@ -495,6 +507,21 @@ def subscribe_page():
 def api_docs():
     """公开数据 API v1 文档页面。"""
     return render_template("api_docs.html")
+
+
+# ─── Blog 路由 ─────────────────────────────────────────────
+
+
+@app.route("/blog")
+def blog_index():
+    """Blog 首页 — 文章列表。"""
+    return render_template("blog_index.html")
+
+
+@app.route("/blog/n-structure-practical")
+def blog_article_n_structure():
+    """N 型结构实战：多周期共振捕捉橡胶期货趋势。"""
+    return render_template("blog_post.html")
 
 
 # ── N 型结构动态重算辅助 ───────────────────────────────────────

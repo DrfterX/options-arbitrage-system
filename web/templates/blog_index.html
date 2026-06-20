@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="description" content="信号矩阵 Blog — N 型结构实战教程、多周期共振分析方法、期权 IV 策略研究。中国商品期货交易技术分析。">
+<meta property="og:title" content="Blog | 信号矩阵 — 期货 N型结构 × 期权 IV 分析">
+<meta property="og:description" content="信号矩阵官方技术博客：N 型结构实战、多周期共振、期权 IV 策略研究。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://signals.drifter.indevs.in/blog">
+<meta property="og:image" content="https://signals.drifter.indevs.in/static/images/signals-dashboard.png">
+<link rel="canonical" href="https://signals.drifter.indevs.in/blog">
+<title>Blog | 信号矩阵 — 期货 N 型结构 × 期权 IV 分析</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css">
+<style>
+.blog-topbar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 20px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 50;
+  backdrop-filter: blur(8px);
+}
+.blog-topbar .logo { font-weight: 800; font-size: .75rem; letter-spacing: .06em; color: var(--text); }
+.blog-topbar .logo .accent { color: var(--brand); }
+.blog-topbar .nav-links { margin-left: auto; display: flex; gap: 16px; font-size: .62rem; font-weight: 500; }
+.blog-topbar .nav-links a { color: var(--text2); text-decoration: none; transition: color .15s; }
+.blog-topbar .nav-links a:hover { color: var(--text); }
+
+.blog-index { max-width: 640px; margin: 0 auto; padding: 40px 24px 80px; }
+.blog-index h1 { font-size: 1.4rem; font-weight: 800; letter-spacing: -.02em; margin-bottom: 6px; }
+.blog-index .sub { font-size: .68rem; color: var(--text2); margin-bottom: 36px; line-height: 1.6; }
+
+/* card list */
+.post-list { display: flex; flex-direction: column; gap: 16px; }
+.post-card {
+  display: block;
+  padding: 20px 22px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  text-decoration: none;
+  transition: all .2s var(--ease-out);
+}
+.post-card:hover {
+  border-color: rgba(34, 197, 94, .15);
+  box-shadow: 0 2px 16px rgba(0,0,0,.15);
+  transform: translateY(-1px);
+}
+.post-card .tag {
+  display: inline-block;
+  font-size: .52rem;
+  font-weight: 600;
+  letter-spacing: .06em;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background: rgba(34, 197, 94, .1);
+  color: var(--brand);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+}
+.post-card h2 {
+  font-size: .78rem;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 4px;
+  line-height: 1.4;
+}
+.post-card .desc {
+  font-size: .62rem;
+  color: var(--text2);
+  line-height: 1.5;
+  margin-bottom: 6px;
+}
+.post-card .date {
+  font-size: .55rem;
+  color: var(--text3);
+}
+.post-card.empty {
+  text-align: center;
+  padding: 40px 20px;
+  border-style: dashed;
+}
+.post-card.empty .desc { margin-bottom: 0; }
+</style>
+</head>
+<body>
+
+<nav class="blog-topbar">
+  <a href="/" class="logo" style="text-decoration:none"><span class="accent">信号</span>矩阵</a>
+  <div class="nav-links">
+    <a href="/">仪表盘</a>
+    <a href="/pricing">定价</a>
+    <a href="/blog">Blog</a>
+  </div>
+</nav>
+
+<div class="blog-index">
+  <h1>📝 Blog</h1>
+  <p class="sub">N 型结构实战教程 · 多周期共振分析 · 期权 IV 策略研究</p>
+
+  <div class="post-list">
+
+    <a href="/blog/n-structure-practical" class="post-card">
+      <div class="tag">实战教程</div>
+      <h2>N 型结构实战：如何用多周期共振捕捉橡胶期货趋势</h2>
+      <div class="desc">
+        通过橡胶 RU2609 周 K 线真实案例，完整展示 N 型结构判定逻辑、ABC 标点与多周期共振分析方法。
+      </div>
+      <div class="date">2026-06-20 · 技术团队</div>
+    </a>
+
+    <!-- placeholder for future articles -->
+    <div class="post-card empty">
+      <div class="desc">更多文章即将发布 — 期权 IV 分析、多品种信号对比……</div>
+    </div>
+
+  </div>
+</div>
+
+</body>
+</html>
