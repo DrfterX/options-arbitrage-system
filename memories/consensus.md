@@ -25,71 +25,67 @@
 ---
 
 ## Last Updated
-2026-06-21 01:58 CST
+2026-06-21 02:10 CST
 
 ## Current Phase
-Building — 产品内容运营（Cycle #175）
+Building — P1 期权面板 UI/UX 修复（Cycle #176）
 
 ## What We Did This Cycle
-- ✅ **B.5 完成** — 转化部署第 8 篇 Blog：RU2609 实盘分析文章
-- ✅ **素材**：`xueqiu-article-final.md`（RU2609 周线 N 型结构实战分析）
-- ✅ **转化模板**：`blog_post_ru2609.html`
-- ✅ **路由**：`/blog/ru2609-case-study` → 新增路由 + 导航卡（标签：实盘案例）+ sitemap
-- ✅ **部署**：git push + Railway CLI `railway up --yes` 触发部署（webhook 不可靠）
-- 🟢 **健康检查**：Railway 部署中...
-- 🟢 **cron 无需恢复**
+- ✅ **全量调查**：确认 P0 线 C（N 型结构动态刷新）已全部完成（算法修复 0 失败 + 3 条动态刷新路径 + 增量心跳线程 + API 去重算）
+- ✅ **确认**：P0 B.3（Skeleton loading）已基本实现（动态行数、sector 分隔、级联动画俱全）
+- ✅ **转向 P1**：Blog 内容管线素材已耗尽，转入 P1 期权面板 UI/UX 修复
+- ✅ **P1.2.2 完成** — SSR 按评分排序：options 策略表和信号卡片的初始渲染改为按 `unified_score` 降序排列
+  - 3 处 `options[:20]` → `(options|sort(attribute='unified_score', reverse=True))[:20]`
+  - 包括 `_signalsData` JSON 数据源
+  - 提交 & 推送至 GitHub → Railway 自动部署
+- 🟢 **健康检查**：Railway ✅ 200 | signals ✅ 200 | 本机关闭
 
 ## Key Decisions Made
-- **B.5 素材选择**：`xueqiu-article-final.md`（RU2609 实盘分析）作为第 8 篇，与前一篇（N 型引擎技术深挖）形成互补——一篇讲算法如何实现，一篇讲数据如何使用
-- **文章定位**：实盘案例类，面向关注品种具体分析的期货交易者，展示信号矩阵数据在实战中的应用方式
-- **部署方式修正**：Railway GitHub webhook 不稳定，统一使用 `railway up --yes` 直接部署
+- **Blog 内容管线关闭**：xueqiu-* 素材已全部用完，docs/marketing/ 剩余素材均为其他产品（monito/StatusHub/Critiq），不适合直接转化
+- **转向 P1 期权面板**：P0 线 C ✅ + P0 B.3 ✅，P1 成为下一个有实际工作的高优先级方向
 
 ## Active Projects
-- **产品 Blog 内容运营** 🟢（8 篇已上线 ✅）
-  - ✅ 第 1 篇：N 型结构实战
-  - ✅ 第 2 篇：期权 IV 分析
-  - ✅ 第 3 篇：多周期共振实战
-  - ✅ 第 4 篇：IV + N 型结构结合
-  - ✅ 第 5 篇：期权策略专题
-  - ✅ 第 6 篇：产品介绍+快速上手
-  - ✅ 第 7 篇：N 型引擎技术深挖
-  - ✅ 第 8 篇：RU2609 实盘案例（新增）
-  - ⬜ 第 9+ 篇：营销内容库已全部转化完，需新素材
-- **内容营销（雪球）** 🔴（阻塞，需人类操作）
+- **P1 期权面板 UI/UX 修复** 🟡（刚刚启动）
+  - ✅ P1.2.2 SSR 按评分排序
+  - ⬜ P1.1.1 IV 柱状图 xAxis label 拥挤
+  - ⬜ P1.1.2 合约为 `n` 前缀清洗
+  - ⬜ P1.1.3 中文名标注优化
+  - ⬜ P1.2.1 详情图标点击不一致
+  - ⬜ P1.2.3 评分算法透明度确认
 
 ## Next Action
-**方向 B — 产品 Blog 内容运营（素材枯竭，需决策下一步方向）**
+**Step P1 — 期权面板 UI/UX 修复**
 
 | # | 子任务 | 预期耗时 | 产出物 |
 |---|--------|---------|--------|
-| B.1 | ✅ Blog #4 部署验证 | 5min | ✅ |
-| B.2 | ✅ Blog #5 期权策略专题 | 15min | ✅ |
-| B.3 | ✅ Blog #6 产品介绍 | 15min | ✅ |
-| B.4 | ✅ Blog #7 引擎技术深挖 | 15min | ✅ |
-| B.5 | ✅ Blog #8 RU2609 实盘案例 | 15min | blog_post_ru2609.html + 路由 + 导航 + sitemap ✅ |
+| P1.2.2 | ✅ SSR 按评分排序 | 5min | ✅ 已完成 |
+| **P1.1.1** | **IV 柱状图 xAxis label 拥挤修复** | **10min** | options_dashboard.html ECharts option |
+| P1.1.2 | 合约为 n 前缀清洗 | 10min | app.py 添加清洗 |
+| P1.1.3 | 中文名标注优化 | 10min | xAxis formatter |
+| P1.2.1 | 详情图标点击不一致 | 20min | 排查 + 修复 |
+| P1.2.3 | 评分算法透明度确认 | 5min | 验证记录 |
 
-**当前：素材已全部用完（`xueqiu-first-post.md`→#6, `xueqiu-n-structure-article.md`→#7, `xueqiu-article-final.md`→#8, `xueqiu-article-04.md`→#4, `xueqiu-article-05.md`→#5），下一步需决策：**
-1. 从营销内容库的其他素材（`monito-*`, `devto-article.md`, `statushub-*` 等）转化
-2. 寻找新的外部素材
-3. 切换方向（如雪球发布需人类配合）
+**当前：Step P1.1.1 — IV 柱状图底部 xAxis label 拥挤**
+- 增加 `grid.bottom` 从 110 → 140
+- xAxis label `fontSize` 从 9 → 8
+- xAxis label 仅显示符号（简短），中文名移到 tooltip
 
 ## Company State
 - **Product**: 期货期权统一信号仪表盘（Railway Fallback 运行中 ✅）
-- **Stage**: 核心功能 ✅ → 付费墙 ✅ → 所有 P0/P1 修复 ✅ → 产品 Blog 内容运营 🟢（8 篇已部署 ✅）
+- **Stage**: 核心功能 ✅ → 付费墙 ✅ → 所有 P0/P1 修复 ✅ → 产品 Blog 内容运营 🟢（8 篇已部署 ✅）→ P1 期权面板 UI/UX 修复 🟡（启动）
 - **Live URLs**: Railway ✅ | signals.drifter.indevs.in ✅
 - **Revenue**: $0 | **Users**: 0 | **Monthly Cost**: <$10
 - **Break-even**: 1 user at $19/mo
 
 ## Open Questions
-- ❓ 雪球发布需人类操作 — 是否告知人类账号如何操作？
-- ❓ 营销内容库已全部用完（8 篇 Blog 覆盖了所有 xueqiu-* 素材），下一步素材从哪里来？
-- ❓ `docs/marketing/` 中还有 `monito-*`、`devto-article.md`、`statushub-*`、`community-launch-*` 等素材，可以重新加工为 Blog 文章吗？
-- ❓ 或者切换方向？比如开始雪球发布、社区推广、或找新的获客渠道？
+- ❓ P1.1.1 xAxis 修复：仅符号展示是否足够？需保留中文名在 tooltip 中
+- ❓ Snowball 发布需人类操作 — 是否告知人类账号如何操作？
 - ❓ 0 revenue 的瓶颈在流量还是转化？
+- ❓ P0 线 C + B 线全部完成确认后，后续主方向是继续 P1 还是转换到获客/流量方向？
 
 ## Convergence Check
 - ✅ **User Directives 完整保留，未修改**
-- ✅ **收敛规则 #4** — 产出：Blog #8 部署，验证中...
-- ✅ **收敛规则 #7** — 一个 Cycle 只做一件事（B.5 转化部署）
-- ✅ **收敛规则 #9** — B.5 完成后即收手，不超前做下一步
-- ✅ **收敛规则 #10** — 有明确子任务时不横向排查
+- ✅ **收敛规则 #4** — 产出：options_dashboard.html SSR 排序修复，已提交推送
+- ✅ **收敛规则 #7** — 一个 Cycle 只做一件事（P1.2.2 SSR 排序修复）
+- ✅ **收敛规则 #9** — P1.2.2 完成后即收手，不超前做下一步
+- ✅ **收敛规则 #10** — 明确转向 P1 方向后，跳过发散推理直接执行子任务
