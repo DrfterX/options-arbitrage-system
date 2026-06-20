@@ -1131,7 +1131,8 @@ var IV_DATA = JSON.parse('{{ iv_json|safe }}');
         if (!d) return '';
         var sym = (d.symbol || '').toUpperCase();
         var cname = (d.name && d.name !== d.symbol) ? d.name : sym;
-        return '<strong>' + sym + ' ' + cname + ' · ' + (d.contract||'') + '</strong><br/>'
+        var contractStr = d.contract ? ' · ' + d.contract : '';
+        return '<strong>' + sym + ' ' + cname + contractStr + '</strong><br/>'
           + '当前 IV: ' + (d.current_iv * 100).toFixed(2) + '%<br/>'
           + '百分位: ' + d.percentile.toFixed(1) + '%<br/>'
           + '等级: ' + (d.level || '—') + '<br/>'
