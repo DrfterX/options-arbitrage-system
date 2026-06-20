@@ -62,8 +62,8 @@ def _normalize_n_ts(d: dict) -> None:
         bj_midnight_utc = ((ts + _BJ_OFFSET) // 86400) * 86400 - _BJ_OFFSET
         d[key] = bj_midnight_utc + _TARGET_HOUR_SEC
 
-# 管理员密码（从环境变量读取，默认值让人类可以立即使用）
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "autocompany2024")
+# 管理员密码（从环境变量读取；未设置时所有管理请求自动拒绝 → fail-secure）
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 
 # 注册铁矿石API Blueprint
 app.register_blueprint(_build_iron_bp(db))
@@ -186,6 +186,12 @@ def sitemap_xml():
     <lastmod>{portal_lastmod}</lastmod>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://signals.drifter.indevs.in/api/docs</loc>
+    <lastmod>{portal_lastmod}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
   </url>
   <url>
     <loc>https://futures.drifter.indevs.in/</loc>
@@ -2261,6 +2267,139 @@ def api_request_trial():
         conn.rollback()
         logger.error("生成试用 Token 失败: %s", e)
         return jsonify({"error": str(e)}), 500
+
+
+# ─── 品种级 SEO 着陆页 ──────────────────────────────────────
+
+
+@app.route("/symbol/<symbol>")
+def symbol_page(symbol: str):
+    """品种独立着陆页 — 显示指定品种的实时信号、N 型结构、期权 IV 状态。
+
+    用于 SEO 搜索引擎索引，每个主力品种一个独立页面。
+    """
+    sym = symbol.upper()
+    conn = db.get_conn()
+    try:
+        # 1. 验证品种是否存在
+        name = SYMBOL_NAMES.get(sym)
+        if not name:
+            return render_template("symbol_page.html",
+                exists=False, symbol=sym, name=sym), 404
+
+        # 2. 查找所属板块
+        sector_name = None
+        sector_symbols = []
+        for sn, symbols in SECTORS.items():
+            if sym in symbols:
+                sector_name = sn
+                sector_symbols = [s for s in symbols if s != sym]
+                break
+
+        # 3. 最新信号
+        sig_row = conn.execute(
+            """SELECT contract, direction, signal_type, score,
+                      level1_pass, level2_pass, level3_pass, created_at
+               FROM futures_signals
+               WHERE symbol=? ORDER BY created_at DESC LIMIT 1""",
+            (sym,),
+        ).fetchone()
+        signal = dict(sig_row) if sig_row else None
+        if signal:
+            signal["score"] = round(signal["score"], 2) if signal["score"] else 0
+            signal["l1"] = bool(signal["level1_pass"])
+            signal["l2"] = bool(signal["level2_pass"])
+            signal["l3"] = bool(signal["level3_pass"])
+
+        # 4. N 型结构（所有 4 周期）
+        n_rows = conn.execute("""
+            SELECT timeframe, direction, state,
+                   point_a_price, point_b_price, point_c_price,
+                   point_a_time, point_b_time, point_c_time, updated_at
+            FROM futures_n_structures
+            WHERE symbol=? AND state NOT IN ('COMPLETED', 'IDLE')
+            ORDER BY timeframe
+        """, (sym,)).fetchall()
+        n_structures = []
+        for r in n_rows:
+            d = dict(r)
+            if d.get("timeframe") in ("1d", "1w"):
+                _normalize_n_ts(d)
+            n_structures.append(d)
+
+        # 5. 当前价格（日线最新一条）
+        price_row = conn.execute(
+            """SELECT close, timestamp
+               FROM futures_klines
+               WHERE symbol=? AND timeframe='1d'
+               ORDER BY timestamp DESC LIMIT 1""",
+            (sym,),
+        ).fetchone()
+        current_price = round(price_row["close"], 2) if price_row else None
+        price_time = price_row["timestamp"] if price_row else None
+        price_time_str = datetime.fromtimestamp(price_time).strftime("%m/%d %H:%M") if price_time else ""
+
+        # 6. 期权 IV 状态
+        iv_status = None
+        iv_row = conn.execute(
+            """SELECT symbol, iv_percentile, iv_rank, iv_current, iv_high, iv_low
+               FROM iv_history
+               WHERE symbol=? ORDER BY created_at DESC LIMIT 1""",
+            (sym,),
+        ).fetchone()
+        if iv_row:
+            iv_status = dict(iv_row)
+
+        # 6b. 期权信号评分
+        opt_row = conn.execute(
+            """SELECT score, direction, created_at
+               FROM options_signals
+               WHERE symbol=? ORDER BY created_at DESC LIMIT 1""",
+            (sym,),
+        ).fetchone()
+        opt_signal = dict(opt_row) if opt_row else None
+
+        # 7. 同板块品种列表（含简要信号方向）
+        related = []
+        for rsym in sector_symbols or []:
+            rrow = conn.execute(
+                """SELECT direction, score
+                   FROM futures_signals
+                   WHERE symbol=? ORDER BY created_at DESC LIMIT 1""",
+                (rsym,),
+            ).fetchone()
+            related.append({
+                "symbol": rsym,
+                "name": SYMBOL_NAMES.get(rsym, rsym),
+                "direction": rrow["direction"] if rrow else None,
+                "score": round(rrow["score"], 2) if rrow and rrow["score"] else 0,
+            })
+
+        # 8. 构建 SEO 描述
+        dir_label = {"LONG": "偏多↑", "SHORT": "偏空↓", "NEUTRAL": "中性"}
+        sig_summary = ""
+        if signal:
+            label = dir_label.get(signal["direction"], signal["direction"])
+            sig_summary = f"信号{label}，评分{signal['score']}。"
+        n_summary = ""
+        for ns in n_structures:
+            label = dir_label.get(ns["direction"], ns["direction"])
+            tf_label = {"15m": "15分钟", "1h": "1小时", "1d": "日线", "1w": "周线"}
+            n_summary += f"{tf_label.get(ns['timeframe'], ns['timeframe'])}周期{label}（{ns['state']}）；"
+
+        seo_desc = f"{name}（{sym}）期货期权实时信号 — {sig_summary} 多周期N型结构：{n_summary} 数据由信号矩阵自动生成。"
+        seo_title = f"{name}（{sym}）实时期货信号 — N型结构多周期分析 | 信号矩阵"
+
+        return render_template("symbol_page.html",
+            exists=True,
+            symbol=sym, name=name, sector=sector_name,
+            signal=signal, n_structures=n_structures,
+            current_price=current_price, price_time_str=price_time_str,
+            iv_status=iv_status, opt_signal=opt_signal,
+            related=related, seo_title=seo_title, seo_desc=seo_desc,
+        )
+    finally:
+        pass
 
 
 # 确保 session 表在应用启动时存在（在 gunicorn import 时执行）

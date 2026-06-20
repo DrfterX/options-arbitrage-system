@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+{% if exists %}
+<meta name="description" content="{{ seo_desc | e }}">
+<meta property="og:title" content="{{ seo_title | e }}">
+<meta property="og:description" content="{{ seo_desc | e }}">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://signals.drifter.indevs.in/symbol/{{ symbol }}">
+<link rel="canonical" href="https://signals.drifter.indevs.in/symbol/{{ symbol }}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{{ seo_title | e }}">
+<meta name="twitter:description" content="{{ seo_desc | e }}">
+<title>{{ seo_title | e }}</title>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Product",
+  "name": "{{ name }}({{ symbol }}) 期货信号",
+  "description": "{{ seo_desc | e }}",
+  "category": "{{ sector or '期货' }}",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD",
+    "availability": "https://schema.org/InStock"
+  }
+}
+</script>
+{% else %}
+<title>{{ symbol }} — 品种未收录 | 信号矩阵</title>
+<meta name="robots" content="noindex">
+{% endif %}
+<script>!function(){var i=new Image;i.src="/api/track.gif?url="+encodeURIComponent(location.pathname)+"&ref="+encodeURIComponent(document.referrer||"")}();</script>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+/* ════════════════════════════════════════════════════════════
+   Symbol Landing Page — Terminal Luxe
+   Dark theme, gold accents, professional trading terminal feel
+   ════════════════════════════════════════════════════════════ */
+
+/* ── breadcrumb ── */
+.sym-breadcrumb {
+  display: flex; align-items: center; gap: 8px;
+  padding: 14px 24px 0;
+  font-size: .82rem; color: var(--text3);
+}
+.sym-breadcrumb a { color: var(--text2); text-decoration: none; transition: color .2s; }
+.sym-breadcrumb a:hover { color: var(--brand); }
+.sym-breadcrumb .sep { color: var(--text4); }
+
+/* ── hero banner ── */
+.sym-hero {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 16px;
+  padding: 24px 24px 20px;
+}
+.sym-hero-left { display: flex; align-items: baseline; gap: 16px; }
+.sym-hero-symbol { font-size: 1.6rem; font-weight: 700; font-family: var(--font-mono); letter-spacing: .02em; }
+.sym-hero-name { font-size: 1rem; color: var(--text2); }
+.sym-hero-price {
+  font-size: 1.4rem; font-weight: 600; font-family: var(--font-mono);
+  color: var(--text); letter-spacing: .02em;
+}
+.sym-hero-price.updated { color: var(--text2); font-size: .78rem; font-weight: 400; font-family: var(--font-ui); }
+.sym-hero-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 12px; border-radius: 20px;
+  font-size: .8rem; font-weight: 600; letter-spacing: .03em;
+}
+.sym-hero-badge.LONG { background: var(--long-bg); color: var(--long); border: 1px solid rgba(240,68,56,.2); }
+.sym-hero-badge.SHORT { background: var(--short-bg); color: var(--short); border: 1px solid rgba(34,197,94,.2); }
+.sym-hero-badge.NEUTRAL { background: var(--brand-bg); color: var(--brand); border: 1px solid rgba(240,180,41,.2); }
+.sym-hero-score {
+  font-size: 1rem; font-weight: 500; font-family: var(--font-mono);
+  color: var(--brand);
+}
+
+/* ── section title ── */
+.sym-section-title {
+  display: flex; align-items: center; gap: 10px;
+  padding: 20px 24px 12px;
+  font-size: .92rem; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .04em; color: var(--text2);
+}
+.sym-section-title::before {
+  content: ''; width: 3px; height: 14px;
+  background: var(--brand); border-radius: 2px;
+}
+
+/* ── N-structure grid ── */
+.sym-n-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+  padding: 0 24px 16px;
+}
+.sym-n-card {
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  padding: 16px; position: relative; overflow: hidden;
+  transition: border-color .2s, background .2s;
+}
+.sym-n-card:hover { border-color: var(--border-light); background: var(--card-hover); }
+.sym-n-card-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 12px;
+}
+.sym-n-card-tf {
+  font-size: .8rem; font-weight: 600; font-family: var(--font-mono);
+  padding: 2px 8px; border-radius: 4px;
+  background: var(--bg2); color: var(--text2);
+  letter-spacing: .02em;
+}
+.sym-n-card-dir {
+  font-size: .75rem; font-weight: 600; padding: 2px 10px; border-radius: 10px;
+}
+.sym-n-card-dir.LONG { background: var(--long-bg); color: var(--long); }
+.sym-n-card-dir.SHORT { background: var(--short-bg); color: var(--short); }
+
+.sym-n-abc {
+  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px;
+  margin: 10px 0;
+}
+.sym-n-point {
+  text-align: center; padding: 6px 4px;
+  border-radius: var(--radius-sm); background: var(--bg2);
+}
+.sym-n-point-label { font-size: .68rem; color: var(--text3); margin-bottom: 2px; }
+.sym-n-point-price { font-size: .82rem; font-weight: 600; font-family: var(--font-mono); }
+.sym-n-point-price.go-up { color: var(--long); }
+.sym-n-point-price.go-down { color: var(--short); }
+
+.sym-n-state {
+  font-size: .72rem; color: var(--text3); text-align: center;
+  border-top: 1px solid var(--border); padding-top: 8px; margin-top: 4px;
+}
+
+/* ── IV section ── */
+.sym-iv-card {
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  padding: 20px 24px; margin: 0 24px 16px;
+  display: flex; align-items: center; gap: 24px; flex-wrap: wrap;
+}
+.sym-iv-metric { text-align: center; min-width: 80px; }
+.sym-iv-value { font-size: 1.2rem; font-weight: 600; font-family: var(--font-mono); }
+.sym-iv-value.high { color: var(--long); }
+.sym-iv-value.mid { color: var(--brand); }
+.sym-iv-value.low { color: var(--short); }
+.sym-iv-label { font-size: .72rem; color: var(--text3); margin-top: 2px; }
+
+/* ── options signal ── */
+.sym-opt-card {
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  padding: 16px 24px; margin: 0 24px 16px;
+  display: flex; align-items: center; gap: 16px;
+}
+.sym-opt-dir {
+  font-size: .8rem; font-weight: 600; padding: 2px 10px; border-radius: 10px;
+}
+.sym-opt-dir.BULLISH { background: var(--long-bg); color: var(--long); }
+.sym-opt-dir.BEARISH { background: var(--short-bg); color: var(--short); }
+.sym-opt-dir.NEUTRAL { background: var(--brand-bg); color: var(--brand); }
+
+/* ── related symbols ── */
+.sym-related {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 10px;
+  padding: 0 24px 32px;
+}
+.sym-related-item {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 10px; border-radius: var(--radius-md);
+  background: var(--card); border: 1px solid var(--border);
+  text-decoration: none; transition: border-color .2s, background .2s;
+}
+.sym-related-item:hover { border-color: var(--border-light); background: var(--card-hover); }
+.sym-related-sym {
+  font-size: .9rem; font-weight: 600; font-family: var(--font-mono);
+  color: var(--text);
+}
+.sym-related-name { font-size: .68rem; color: var(--text3); }
+.sym-related-dir {
+  font-size: .68rem; font-weight: 500; padding: 1px 6px; border-radius: 8px;
+}
+.sym-related-dir.LONG { color: var(--long); }
+.sym-related-dir.SHORT { color: var(--short); }
+.sym-related-dir.None { color: var(--text3); }
+
+/* ── footer back-link ── */
+.sym-footer {
+  text-align: center; padding: 0 24px 40px;
+}
+.sym-footer a {
+  display: inline-flex; align-items: center; gap: 6px;
+  color: var(--text3); text-decoration: none; font-size: .82rem;
+  transition: color .2s;
+}
+.sym-footer a:hover { color: var(--brand); }
+
+/* ── 404 state ── */
+.sym-404 {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  min-height: 60vh; gap: 16px;
+}
+.sym-404 h1 { font-size: 2rem; font-family: var(--font-mono); color: var(--text2); }
+.sym-404 p { color: var(--text3); font-size: .9rem; }
+.sym-404 a { color: var(--brand); text-decoration: none; }
+.sym-404 a:hover { text-decoration: underline; }
+
+/* ── animation ── */
+@keyframes sym-fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.sym-n-card, .sym-iv-card, .sym-opt-card { animation: sym-fade-up .4s var(--ease-out) both; }
+.sym-n-card:nth-child(1) { animation-delay: .05s; }
+.sym-n-card:nth-child(2) { animation-delay: .10s; }
+.sym-n-card:nth-child(3) { animation-delay: .15s; }
+.sym-n-card:nth-child(4) { animation-delay: .20s; }
+
+/* ── responsive ── */
+@media (max-width: 640px) {
+  .sym-hero { flex-direction: column; align-items: flex-start; }
+  .sym-n-grid { grid-template-columns: 1fr; }
+  .sym-related { grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); }
+  .sym-hero-price { font-size: 1.1rem; }
+  .sym-iv-card { flex-direction: column; align-items: flex-start; gap: 12px; }
+}
+</style>
+</head>
+<body>
+{% if exists %}
+
+<!-- ═══ Breadcrumb ═══ -->
+<nav class="sym-breadcrumb">
+  <a href="https://signals.drifter.indevs.in">信号矩阵</a>
+  <span class="sep">›</span>
+  {% if sector %}<a href="https://signals.drifter.indevs.in">{{ sector }}</a><span class="sep">›</span>{% endif %}
+  <span style="color:var(--text)">{{ symbol }}</span>
+</nav>
+
+<!-- ═══ Hero ═══ -->
+<header class="sym-hero">
+  <div class="sym-hero-left">
+    <div>
+      <span class="sym-hero-symbol">{{ symbol }}</span>
+      <span class="sym-hero-name">{{ name }}</span>
+    </div>
+    {% if signal %}
+    <span class="sym-hero-badge {{ signal.direction }}">{{ signal.direction }}</span>
+    <span class="sym-hero-score">{{ signal.score }}</span>
+    {% endif %}
+  </div>
+  <div style="display:flex;align-items:baseline;gap:12px;">
+    {% if current_price %}
+    <span class="sym-hero-price">{{ "{:,.2f}".format(current_price) }}</span>
+    {% if price_time_str %}
+    <span class="sym-hero-price updated">{{ price_time_str }}</span>
+    {% endif %}
+    {% endif %}
+  </div>
+</header>
+
+<!-- ═══ N型结构 section ═══ -->
+<div class="sym-section-title">N 型结构 · 多周期分析</div>
+
+<div class="sym-n-grid">
+  {% set tf_labels = {"15m":"15分钟","1h":"1小时","1d":"日线","1w":"周线"} %}
+  {% set state_labels = {"LEG1":"第一笔形成中","LEG2":"第二笔形成中","LEG3":"第三笔形成中","COMPLETED":"已完成","IDLE":"待激活"} %}
+
+  {% for ns in n_structures %}
+  {% set ab = ns.point_a_price %}
+  {% set bb = ns.point_b_price %}
+  {% set cb = ns.point_c_price %}
+  <div class="sym-n-card">
+    <div class="sym-n-card-header">
+      <span class="sym-n-card-tf">{{ tf_labels.get(ns.timeframe, ns.timeframe) }}</span>
+      <span class="sym-n-card-dir {{ ns.direction }}">{{ ns.direction }}</span>
+    </div>
+    <div style="font-size:.72rem;color:var(--text3);margin-bottom:8px;">
+      {{ state_labels.get(ns.state, ns.state) }}
+    </div>
+    <div class="sym-n-abc">
+      <div class="sym-n-point">
+        <div class="sym-n-point-label">A</div>
+        <div class="sym-n-point-price">{{ "{:,.0f}".format(ab) }}</div>
+      </div>
+      <div class="sym-n-point">
+        <div class="sym-n-point-label">B</div>
+        <div class="sym-n-point-price {{ 'go-up' if bb > ab else 'go-down' }}">{{ "{:,.0f}".format(bb) }}</div>
+      </div>
+      <div class="sym-n-point">
+        <div class="sym-n-point-label">C</div>
+        <div class="sym-n-point-price">{{ "{:,.0f}".format(cb) }}</div>
+      </div>
+    </div>
+    <div class="sym-n-state">
+      {% if ns.direction == "LONG" %}
+      A→B↗ B→C↘ C→最新价↗ · 上升N型
+      {% else %}
+      A→B↘ B→C↗ C→最新价↘ · 下降N型
+      {% endif %}
+    </div>
+  </div>
+  {% else %}
+  <div style="grid-column:1/-1;padding:24px;text-align:center;color:var(--text3);background:var(--card);border:1px solid var(--border);border-radius:var(--radius-lg);">
+    ⚡ 暂无活跃 N 型结构数据
+  </div>
+  {% endfor %}
+</div>
+
+<!-- ═══ IV 状态 ═══ -->
+{% if iv_status %}
+<div class="sym-section-title">期权 · 隐含波动率</div>
+<div class="sym-iv-card">
+  <div class="sym-iv-metric">
+    <div class="sym-iv-value {{ 'high' if iv_status.iv_percentile and iv_status.iv_percentile > 80 else 'mid' if iv_status.iv_percentile and iv_status.iv_percentile > 20 else 'low' }}">
+      {{ (iv_status.iv_percentile * 100)|round|int if iv_status.iv_percentile is not none else '—' }}%
+    </div>
+    <div class="sym-iv-label">IV 百分位</div>
+  </div>
+  <div class="sym-iv-metric">
+    <div class="sym-iv-value">{{ (iv_status.iv_current|float|round(1)) if iv_status.iv_current else '—' }}%</div>
+    <div class="sym-iv-label">当前 IV</div>
+  </div>
+  <div class="sym-iv-metric">
+    <div class="sym-iv-value" style="color:var(--text2)">{{ (iv_status.iv_high|float|round(1)) if iv_status.iv_high else '—' }}%</div>
+    <div class="sym-iv-label">最高 IV</div>
+  </div>
+  <div class="sym-iv-metric">
+    <div class="sym-iv-value" style="color:var(--text2)">{{ (iv_status.iv_low|float|round(1)) if iv_status.iv_low else '—' }}%</div>
+    <div class="sym-iv-label">最低 IV</div>
+  </div>
+</div>
+{% endif %}
+
+<!-- ═══ 期权信号 ═══ -->
+{% if opt_signal %}
+<div class="sym-section-title">期权策略评分</div>
+<div class="sym-opt-card">
+  <span class="sym-opt-dir {{ opt_signal.direction }}">
+    {{ opt_signal.direction }}
+  </span>
+  <span style="font-family:var(--font-mono);font-weight:600;font-size:1rem;">
+    {{ opt_signal.score|round(2) if opt_signal.score else '—' }}
+  </span>
+  <span style="color:var(--text3);font-size:.78rem;">
+    更新于 {{ opt_signal.created_at[:16] if opt_signal.created_at else '' }}
+  </span>
+</div>
+{% endif %}
+
+<!-- ═══ 同板块品种 ═══ -->
+{% if related %}
+<div class="sym-section-title">{{ sector }} · 同板块品种</div>
+<div class="sym-related">
+  {% for r in related %}
+  <a href="/symbol/{{ r.symbol }}" class="sym-related-item">
+    <span class="sym-related-sym">{{ r.symbol }}</span>
+    <span class="sym-related-name">{{ r.name }}</span>
+    {% if r.direction %}
+    <span class="sym-related-dir {{ r.direction }}">{{ r.direction }}</span>
+    {% else %}
+    <span class="sym-related-dir None">—</span>
+    {% endif %}
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+
+<!-- ═══ Footer ═══ -->
+<div class="sym-footer">
+  <a href="https://signals.drifter.indevs.in">← 返回信号矩阵首页</a>
+</div>
+
+{% else %}
+<!-- ═══ 404 — 品种不存在 ═══ -->
+<div class="sym-404">
+  <h1>{{ symbol }}</h1>
+  <p>品种 "{{ symbol }}" 未收录在信号矩阵数据库中。</p>
+  <p><a href="https://signals.drifter.indevs.in">← 返回首页查看已收录品种</a></p>
+</div>
+{% endif %}
+
+</body>
+</html>
