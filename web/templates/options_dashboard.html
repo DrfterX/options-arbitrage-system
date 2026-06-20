@@ -212,11 +212,13 @@
 .strat-detail-link {
   color: var(--brand);
   cursor: pointer;
-  font-size: .6rem;
-  text-decoration: underline dotted;
-  opacity: .7;
+  font-size: .72rem;
+  opacity: .85;
+  padding: 4px 2px;
+  border-radius: 3px;
+  transition: background .15s, opacity .15s;
 }
-.strat-detail-link:hover { opacity: 1; }
+.strat-detail-link:hover { background: rgba(168,85,247,.12); opacity: 1; }
 .strat-empty {
   padding: 24px;
   text-align: center;
@@ -867,7 +869,7 @@
             <td class="{% if s.iv_level == '极端高' %}strat-iv-high{% elif s.iv_level == '偏高' %}strat-iv-high{% elif s.iv_level == '正常' %}strat-iv-normal{% elif s.iv_level == '偏低' %}strat-iv-low{% elif s.iv_level == '极端低' %}strat-iv-extreme{% endif %}">{{ "%.1f"|format((s.iv_avg or 0)*100) }}%</td>
             <td class="strat-greeks">Δ:{{ "%.2f"|format(s.net_delta or 0) }}<br>Θ:{{ "%.2f"|format(s.net_theta or 0) }}</td>
             <td><span class="strat-pnl-pos">+{{ "%.0f"|format(s.max_profit or 0) }}</span> / <span class="strat-pnl-neg">{{ "%.0f"|format(s.max_loss or 0) }}</span></td>
-            <td><span class="strat-strength" style="color:{% if s.unified_score >= 70 %}var(--brand){% elif s.unified_score >= 50 %}#f0b429{% else %}var(--text3){% endif %}">{{ "%.1f"|format(s.unified_score or 0) }}</span></td>
+            <td><span class="strat-strength" style="color:{% if s.unified_score >= 70 %}var(--brand){% elif s.unified_score >= 50 %}#f0b429{% else %}var(--text3){% endif %}">{% if s.unified_score and s.unified_score > 99.9 %}99.9+{% else %}{{ "%.1f"|format(s.unified_score or 0) }}{% endif %}</span></td>
             <td class="strat-detail-link" onclick="showStratDetailFromData(this)" data-idx="{{ loop.index0 }}"><span>📋</span></td>
           </tr>
           {% endfor %}
@@ -1225,7 +1227,7 @@ function showStratDetail(el) {
     { label: '盈亏平衡高', value: detail.breakeven_high != null ? detail.breakeven_high.toFixed(1) : '—' },
     { label: '盈利区宽度', value: detail.profit_zone_width != null ? detail.profit_zone_width.toFixed(0) : '—' },
     { label: '胜率', value: detail.win_rate != null ? (detail.win_rate * 100).toFixed(1) + '%' : '—' },
-    { label: '评分', value: detail.score != null ? detail.score.toFixed(1) : '—' },
+    { label: '评分', value: detail.score != null ? (detail.score > 99.9 ? '99.9+' : detail.score.toFixed(1)) : '—' },
     { label: '保证金', value: detail.margin_required != null ? detail.margin_required.toFixed(0) : '—' },
   ];
   fields.forEach(function(f) {
@@ -1435,7 +1437,7 @@ function renderOptionsSignals(signals) {
       + '<td class="' + ivClass + '">' + ivPct + '%</td>'
       + '<td class="strat-greeks">Δ:' + (s.net_delta != null ? s.net_delta.toFixed(2) : '0.00') + '<br>Θ:' + (s.net_theta != null ? s.net_theta.toFixed(2) : '0.00') + '</td>'
       + '<td><span class="strat-pnl-pos">+' + (s.max_profit != null ? s.max_profit.toFixed(0) : '0') + '</span> / <span class="strat-pnl-neg">' + (s.max_loss != null ? s.max_loss.toFixed(0) : '0') + '</span></td>'
-      + '<td><span class="strat-strength" style="color:' + scoreClr + '">' + score.toFixed(1) + '</span></td>'
+      + '<td><span class="strat-strength" style="color:' + scoreClr + '">' + scoreDisplay + '</span></td>'
       + '<td class="strat-detail-link" onclick="showStratDetailFromData(this)" data-idx="' + signals.indexOf(s) + '"><span>📋</span></td>'
       + '</tr>';
   });
@@ -1479,7 +1481,7 @@ function renderOptionCards(signals) {
       + '<div class="option-card-pnl">'
       + '<span class="strat-pnl-pos">P+' + (s.max_profit != null ? s.max_profit.toFixed(0) : '0') + '</span>'
       + '<span class="strat-pnl-neg">L' + (s.max_loss != null ? s.max_loss.toFixed(0) : '0') + '</span>'
-      + '<span class="strat-strength" style="color:' + scoreClr + '">' + (s.unified_score != null ? s.unified_score.toFixed(1) : '—') + '</span>'
+      + '<span class="strat-strength" style="color:' + scoreClr + '">' + (s.unified_score != null ? (s.unified_score > 99.9 ? '99.9+' : s.unified_score.toFixed(1)) : '—') + '</span>'
       + '</div>'
       + '<div class="option-card-detail">' + esc(reason) + '</div>'
       + '</div>';
@@ -1530,7 +1532,7 @@ function showStratDetailFromData(el) {
         { label: '盈亏平衡高', value: sf(detail.breakeven_high, 1) },
         { label: '盈利区宽度', value: sf(detail.profit_zone_width, 0) },
         { label: '胜率', value: detail.win_rate != null ? (detail.win_rate * 100).toFixed(1) + '%' : '—' },
-        { label: '评分', value: detail.score != null ? detail.score.toFixed(1) : (s.unified_score != null ? s.unified_score.toFixed(1) : '—') },
+        { label: '评分', value: detail.score != null ? (detail.score > 99.9 ? '99.9+' : detail.score.toFixed(1)) : (s.unified_score != null ? (s.unified_score > 99.9 ? '99.9+' : s.unified_score.toFixed(1)) : '—') },
         { label: '保证金', value: sf(detail.margin_required, 0) },
       ];
       fields.forEach(function(f) {
