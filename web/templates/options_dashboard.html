@@ -903,7 +903,7 @@
         </thead>
         <tbody id="stratBody">
           {% if options %}
-          {% for s in options[:20] %}
+          {% for s in (options|sort(attribute='unified_score', reverse=True))[:20] %}
           <tr>
             <td><span class="strat-sym">{{ s.symbol }}</span> <span class="strat-name">{{ s.name or s.contract or '' }}</span></td>
             <td><span class="strat-type {% if s.strategy == 'iron_condor' %}strat-ic{% elif s.strategy == 'vertical_spread' %}strat-vs{% elif s.strategy == 'calendar_spread' %}strat-cs{% else %}strat-other{% endif %}">{{ s.strategy_cn }}</span></td>
@@ -920,7 +920,7 @@
         </tbody>
       </table>
       {% if options %}
-	      <script>window._signalsData = {{ options[:20] | tojson | safe }};</script>
+	      <script>window._signalsData = {{ (options|sort(attribute='unified_score', reverse=True))[:20] | tojson | safe }};</script>
 	      {% else %}
 	      <script>window._signalsData = [];</script>
 	      {% endif %}
@@ -932,7 +932,7 @@
     <h2>📊 策略卡片 <span class="badge" id="card-badge">{{ options|length }} 个</span><span class="loading-dot"></span></h2>
     <div class="options-cards" id="optionsCards">
       {% if options %}
-      {% for s in options[:20] %}
+      {% for s in (options|sort(attribute='unified_score', reverse=True))[:20] %}
       <div class="option-card {% if s.unified_score >= 70 %}strength-high{% elif s.unified_score >= 50 %}strength-mid{% else %}strength-low{% endif %}">
         <div class="option-card-header">
           <div>
