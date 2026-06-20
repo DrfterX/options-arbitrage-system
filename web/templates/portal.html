@@ -697,6 +697,51 @@
 .portal-footer .dot.green { background: #22c55e; animation: pulse-dot 2s ease infinite; }
 
 /* ═══════════════════════════════════════════════════════════════
+   Unified Panel (iframe) — B.2 统一导航栏
+   ═══════════════════════════════════════════════════════════════ */
+.panel-iframe {
+  min-height: 70vh;
+  position: relative;
+}
+.panel-frame {
+  width: 100%;
+  border: none;
+  height: 3200px;
+  background: transparent;
+  transition: opacity .3s var(--ease-out);
+}
+
+/* Loading state */
+.panel-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 40vh;
+  z-index: 1;
+  pointer-events: none;
+}
+.pl-spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid rgba(90,97,115,.15);
+  border-top-color: var(--brand);
+  border-radius: 50%;
+  animation: pl-rotate .7s linear infinite;
+}
+@keyframes pl-rotate {
+  to { transform: rotate(360deg); }
+}
+.pl-text {
+  font-size: .7rem;
+  color: var(--text3);
+  letter-spacing: .04em;
+}
+
+/* ═══════════════════════════════════════════════════════════════
    Responsive
    ═══════════════════════════════════════════════════════════════ */
 
@@ -1373,8 +1418,8 @@
   <div class="topbar-right">
     <div class="nav-tabs">
       <span class="nav-tab active" data-tab="overview"><span class="nav-tab-icon">◈</span> 总览</span>
-      <a href="https://futures.drifter.indevs.in" class="nav-tab"><span class="nav-tab-icon">📈</span> 期货</a>
-      <a href="https://options.drifter.indevs.in" class="nav-tab"><span class="nav-tab-icon">📉</span> 期权</a>
+      <span class="nav-tab" data-tab="futures"><span class="nav-tab-icon">📈</span> 期货</span>
+      <span class="nav-tab" data-tab="options"><span class="nav-tab-icon">📉</span> 期权</span>
       <a href="/api/docs" class="nav-tab"><span class="nav-tab-icon">⎔</span> API</a>
       <span class="nav-tab premium-tab" data-tab="premium"><span class="nav-tab-icon">✦</span> Premium</span>
     </div>
@@ -1394,6 +1439,9 @@
 {% endif %}
 
 <div class="main">
+
+<!-- ═══ Panel: Overview (default) ═══ -->
+<div id="panel-overview">
 
 <!-- ─── Tagline ─── -->
 <div class="portal-tagline">
@@ -1463,6 +1511,24 @@
   </div>
 
 </div><!-- /.portal-hero -->
+
+</div><!-- /#panel-overview -->
+
+<!-- ═══ Panel: Futures (lazy-loaded via iframe) ═══ -->
+<div id="panel-futures" class="panel-iframe" style="display:none;">
+  <div class="panel-loading" id="futures-loading">
+    <div class="pl-spinner"></div>
+    <div class="pl-text">加载期货面板…</div>
+  </div>
+</div>
+
+<!-- ═══ Panel: Options (lazy-loaded via iframe) ═══ -->
+<div id="panel-options" class="panel-iframe" style="display:none;">
+  <div class="panel-loading" id="options-loading">
+    <div class="pl-spinner"></div>
+    <div class="pl-text">加载期权面板…</div>
+  </div>
+</div>
 
 <!-- ─── Premium Section (hidden by default, shown via Premium tab) ─── -->
 <div class="premium-section" id="premiumSection" style="display:none;">
@@ -1845,8 +1911,7 @@ setInterval(function() {
 setTimeout(function() { location.reload(); }, 3600000); // 1h fallback
 
 
-// ── Premium Tab — Tab Switching ──
-// Handle data-tab clicks for Premium/Overview tab switching
+// ── Tab Switching — Unified nav (总览 / 期货 / 期权 / Premium) ──
 document.querySelectorAll('.nav-tab[data-tab]').forEach(function(tab) {
   tab.addEventListener('click', function(e) {
     e.preventDefault();
@@ -1855,18 +1920,58 @@ document.querySelectorAll('.nav-tab[data-tab]').forEach(function(tab) {
     document.querySelectorAll('.nav-tab').forEach(function(t) { t.classList.remove('active'); });
     this.classList.add('active');
 
-    if (target === 'premium') {
-      document.getElementById('premiumSection').style.display = '';
-      document.querySelector('.portal-hero').style.display = 'none';
-      document.querySelector('.portal-tagline').style.display = 'none';
-      checkPremiumStatus();
-    } else {
-      document.getElementById('premiumSection').style.display = 'none';
-      document.querySelector('.portal-hero').style.display = '';
+    // Hide all panels
+    ['overview', 'futures', 'options', 'premium'].forEach(function(id) {
+      var panel = document.getElementById('panel-' + id);
+      if (panel) panel.style.display = 'none';
+    });
+    document.getElementById('premiumSection').style.display = 'none';
+    document.querySelector('.portal-tagline').style.display = 'none';
+
+    if (target === 'overview') {
+      document.getElementById('panel-overview').style.display = '';
       document.querySelector('.portal-tagline').style.display = '';
+    } else if (target === 'futures') {
+      lazyLoadIframe('futures', 'https://futures.drifter.indevs.in');
+    } else if (target === 'options') {
+      lazyLoadIframe('options', 'https://options.drifter.indevs.in');
+    } else if (target === 'premium') {
+      document.getElementById('premiumSection').style.display = '';
+      checkPremiumStatus();
     }
   });
 });
+
+// ── Lazy-load iframe for futures/options panels ──
+var iframeCache = {};
+function lazyLoadIframe(name, src) {
+  var container = document.getElementById('panel-' + name);
+  if (!container) return;
+  container.style.display = '';
+
+  if (iframeCache[name]) {
+    // Already created — just ensure visible
+    return;
+  }
+
+  var iframe = document.createElement('iframe');
+  iframe.className = 'panel-frame';
+  iframe.src = src;
+  iframe.setAttribute('frameborder', '0');
+  iframe.setAttribute('allowtransparency', 'true');
+  iframe.setAttribute('loading', 'lazy');
+  iframe.onload = function() {
+    // Hide loading state
+    var loading = document.getElementById(name + '-loading');
+    if (loading) loading.style.display = 'none';
+    // Fade in after load
+    iframe.style.opacity = '1';
+  };
+  iframe.style.opacity = '0';
+
+  container.appendChild(iframe);
+  iframeCache[name] = true;
+}
 
 // ── Premium — Check subscription status ──
 function checkPremiumStatus() {
