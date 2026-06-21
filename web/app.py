@@ -3231,6 +3231,71 @@ def db_sync():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+# ─── DB 启动自动恢复 (Railway 容器重启时从 backup 文件恢复) ──
+# 当 Railway 容器重启后，SQLite DB 为空或数据不完整。
+# 此模块级代码在最前面检查 backup 文件并恢复数据。
+import subprocess as _subprocess
+import gzip as _gzip
+
+_PROJECT_ROOT_DB = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_DB_FULL_PATH = os.path.join(_PROJECT_ROOT_DB, "trading_system.db")
+
+
+def _restore_db_if_needed():
+    """优先恢复 SQL dump，其次恢复二进制 .db.gz"""
+    # 优先 SQL dump（最完整，包含 signals/IV/macd 等计算数据）
+    for _gz_name in (".sql.gz", ".bak.sql.gz"):
+        _sql_gz = _DB_FULL_PATH + _gz_name
+        if not os.path.exists(_sql_gz):
+            continue
+        try:
+            print(f"[startup-db] Found {_gz_name}, restoring...")
+            with _gzip.open(_sql_gz, "rb") as _f:
+                _data = _f.read()
+            if os.path.exists(_DB_FULL_PATH):
+                __import__("shutil").copy2(_DB_FULL_PATH, _DB_FULL_PATH + ".bak2")
+            _result = _subprocess.run(
+                ["sqlite3", _DB_FULL_PATH],
+                input=_data, capture_output=True, timeout=300,
+            )
+            if _result.returncode == 0:
+                _cnt = _subprocess.run(
+                    ["sqlite3", _DB_FULL_PATH, "SELECT COUNT(*) FROM futures_klines"],
+                    capture_output=True, timeout=30,
+                ).stdout.strip()
+                print(f"[startup-db] SQL restore OK: {_cnt.decode()} klines")
+                os.remove(_sql_gz)
+                for _w in ("-shm", "-wal"):
+                    if os.path.exists(_DB_FULL_PATH + _w):
+                        os.remove(_DB_FULL_PATH + _w)
+                return
+            else:
+                print(f"[startup-db] SQL restore FAILED: {_result.stderr.decode()[:200]}")
+        except Exception as _e:
+            print(f"[startup-db] SQL restore error: {_e}")
+
+    # 其次二进制 .db.gz
+    _bin_gz = _DB_FULL_PATH + ".gz"
+    if os.path.exists(_bin_gz) and not os.path.exists(_DB_FULL_PATH + ".bak"):
+        try:
+            print("[startup-db] Restoring from .db.gz...")
+            __import__("shutil").copy2(_DB_FULL_PATH, _DB_FULL_PATH + ".bak")
+            with _gzip.open(_bin_gz, "rb") as _f:
+                _decompressed = _f.read()
+            with open(_DB_FULL_PATH, "wb") as _f:
+                _f.write(_decompressed)
+            for _w in ("-shm", "-wal"):
+                if os.path.exists(_DB_FULL_PATH + _w):
+                    os.remove(_DB_FULL_PATH + _w)
+            os.remove(_bin_gz)
+            print("[startup-db] Binary restore OK")
+        except Exception as _e:
+            print(f"[startup-db] Binary restore error: {_e}")
+
+
+_restore_db_if_needed()
+
+
 # ─── Google Search Console 验证文件 ──────────────────────
 # Google 的 HTML 文件验证方法要求在站点根目录放置 googleXXXXX.html 文件。
 # 本路由将请求映射到 web/verification/ 目录，用户只需将验证文件放入该目录即可。
