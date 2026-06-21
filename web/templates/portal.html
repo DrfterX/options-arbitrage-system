@@ -1812,7 +1812,16 @@ function loadOptionsStrats() {
           : s.strategy === 'covered_call' ? '备兑'
           : s.strategy === 'protective_put' ? '保护沽'
           : s.strategy || '—';
-        var thetaStr = s.net_theta > 0 ? '<span class="pos">+'+s.net_theta.toFixed(2)+'Θ</span>' : '<span class="neg">'+s.net_theta.toFixed(2)+'Θ</span>';
+        var deltaC = s.delta_cash || 0;
+        var thetaC = s.theta_cash || 0;
+        var gammaC = s.gamma_cash || 0;
+        var vegaC = s.vega_cash || 0;
+        function cashSpan(v) {
+          if (v > 0) return '<span class="pos">+'+v.toFixed(0)+'</span>';
+          if (v < 0) return '<span class="neg">'+v.toFixed(0)+'</span>';
+          return '<span style="color:var(--text3)">0</span>';
+        }
+        var greeksHtml = 'δ¥' + cashSpan(deltaC) + ' θ¥' + cashSpan(thetaC) + ' γ¥' + cashSpan(gammaC) + ' ν¥' + cashSpan(vegaC);
         var ivLevelClass = 'iv-normal';
         if (s.iv_level === '极端高') ivLevelClass = 'iv-high';
         else if (s.iv_level === '偏高') ivLevelClass = 'iv-mid';
@@ -1821,7 +1830,7 @@ function loadOptionsStrats() {
         html += '<div class="portal-strat-item">'
           + '<span class="si-sym">' + esc(s.symbol) + '</span>'
           + '<span class="si-strat">' + esc(stratLabel) + ((s.contract) ? ' · ' + esc(s.contract) : '') + '</span>'
-          + '<span class="si-greeks">' + thetaStr + '</span>'
+          + '<span class="si-greeks">' + greeksHtml + '</span>'
           + '<span class="si-iv ' + ivLevelClass + '">' + (s.iv_avg ? (s.iv_avg * 100).toFixed(1) + '%' : '—') + '</span>'
           + '</div>';
       });
