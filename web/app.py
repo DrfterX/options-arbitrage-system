@@ -3147,25 +3147,26 @@ except Exception as e:
 DB_SYNC_KEY = os.environ.get("DB_SYNC_KEY", "")
 
 
-@app.route("/api/db-sync", methods=["POST"])
+@app.route("/api/db-sync", methods=["POST", "GET"])
 def db_sync():
     """接收并恢复 SQLite 数据库备份。
 
-    支持两种格式（自动检测）：
+    支持两种上传方式：
+    1. multipart/form-data（字段名 "file"）
+    2. raw body (Content-Type: application/gzip)
+
+    两种内容格式（自动检测）：
     1. gzip 压缩的 SQLite 二进制文件 (.db.gz)
     2. gzip 压缩的 SQL dump (.sql.gz)
     """
+    # GET 时只返回状态信息
+    if request.method == "GET":
+        return jsonify({"ok": True, "endpoint": "db-sync", "usage": "POST with file"})
+
     # 认证检查
     auth_key = request.headers.get("X-DB-Sync-Key", "")
     if DB_SYNC_KEY and auth_key != DB_SYNC_KEY:
         return jsonify({"ok": False, "error": "unauthorized"}), 401
-
-    if "file" not in request.files:
-        return jsonify({"ok": False, "error": "no file uploaded"}), 400
-
-    f = request.files["file"]
-    if f.filename == "":
-        return jsonify({"ok": False, "error": "empty filename"}), 400
 
     import gzip
     import shutil
@@ -3174,8 +3175,21 @@ def db_sync():
     db_path = str(DB_PATH)
     db_path_bak = db_path + ".bak"
 
+    # 读取压缩数据：优先 multipart，其次 raw body
+    compressed = None
+    content_type = request.content_type or ""
+
+    if "multipart/form-data" in content_type and "file" in request.files:
+        f = request.files["file"]
+        if f.filename:
+            compressed = f.read()
+    elif "application/gzip" in content_type:
+        compressed = request.get_data()
+
+    if compressed is None:
+        return jsonify({"ok": False, "error": "no valid file uploaded"}), 400
+
     try:
-        compressed = f.read()
         decompressed = gzip.decompress(compressed)
 
         # 判断格式：以 SQL 关键字开头 → SQL dump，否则当作 SQLite 二进制
@@ -3184,40 +3198,30 @@ def db_sync():
             header.startswith(kw) for kw in ["CREATE", "INSERT", "BEGIN", "PRAGMA"]
         )
 
+        if os.path.exists(db_path):
+            shutil.copy2(db_path, db_path_bak)
+
         if is_sql_dump:
             # SQL dump 恢复
-            if os.path.exists(db_path):
-                shutil.copy2(db_path, db_path_bak)
-            tmp_sql = db_path + ".sync.sql"
-            with open(tmp_sql, "wb") as out:
-                out.write(decompressed)
             result = subprocess.run(
                 ["sqlite3", db_path],
                 input=decompressed,
                 capture_output=True,
                 timeout=300,
             )
-            os.remove(tmp_sql)
             if result.returncode != 0:
                 raise RuntimeError(
                     f"sqlite3 restore failed: {result.stderr.decode()}"
                 )
             row_count = len(decompressed.decode().splitlines())
-            logger.info(
-                "DB sync OK (SQL dump): %d lines restored", row_count
-            )
+            logger.info("DB sync OK (SQL dump): %d lines restored", row_count)
             return jsonify({"ok": True, "lines": row_count})
-
         else:
             # SQLite 二进制覆盖
-            if os.path.exists(db_path):
-                shutil.copy2(db_path, db_path_bak)
             with open(db_path, "wb") as out:
                 out.write(decompressed)
             total_bytes = len(decompressed)
-            logger.info(
-                "DB sync OK: %d bytes restored to %s", total_bytes, db_path
-            )
+            logger.info("DB sync OK: %d bytes restored to %s", total_bytes, db_path)
             return jsonify({"ok": True, "bytes": total_bytes})
 
     except Exception as e:
