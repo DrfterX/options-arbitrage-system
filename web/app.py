@@ -3279,16 +3279,23 @@ def _restore_db_if_needed():
     if os.path.exists(_bin_gz) and not os.path.exists(_DB_FULL_PATH + ".bak"):
         try:
             print("[startup-db] Restoring from .db.gz...")
-            __import__("shutil").copy2(_DB_FULL_PATH, _DB_FULL_PATH + ".bak")
+            # Close current DB connection before replacing file
+            try:
+                db.close()
+            except Exception:
+                pass
+            # Remove old WAL/SHM which may be incompatible
+            for _w in ("", "-shm", "-wal", ".bak", ".bak2"):
+                _p = _DB_FULL_PATH + _w
+                if os.path.exists(_p) and _w:
+                    os.remove(_p)
+            # Decompress and write
             with _gzip.open(_bin_gz, "rb") as _f:
                 _decompressed = _f.read()
             with open(_DB_FULL_PATH, "wb") as _f:
                 _f.write(_decompressed)
-            for _w in ("-shm", "-wal"):
-                if os.path.exists(_DB_FULL_PATH + _w):
-                    os.remove(_DB_FULL_PATH + _w)
             os.remove(_bin_gz)
-            print("[startup-db] Binary restore OK")
+            print(f"[startup-db] Binary restore OK: {len(_decompressed)} bytes")
         except Exception as _e:
             print(f"[startup-db] Binary restore error: {_e}")
 
