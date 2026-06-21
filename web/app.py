@@ -19,6 +19,7 @@ import os
 import re
 import sqlite3
 import hashlib
+import secrets
 import bcrypt
 from datetime import datetime, timedelta, timezone
 from functools import wraps
@@ -72,6 +73,13 @@ def _normalize_n_ts(d: dict) -> None:
 
 # 管理员密码（从环境变量读取；未设置时所有管理请求自动拒绝 → fail-secure）
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
+
+
+def _admin_pw_ok(candidate: str) -> bool:
+    """时序安全地校验管理员密码。空 ADMIN_PASSWORD 时一律拒绝（fail-secure）。"""
+    if not ADMIN_PASSWORD:
+        return False
+    return secrets.compare_digest(str(candidate or ""), ADMIN_PASSWORD)
 
 # 注册铁矿石API Blueprint
 app.register_blueprint(_build_iron_bp(db))
@@ -1470,10 +1478,11 @@ def api_refresh():
         data = request.get_json(force=True) or {}
     except Exception:
         data = {}
-    password = data.get("password", request.args.get("password", ""))
+    # 密码仅从 POST body 读取（URL query 会进 access log/Referer，已禁用）
+    password = data.get("password", "")
     sync = request.args.get("sync", "").lower() in ("true", "1", "yes")
 
-    if password != ADMIN_PASSWORD:
+    if not _admin_pw_ok(password):
         return jsonify({"error": "密码错误"}), 403
 
     # 周期选择
@@ -2034,7 +2043,7 @@ def api_admin_verify_password():
     """验证管理员密码。"""
     data = request.get_json() or {}
     password = data.get("password", "")
-    if password == ADMIN_PASSWORD:
+    if _admin_pw_ok(password):
         return jsonify({"ok": True})
     return jsonify({"ok": False})
 
@@ -2056,7 +2065,7 @@ def api_admin_generate_token():
     password = data.get("password", "")
     email = data.get("email", "")
 
-    if password != ADMIN_PASSWORD:
+    if not _admin_pw_ok(password):
         return jsonify({"error": "密码错误"}), 403
 
     if not email:
@@ -2087,7 +2096,7 @@ def api_admin_list_subscriptions():
     """列出所有 premium_subscriptions 记录（需密码验证）。"""
     password = request.args.get("password", "")
 
-    if password != ADMIN_PASSWORD:
+    if not _admin_pw_ok(password):
         return jsonify({"error": "密码错误"}), 403
 
     from web.stripe_handler import ensure_premium_table
@@ -2129,7 +2138,6 @@ def _generate_session_token() -> str:
 
     使用 secrets.token_urlsafe（CSPRNG），碰撞概率 < 2^-256。
     """
-    import secrets
     return secrets.token_urlsafe(48)
 
 
@@ -3129,6 +3137,59 @@ try:
     start_incremental_heartbeat(db)
 except Exception as e:
     logger.warning("增量心跳启动失败（非致命）: %s", e)
+
+# ─── DB 同步端点 (Railway 备份恢复) ─────────────────────
+# 本地脚本通过 POST multipart 上传 trading_system.db 的 gzip 压缩包，
+# Railway 端解压后覆盖本地 DB 文件，实现数据同步。
+# 认证：请求头 X-DB-Sync-Key 必须匹配环境变量 DB_SYNC_KEY
+
+DB_SYNC_KEY = os.environ.get("DB_SYNC_KEY", "")
+
+
+@app.route("/api/db-sync", methods=["POST"])
+def db_sync():
+    """接收并恢复 SQLite 数据库备份（gzip 压缩）。"""
+    # 认证检查
+    auth_key = request.headers.get("X-DB-Sync-Key", "")
+    if DB_SYNC_KEY and auth_key != DB_SYNC_KEY:
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+    if "file" not in request.files:
+        return jsonify({"ok": False, "error": "no file uploaded"}), 400
+
+    f = request.files["file"]
+    if f.filename == "":
+        return jsonify({"ok": False, "error": "empty filename"}), 400
+
+    import gzip
+    import shutil
+
+    db_path = str(DB_PATH)
+    db_path_bak = db_path + ".bak"
+
+    try:
+        # 备份当前 DB
+        if os.path.exists(db_path):
+            shutil.copy2(db_path, db_path_bak)
+
+        # 解压并覆盖
+        compressed = f.read()
+        decompressed = gzip.decompress(compressed)
+
+        with open(db_path, "wb") as out:
+            out.write(decompressed)
+
+        total_bytes = len(decompressed)
+        logger.info("DB sync OK: %d bytes restored to %s", total_bytes, db_path)
+        return jsonify({"ok": True, "bytes": total_bytes})
+
+    except Exception as e:
+        # 恢复失败时回滚到备份
+        if os.path.exists(db_path_bak):
+            shutil.copy2(db_path_bak, db_path)
+        logger.error("DB sync FAILED: %s", e)
+        return jsonify({"ok": False, "error": str(e)}), 500
+
 
 # ─── Google Search Console 验证文件 ──────────────────────
 # Google 的 HTML 文件验证方法要求在站点根目录放置 googleXXXXX.html 文件。
