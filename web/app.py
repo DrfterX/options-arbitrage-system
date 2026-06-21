@@ -3243,11 +3243,11 @@ _DB_FULL_PATH = os.path.join(_PROJECT_ROOT_DB, "trading_system.db")
 
 def _restore_db_if_needed():
     """优先恢复 SQL dump，其次恢复二进制 .db.gz"""
-    # 优先 SQL dump（最完整，包含 signals/IV/macd 等计算数据）
-    for _gz_name in (".sql.gz", ".bak.sql.gz"):
-        _sql_gz = _DB_FULL_PATH + _gz_name
-        if not os.path.exists(_sql_gz):
-            continue
+    # SQL dump 文件可能命名为 trading_system.sql.gz（完整）或 trading_system.db.sql.gz
+    _sql_candidates = [
+        _PROJECT_ROOT_DB + "/trading_system.sql.gz",
+        _PROJECT_ROOT_DB + "/trading_system.db.sql.gz",
+    ]
         try:
             print(f"[startup-db] Found {_gz_name}, restoring...")
             with _gzip.open(_sql_gz, "rb") as _f:
