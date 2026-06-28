@@ -35,8 +35,7 @@ _DAY_CLOSE = (15, 0)            # 日盘收盘
 # 夜盘收盘时间 (北京时间次日)
 # key: 收盘时点; values: 适用交易所/品种集合示例
 _NIGHT_CLOSE_2300 = 23 * 3600        # 23:00 (黑色/化工多数)
-_NIGHT_CLOSE_2330 = 23 * 3600 + 1800 # 23:30 (郑商所多数)
-_NIGHT_CLOSE_0100 = 25 * 3600        # 01:00 (大连有色)
+_NIGHT_CLOSE_0100 = 25 * 3600        # 01:00 (上期所有色)
 _NIGHT_CLOSE_0230 = 26 * 3600 + 1800 # 02:30 (上期所贵金属/有色/INE原油)
 _NIGHT_START = 21 * 3600             # 21:00 夜盘统一开盘
 
@@ -44,9 +43,9 @@ _NIGHT_START = 21 * 3600             # 21:00 夜盘统一开盘
 EXCHANGE_NIGHT_CLOSE: Dict[str, int] = {
     "SHFE": _NIGHT_CLOSE_0230,   # 默认按有色的2:30; 黑色品种需特殊处理
     "DCE": _NIGHT_CLOSE_2300,    # 23:00
-    "CZCE": _NIGHT_CLOSE_2330,   # 23:30
+    "CZCE": _NIGHT_CLOSE_2300,   # 23:00 (郑商所实际夜盘23:00收盘)
     "INE": _NIGHT_CLOSE_0230,    # 02:30
-    "GFEX": _NIGHT_CLOSE_2300,   # 23:00
+    "GFEX": 0,                   # 广期所无夜盘（如SI工业硅）
     "CFFEX": 0,                  # 无夜盘
 }
 
@@ -58,11 +57,21 @@ SYMBOL_NIGHT_CLOSE: Dict[str, int] = {
     "RU": _NIGHT_CLOSE_2300, "NR": _NIGHT_CLOSE_2300,
     "SP": _NIGHT_CLOSE_2300, "BR": _NIGHT_CLOSE_2300,
     "SS": _NIGHT_CLOSE_2300,
+    # 上期所有色品种 → 01:00
+    "CU": _NIGHT_CLOSE_0100, "AL": _NIGHT_CLOSE_0100,
+    "ZN": _NIGHT_CLOSE_0100, "PB": _NIGHT_CLOSE_0100,
+    "NI": _NIGHT_CLOSE_0100, "SN": _NIGHT_CLOSE_0100,
     # 上期所有色/贵金属 → 02:30 (保持交易所默认)
     # 大商所多数 → 23:00 (保持交易所默认)
     "J": _NIGHT_CLOSE_2300, "JM": _NIGHT_CLOSE_2300,
     # 大商所豆类油脂 → 23:00
-    # 郑商所 → 23:30 (交易所默认)
+    # 郑商所 → 23:00 (品种级覆盖，已有7个CZCE品种在SYMBOL_NIGHT_CLOSE无则用交易所默认)
+    # 无夜盘品种（在DCE/CZCE但有夜盘品种的交易所旗下）
+    "JD": 0, "LH": 0,
+    # SHFE 无夜盘品种 — 否则回退到 SHFE 默认的 02:30 会导致 K 线错误包含夜盘数据
+    "AO": 0,
+    "SF": 0, "SM": 0, "AP": 0, "CJ": 0,
+
     "ZC": _NIGHT_CLOSE_2300,  # 动力煤(已停但不影响)
 }
 
@@ -72,12 +81,13 @@ _DAY_OPEN_DEFAULT = 9 * 3600       # 9:00
 CFFEX_SYMBOLS = {"IF", "IH", "IM", "IC", "TS", "TF", "T", "TL"}
 
 
-def _get_exchange_night_close(symbol: str) -> int:
+def _get_exchange_night_close(symbol: str, exchange: str = "") -> int:
     """获取品种的夜盘收盘秒数（北京时间当天0点为基准）。0=无夜盘。"""
     if symbol in SYMBOL_NIGHT_CLOSE:
         return SYMBOL_NIGHT_CLOSE[symbol]
-    # 从ContractRegistry查交易所（调用时传入），这里用默认
-    return _NIGHT_CLOSE_0230
+    if exchange and exchange in EXCHANGE_NIGHT_CLOSE:
+        return EXCHANGE_NIGHT_CLOSE[exchange]
+    return _NIGHT_CLOSE_2300  # 默认23:00（34/43夜盘品种）
 
 
 def _trading_breaks_for_symbol(symbol: str, exchange: str = "") -> List[Tuple[int, int]]:
@@ -93,7 +103,7 @@ def _trading_breaks_for_symbol(symbol: str, exchange: str = "") -> List[Tuple[in
         (_time_to_sec(*_DAY_NOON_BREAK), _time_to_sec(*_DAY_AFTERNOON_START)),
     ]
     
-    night_close = _get_exchange_night_close(symbol)
+    night_close = _get_exchange_night_close(symbol, exchange)
     if night_close > 0:
         day_open = _DAY_OPEN_CFFEX if symbol in CFFEX_SYMBOLS else _DAY_OPEN_DEFAULT
         # 跨天：夜盘收盘 → 次日日盘开盘
@@ -111,6 +121,18 @@ def _bj_seconds(timestamp: int) -> int:
     """Unix时间戳 → 北京时间当天的秒数 (0~86399)"""
     dt = datetime.fromtimestamp(timestamp, tz=timezone.utc) + timedelta(hours=8)
     return dt.hour * 3600 + dt.minute * 60 + dt.second
+
+
+def _trading_date(ts: int) -> int:
+    """返回时间戳对应的交易日YYYMMDD（北京时间夜盘21:00+归属下一日）。
+    
+    例：2026-06-26 01:00 BJ→20260626, 2026-06-26 22:00 BJ→20260627。
+    使用整数键用于K线分组，避免浮点数/时间戳精度问题。
+    """
+    bj_dt = datetime.fromtimestamp(ts, tz=timezone.utc) + timedelta(hours=8)
+    if bj_dt.hour >= 21:
+        bj_dt += timedelta(days=1)
+    return bj_dt.year * 10000 + bj_dt.month * 100 + bj_dt.day
 
 
 def _is_trading_boundary(ts1: int, ts2: int, breaks: List[Tuple[int, int]],
@@ -241,9 +263,9 @@ def aggregate_klines(
 
     # 准备交易时段信息
     exchange = _lookup_exchange(symbol)
-    night_close = _get_exchange_night_close(symbol)
+    night_close = _get_exchange_night_close(symbol, exchange)
     breaks = _trading_breaks_for_symbol(symbol, exchange)
-    
+
     period = PERIOD_SECONDS.get(to_tf, 900)
     bars: List[Dict[str, Any]] = []
     current_group: List[Dict[str, Any]] = []
@@ -278,26 +300,25 @@ def aggregate_klines(
                 current_group.append(k)
 
         elif to_tf == "1d":
+            # 日K：按交易日分组（夜盘21:00+归属下一交易日）
+            trading_day = _trading_date(ts)
             if current_aligned_ts is None:
-                current_aligned_ts = ts
+                current_aligned_ts = trading_day
                 current_group.append(k)
-            elif _is_trading_boundary(current_group[-1]["timestamp"], ts,
-                                       breaks, night_close):
+            elif trading_day != current_aligned_ts:
                 bars.append(_aggregate_bar(current_group))
                 current_group = [k]
-                current_aligned_ts = ts
+                current_aligned_ts = trading_day
             else:
                 current_group.append(k)
 
         elif to_tf == "1w":
-            dt = datetime.fromtimestamp(ts, tz=timezone.utc)
-            week_start = (
-                ts
-                - (dt.weekday() * 86400)
-                - dt.hour * 3600
-                - dt.minute * 60
-                - dt.second
-            )
+            # 使用北京时间（UTC+8）计算周起始，确保周日夜盘数据落入正确的周
+            BJT_OFFSET = 8 * 3600
+            bjt_ts = ts + BJT_OFFSET
+            bjt_dt = datetime.fromtimestamp(bjt_ts, tz=timezone.utc)
+            week_start = bjt_ts - (bjt_dt.weekday() * 86400) - bjt_dt.hour * 3600 - bjt_dt.minute * 60 - bjt_dt.second
+            week_start -= BJT_OFFSET  # 转回 UTC 时间戳存储
             if week_start != current_aligned_ts:
                 if current_group:
                     bars.append(_aggregate_bar(current_group))

@@ -1,7 +1,9 @@
 """
 macOS 本地桌面推送通知模块。
 
-通过 ``osascript`` 调用 macOS Notification Center 显示通知。
+通过 ``osascript`` 调用 AppleScript ``display notification`` 显示通知，
+该命令使用 macOS 现代通知 API（UNUserNotificationCenter），兼容 macOS 10.8+。
+
 无需任何配置，系统内置可用。
 
 依赖: macOS 系统，Python 标准库（无需第三方包）
@@ -15,29 +17,43 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 
-def _osascript_js(script: str) -> bool:
-    """通过 osascript -l JavaScript 执行脚本。
+def _notify_osascript(
+    title: str,
+    subtitle: str,
+    text: str,
+    sound: bool = False,
+) -> bool:
+    """通过 osascript AppleScript ``display notification`` 发送通知。
 
-    JavaScript for Automation (JSA) 方式比 AppleScript 更稳定地处理 Unicode。
+    使用 AppleScript 内置命令，底层调度到 UNUserNotificationCenter。
+    比 NSUserNotification (deprecated since macOS 11) 兼容性更好。
 
     Args:
-        script: JavaScript for Automation 代码。
+        title: 通知标题。
+        subtitle: 副标题。
+        text: 正文内容。
+        sound: 是否播放提示音。
 
     Returns:
-        True 执行成功。
+        True 发送成功。
     """
+    # 用 JSON 转义确保 Unicode/emoji 兼容
+    safe_subtitle = json.dumps(subtitle)
+    safe_text = json.dumps(text)
+    safe_title = json.dumps(title)
+
+    # AppleScript display notification 使用 UNUserNotificationCenter
+    parts = [f"display notification {safe_text} with title {safe_title} subtitle {safe_subtitle}"]
+    if sound:
+        parts.append("sound name \"default\"")
+    script = " ".join(parts)
+
     try:
         result = subprocess.run(
-            ["osascript", "-l", "JavaScript", "-e", script],
-            capture_output=True,
-            text=True,
-            timeout=5,
+            ["osascript", "-e", script],
+            capture_output=True, text=True, timeout=5,
         )
-        if result.returncode == 0:
-            return True
-        else:
-            logger.debug("osascript JSA 返回非零: %s", result.stderr.strip())
-            return False
+        return result.returncode == 0
     except FileNotFoundError:
         logger.debug("osascript 不可用（非 macOS 环境）")
         return False
@@ -66,23 +82,8 @@ def notify(
     Returns:
         True 通知发送成功，False 失败（非 macOS / osascript 不可用）。
     """
-    # 用 JavaScript for Automation 确保 Unicode/emoji 兼容
-    title_js = json.dumps(title)
-    subtitle_js = json.dumps(subtitle)
-    text_js = json.dumps(text)
-
-    script = (
-        f'ObjC.import("Foundation");'
-        f'var center = $.NSUserNotificationCenter.defaultUserNotificationCenter;'
-        f'var notif = $.NSUserNotification.alloc.init;'
-        f'notif.title = {title_js};'
-        f'notif.subtitle = {subtitle_js};'
-        f'notif.informativeText = {text_js};'
-        f'if ({str(sound).lower()}) {{ notif.soundName = $.NSUserNotificationDefaultSoundName }};'
-        f'center.deliverNotification(notif);'
-    )
-
-    ok = _osascript_js(script)
+    # 用 AppleScript display notification（底层 UNUserNotificationCenter）
+    ok = _notify_osascript(title, subtitle, text, sound)
     if ok:
         logger.info("macOS 通知已发送: %s - %s", title, subtitle)
     return ok

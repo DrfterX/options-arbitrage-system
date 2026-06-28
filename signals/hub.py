@@ -8,6 +8,7 @@
 import json
 import logging
 import math
+import sqlite3
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
@@ -28,6 +29,11 @@ def _sanitize_json(obj: Any) -> Any:
     if isinstance(obj, float) and (math.isinf(obj) or math.isnan(obj)):
         return None
     return obj
+
+
+def _safe_int_pass(val: Any) -> int:
+    """安全提取 level-level dict 的 'passed' 值，非 dict 返回 0。"""
+    return int(val.get("passed", 0)) if isinstance(val, dict) else 0
 
 
 def _safe_float(val, default: float = 0.0) -> float:
@@ -61,20 +67,7 @@ class SignalHub:
     # ── 期货信号 ──────────────────────────────────────────────
 
     def record_futures_signal(self, result) -> int:
-        """将 SignalResult 写入 ``futures_signals`` 表。
-
-        自动计算去重指纹并跳过完全相同的已存在信号。
-
-        Args:
-            result: ``futures.scorer.SignalResult`` dataclass 实例，
-                包含 symbol / contract / direction / signal_type /
-                level1/2/3_pass / entry_price / stop_loss / take_profit /
-                overall_score 及 detail(JSON) 等字段。
-
-        Returns:
-            新插入记录的 signal_id（整数），或已有信号的 ID（去重命中），
-            写入失败返回 -1。
-        """
+        """将 SignalResult 写入 ``futures_signals`` 表。"""
         detail: Dict[str, Any] = {}
         if hasattr(result, "level1"):
             detail["level1"] = result.level1
@@ -90,9 +83,9 @@ class SignalHub:
         direction = getattr(result, "direction", "NONE")
         signal_type = getattr(result, "signal_type", "NONE")
 
-        level1_pass = int(getattr(result, "level1", {}).get("passed", 0) if isinstance(getattr(result, "level1", {}), dict) else 0)
-        level2_pass = int(getattr(result, "level2", {}).get("passed", 0) if isinstance(getattr(result, "level2", {}), dict) else 0)
-        level3_pass = int(getattr(result, "level3", {}).get("passed", 0) if isinstance(getattr(result, "level3", {}), dict) else 0)
+        level1_pass = _safe_int_pass(getattr(result, "level1", {}))
+        level2_pass = _safe_int_pass(getattr(result, "level2", {}))
+        level3_pass = _safe_int_pass(getattr(result, "level3", {}))
 
         entry_price = getattr(result, "entry_price", None)
         stop_loss = getattr(result, "stop_loss", None)
@@ -105,76 +98,54 @@ class SignalHub:
 
         now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
-        conn = self.db.get_conn()
-        try:
-            # 去重检查：同一指纹的信号已存在则不重复插入
-            existing = conn.execute(
-                "SELECT id FROM futures_signals WHERE fingerprint = ? LIMIT 1",
-                (fingerprint,),
-            ).fetchone()
-            if existing:
-                logger.debug(
-                    "期货信号去重命中: id=%d %s", existing["id"], fingerprint
-                )
-                return existing["id"]
+        with self.db.get_conn() as conn:
+            try:
+                existing = conn.execute(
+                    "SELECT id FROM futures_signals WHERE fingerprint = ? LIMIT 1",
+                    (fingerprint,),
+                ).fetchone()
+                if existing:
+                    logger.debug(
+                        "期货信号去重命中: id=%d %s", existing["id"], fingerprint
+                    )
+                    return existing["id"]
 
-            cur = conn.execute(
-                """INSERT INTO futures_signals
-                   (symbol, contract, direction, signal_type,
-                    level1_pass, level2_pass, level3_pass,
-                    entry_price, stop_loss, take_profit, score, detail,
-                    fingerprint, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (
-                    result.symbol,
-                    result.contract,
-                    direction,
-                    signal_type,
-                    level1_pass,
-                    level2_pass,
-                    level3_pass,
-                    entry_price,
-                    stop_loss,
-                    take_profit,
-                    score,
-                    detail_json,
-                    fingerprint,
-                    now_utc,
-                ),
-            )
-            conn.commit()
-            signal_id: int = cur.lastrowid or -1
-            logger.info(
-                "期货信号已记录: id=%d %s %s %s score=%.2f fp=%s",
-                signal_id, result.symbol, result.contract, signal_type, score, fingerprint,
-            )
-            return signal_id
-        except Exception as e:
-            logger.error("记录期货信号失败 %s %s: %s", result.symbol, result.contract, e)
-            return -1
+                cur = conn.execute(
+                    """INSERT INTO futures_signals
+                       (symbol, contract, direction, signal_type,
+                        level1_pass, level2_pass, level3_pass,
+                        entry_price, stop_loss, take_profit, score, detail,
+                        fingerprint, created_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        result.symbol, result.contract, direction, signal_type,
+                        level1_pass, level2_pass, level3_pass,
+                        entry_price, stop_loss, take_profit, score, detail_json,
+                        fingerprint, now_utc,
+                    ),
+                )
+                conn.commit()
+                signal_id: int = cur.lastrowid or -1
+                logger.info(
+                    "期货信号已记录: id=%d %s %s %s score=%.2f fp=%s",
+                    signal_id, result.symbol, result.contract, signal_type, score, fingerprint,
+                )
+                return signal_id
+            except sqlite3.IntegrityError as e:
+                logger.error("期货信号重复 %s %s: %s", result.symbol, result.contract, e)
+                return -2
+            except Exception as e:
+                logger.error("记录期货信号失败 %s %s: %s", result.symbol, result.contract, e)
+                conn.rollback()
+                return -1
 
     # ── 期权信号 ──────────────────────────────────────────────
 
     def record_options_signal(self, signal_dict: dict) -> int:
-        """将期权策略信号写入 ``options_signals`` 表。
-
-        Args:
-            signal_dict: 期权策略信号字典，至少包含:
-                symbol, contract, strategy, signal_type, strength,
-                reason, futures_price, iv_avg, iv_percentile, iv_level,
-                net_delta, net_theta, net_vega, max_profit, max_loss,
-                unified_score, strategy_details(JSON)。
-
-        Returns:
-            新插入记录的 signal_id（整数），写入失败返回 -1。
-        """
+        """将期权策略信号写入 ``options_signals`` 表。"""
         strategy_details = signal_dict.get("strategy_details", {})
         if isinstance(strategy_details, dict):
-            # 净化 NaN/Infinity → null（Python json.dumps 默认输出 Infinity 非法 JSON）
             strategy_details = _sanitize_json(strategy_details)
-            strategy_details_json = json.dumps(strategy_details, ensure_ascii=False)
-        else:
-            strategy_details_json = str(strategy_details)
 
         # 顶层数值字段也净化（max_loss 等可能含 float("inf")）
         for key in ("max_loss", "max_profit", "strength", "net_delta", "net_theta", "net_vega"):
@@ -184,52 +155,69 @@ class SignalHub:
 
         now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
-        conn = self.db.get_conn()
-        try:
-            cur = conn.execute(
-                """INSERT INTO options_signals
-                   (symbol, contract, strategy, signal_type, strength,
-                    reason, futures_price, iv_avg, iv_percentile, iv_level,
-                    net_delta, net_theta, net_vega, max_profit, max_loss,
-                    unified_score, strategy_details, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (
-                    signal_dict.get("symbol", ""),
-                    signal_dict.get("contract", ""),
-                    signal_dict.get("strategy", ""),
-                    signal_dict.get("signal_type", "WATCH"),
-                    _safe_float(signal_dict.get("strength", 0)),
-                    signal_dict.get("reason", ""),
-                    _safe_float(signal_dict.get("futures_price", 0)),
-                    _safe_float(signal_dict.get("iv_avg", 0)),
-                    _safe_float(signal_dict.get("iv_percentile", 0)),
-                    signal_dict.get("iv_level", ""),
-                    _safe_float(signal_dict.get("net_delta", 0)),
-                    _safe_float(signal_dict.get("net_theta", 0)),
-                    _safe_float(signal_dict.get("net_vega", 0)),
-                    _safe_float(signal_dict.get("max_profit", 0)),
-                    _safe_float(signal_dict.get("max_loss", 0)),
-                    _safe_float(signal_dict.get("unified_score", 0)),
-                    strategy_details_json,
-                    now_utc,
-                ),
-            )
-            conn.commit()
-            signal_id: int = cur.lastrowid or -1
-            logger.info(
-                "期权信号已记录: id=%d %s %s %s score=%.1f",
-                signal_id,
-                signal_dict.get("symbol"),
-                signal_dict.get("contract"),
-                signal_dict.get("strategy"),
-                signal_dict.get("unified_score", 0),
-            )
-            return signal_id
-        except Exception as e:
-            logger.error(
-                "记录期权信号失败 %s: %s", signal_dict.get("symbol"), e
-            )
-            return -1
+        with self.db.get_conn() as conn:
+            try:
+                strategy_details_json = json.dumps(strategy_details, ensure_ascii=False) if isinstance(strategy_details, dict) else str(strategy_details)
+            except (TypeError, ValueError):
+                strategy_details_json = str(strategy_details)
+
+            try:
+                cur = conn.execute(
+                    """INSERT INTO options_signals
+                       (symbol, contract, strategy, signal_type, strength,
+                        reason, futures_price, iv_avg, iv_percentile, iv_level,
+                        net_delta, net_theta, net_vega, max_profit, max_loss,
+                        days_to_expiry, margin_required, win_rate,
+                        breakeven_low, breakeven_high,
+                        unified_score, strategy_details, created_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                               ?, ?, ?, ?, ?, ?)""",
+                    (
+                        signal_dict.get("symbol", ""),
+                        signal_dict.get("contract", ""),
+                        signal_dict.get("strategy", ""),
+                        signal_dict.get("signal_type", "WATCH"),
+                        _safe_float(signal_dict.get("strength", 0)),
+                        signal_dict.get("reason", ""),
+                        _safe_float(signal_dict.get("futures_price", 0)),
+                        _safe_float(signal_dict.get("iv_avg", 0)),
+                        _safe_float(signal_dict.get("iv_percentile", 0)),
+                        signal_dict.get("iv_level", ""),
+                        _safe_float(signal_dict.get("net_delta", 0)),
+                        _safe_float(signal_dict.get("net_theta", 0)),
+                        _safe_float(signal_dict.get("net_vega", 0)),
+                        _safe_float(signal_dict.get("max_profit", 0)),
+                        _safe_float(signal_dict.get("max_loss", 0)),
+                        signal_dict.get("days_to_expiry", 0) or 0,
+                        _safe_float(signal_dict.get("margin_required", 0)),
+                        _safe_float(signal_dict.get("win_rate", 0)),
+                        _safe_float(signal_dict.get("breakeven_low", 0)),
+                        _safe_float(signal_dict.get("breakeven_high", 0)),
+                        _safe_float(signal_dict.get("unified_score", 0)),
+                        strategy_details_json,
+                        now_utc,
+                    ),
+                )
+                conn.commit()
+                signal_id: int = cur.lastrowid or -1
+                logger.info(
+                    "期权信号已记录: id=%d %s %s %s score=%.1f",
+                    signal_id,
+                    signal_dict.get("symbol"),
+                    signal_dict.get("contract"),
+                    signal_dict.get("strategy"),
+                    signal_dict.get("unified_score", 0),
+                )
+                return signal_id
+            except sqlite3.IntegrityError as e:
+                logger.error("期权信号重复 %s: %s", signal_dict.get("symbol"), e)
+                return -2
+            except Exception as e:
+                logger.error(
+                    "记录期权信号失败 %s: %s", signal_dict.get("symbol"), e
+                )
+                conn.rollback()
+                return -1
 
     # ── 去重 ──────────────────────────────────────────────────
 
@@ -290,20 +278,20 @@ class SignalHub:
         strikes_str = ",".join(str(s) for s in strikes)
         now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
-        conn = self.db.get_conn()
-        try:
-            conn.execute(
-                """INSERT INTO signal_push_log
-                   (fingerprint, symbol, contract, strategy_type, strikes, score, pushed_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                (fingerprint, symbol, contract, strategy_type, strikes_str, score, now_utc),
-            )
-            conn.commit()
-            logger.debug("推送记录: %s", fingerprint)
-            return True
-        except Exception as e:
-            logger.error("记录推送失败 %s: %s", fingerprint, e)
-            return False
+        with self.db.get_conn() as conn:
+            try:
+                conn.execute(
+                    """INSERT INTO signal_push_log
+                       (fingerprint, symbol, contract, strategy_type, strikes, score, pushed_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    (fingerprint, symbol, contract, strategy_type, strikes_str, score, now_utc),
+                )
+                conn.commit()
+                logger.debug("推送记录: %s", fingerprint)
+                return True
+            except Exception as e:
+                logger.error("记录推送失败 %s: %s", fingerprint, e)
+                return False
 
     # ── 查询 ──────────────────────────────────────────────────
 
@@ -385,35 +373,35 @@ class SignalHub:
         Returns:
             True 表示记录成功。
         """
-        conn = self.db.get_conn()
-        try:
-            conn.execute(
-                """INSERT INTO filter_decision_log
-                   (fingerprint, symbol, contract, score,
-                    level1_pass, level2_pass, signal_type, direction,
-                    should_push, push_level, reason, confidence, boost_factor)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (
-                    fingerprint,
-                    symbol,
-                    contract,
-                    score,
-                    int(level1_pass),
-                    int(level2_pass),
-                    signal_type,
-                    direction,
-                    int(should_push),
-                    push_level,
-                    reason,
-                    confidence,
-                    boost_factor,
-                ),
-            )
-            conn.commit()
-            return True
-        except Exception as e:
-            logger.error("记录过滤决策失败 %s: %s", symbol, e)
-            return False
+        with self.db.get_conn() as conn:
+            try:
+                conn.execute(
+                    """INSERT INTO filter_decision_log
+                       (fingerprint, symbol, contract, score,
+                        level1_pass, level2_pass, signal_type, direction,
+                        should_push, push_level, reason, confidence, boost_factor)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        fingerprint,
+                        symbol,
+                        contract,
+                        score,
+                        int(level1_pass),
+                        int(level2_pass),
+                        signal_type,
+                        direction,
+                        int(should_push),
+                        push_level,
+                        reason,
+                        confidence,
+                        boost_factor,
+                    ),
+                )
+                conn.commit()
+                return True
+            except Exception as e:
+                logger.error("记录过滤决策失败 %s: %s", symbol, e)
+                return False
 
     def get_filter_stats(self, delay: bool = False) -> dict:
         """获取 SmartFilter 统计汇总。
@@ -488,24 +476,25 @@ class SignalHub:
             datetime.now(timezone.utc) - timedelta(days=days)
         ).strftime("%Y-%m-%d %H:%M:%S")
 
-        conn = self.db.get_conn()
-        total_deleted: int = 0
-        try:
-            cur = conn.execute(
-                "DELETE FROM futures_signals WHERE created_at < ?", (cutoff,)
-            )
-            total_deleted += cur.rowcount
-            cur = conn.execute(
-                "DELETE FROM options_signals WHERE created_at < ?", (cutoff,)
-            )
-            total_deleted += cur.rowcount
-            cur = conn.execute(
-                "DELETE FROM signal_push_log WHERE pushed_at < ?", (cutoff,)
-            )
-            total_deleted += cur.rowcount
-            conn.commit()
-            logger.info("清理旧数据: 删除 %d 条 (>%d天前)", total_deleted, days)
-            return total_deleted
-        except Exception as e:
-            logger.error("清理旧数据失败: %s", e)
-            return 0
+        with self.db.get_conn() as conn:
+            total_deleted: int = 0
+            try:
+                cur = conn.execute(
+                    "DELETE FROM futures_signals WHERE created_at < ?", (cutoff,)
+                )
+                total_deleted += cur.rowcount
+                cur = conn.execute(
+                    "DELETE FROM options_signals WHERE created_at < ?", (cutoff,)
+                )
+                total_deleted += cur.rowcount
+                cur = conn.execute(
+                    "DELETE FROM signal_push_log WHERE pushed_at < ?", (cutoff,)
+                )
+                total_deleted += cur.rowcount
+                conn.commit()
+                logger.info("清理旧数据: 删除 %d 条 (>%d天前)", total_deleted, days)
+                return total_deleted
+            except Exception as e:
+                logger.error("清理旧数据失败: %s", e)
+                conn.rollback()
+                return 0

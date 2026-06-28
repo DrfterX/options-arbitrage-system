@@ -9,6 +9,14 @@
 # key = 表名, value = CREATE TABLE 语句
 # ============================================================
 ALL_TABLES: dict[str, str] = {
+    # ── 0. Schema 版本管理 ──────────────────────────────────────
+    "schema_version": """
+        CREATE TABLE IF NOT EXISTS schema_version (
+            version     INTEGER PRIMARY KEY,
+            applied_at  TEXT DEFAULT (datetime('now','localtime')),
+            description TEXT DEFAULT ''
+        )
+    """,
     # ── 1. 品种母表 ──────────────────────────────────────────
     "symbols": """
         CREATE TABLE IF NOT EXISTS symbols (
@@ -148,8 +156,14 @@ ALL_TABLES: dict[str, str] = {
             net_delta         REAL DEFAULT 0,
             net_theta         REAL DEFAULT 0,
             net_vega          REAL DEFAULT 0,
+            net_gamma         REAL DEFAULT 0,
             max_profit        REAL DEFAULT 0,
             max_loss          REAL DEFAULT 0,
+            days_to_expiry    INTEGER DEFAULT 0,
+            margin_required   REAL DEFAULT 0,
+            win_rate          REAL DEFAULT 0,
+            breakeven_low     REAL DEFAULT 0,
+            breakeven_high    REAL DEFAULT 0,
             unified_score     REAL DEFAULT 0,
             strategy_details  TEXT DEFAULT '',
             created_at        TEXT DEFAULT (datetime('now'))

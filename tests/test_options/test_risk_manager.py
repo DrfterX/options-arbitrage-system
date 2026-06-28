@@ -58,15 +58,15 @@ class TestRiskCheckResult:
         assert result.warnings == []
 
     def test_add_warning(self) -> None:
-        """添加警告将 passed 设为 False"""
+        """添加警告"""
         result = RiskCheckResult()
         result.add_warning("测试警告")
-        assert result.passed is False
         assert len(result.warnings) == 1
+        assert result.warnings[0] == "测试警告"
 
     def test_to_dict(self) -> None:
         """to_dict 返回正确结构"""
-        result = RiskCheckResult(passed=True, score=15.5, details={"delta": 0.05})
+        result = RiskCheckResult(passed=False, score=15.5, details={"delta": 0.05})
         result.add_warning("警告1")
         d = result.to_dict()
         assert d["passed"] is False

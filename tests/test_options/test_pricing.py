@@ -70,9 +70,14 @@ class TestBlackPrice:
             black_price(F=100, K=90, T=0.5, r=0.02, sigma=0, is_call=True)
 
     def test_negative_time(self) -> None:
-        """到期时间为0或负 → 抛出 ValueError"""
-        with pytest.raises(ValueError, match="到期时间"):
-            black_price(F=100, K=100, T=0, r=0.02, sigma=0.2, is_call=True)
+        """到期时间为0 → 返回内在价值（不再抛异常）"""
+        price = black_price(F=100, K=100, T=0, r=0.02, sigma=0.2, is_call=True)
+        assert price == 0.0  # ATM 内在价值 = 0
+
+    def test_zero_time_itm(self) -> None:
+        """到期日深度实值 → 返回内在价值"""
+        price = black_price(F=100, K=50, T=0, r=0.02, sigma=0.2, is_call=True)
+        assert price == pytest.approx(50.0 * math.exp(-0.02 * 0), abs=1e-9)  # = 50
 
 
 # ═══════════════════════════════════════════════════════
@@ -113,9 +118,10 @@ class TestBlackGreeks:
         assert greeks["theta"] < 0
 
     def test_zero_time_greeks(self) -> None:
-        """到期时间为0 → 抛出 ValueError"""
-        with pytest.raises(ValueError, match="到期时间"):
-            black_greeks(F=100, K=100, T=0, r=0.02, sigma=0.2, is_call=True)
+        """到期时间为0 → 返回全零 Greeks（不再抛异常）"""
+        greeks = black_greeks(F=100, K=100, T=0, r=0.02, sigma=0.2, is_call=True)
+        for key in ("delta", "gamma", "theta", "vega", "rho"):
+            assert greeks[key] == 0.0
 
     def test_deep_itm_call_delta(self) -> None:
         """深度实值看涨 Delta ≈ 1"""

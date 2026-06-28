@@ -955,6 +955,12 @@ class Orchestrator:
                     "net_vega": spread.net_vega,
                     "max_profit": spread.max_profit,
                     "max_loss": spread.max_profit * 3 + spread.net_cost,
+                    "max_loss_unbounded": True,
+                    "win_rate": spread.win_rate,
+                    "days_to_expiry": dte,
+                    "margin_required": round(spread.underlying * get_contract_multiplier(self.registry, symbol) * 0.15 * 2, 0),
+                    "breakeven_low": spread.breakeven_low,
+                    "breakeven_high": spread.breakeven_high,
                     "unified_score": spread.score,
                     "description": f"Call RatioSpread K1={spread.buy_leg.strike:.0f} K2={spread.sell_leg.strike:.0f}",
                     "strategy_details": {
@@ -971,6 +977,7 @@ class Orchestrator:
                         "net_cost": spread.net_cost,
                         "max_profit": spread.max_profit,
                         "max_loss": spread.max_profit * 3 + spread.net_cost,
+                        "max_loss_unbounded": True,
                         "breakeven_low": spread.breakeven_low,
                         "breakeven_high": spread.breakeven_high,
                         "profit_zone_width": spread.profit_zone_width,
@@ -1019,6 +1026,7 @@ class Orchestrator:
                         "net_cost": spread.net_cost,
                         "max_profit": spread.max_profit,
                         "max_loss": spread.max_profit * 3 + spread.net_cost,
+                        "max_loss_unbounded": True,
                         "breakeven_low": spread.breakeven_low,
                         "breakeven_high": spread.breakeven_high,
                         "profit_zone_width": spread.profit_zone_width,
@@ -1051,6 +1059,11 @@ class Orchestrator:
                     "net_vega": strangle.get("net_vega", 0),
                     "max_profit": strangle.get("max_profit", 0),
                     "max_loss": strangle.get("max_loss", 0),
+                    "win_rate": strangle.get("win_rate", 0),
+                    "days_to_expiry": strangle.get("days_to_expiry", dte),
+                    "margin_required": strangle.get("margin_required", 0),
+                    "breakeven_low": strangle.get("breakeven_low", 0),
+                    "breakeven_high": strangle.get("breakeven_high", 0),
                     "unified_score": strangle.get("score", 0),
                     "description": strangle.get("description", ""),
                     "strategy_details": strangle,
@@ -1074,6 +1087,11 @@ class Orchestrator:
                     "net_vega": iron_condor.get("net_vega", 0),
                     "max_profit": iron_condor.get("max_profit", 0),
                     "max_loss": iron_condor.get("max_loss", 0),
+                    "win_rate": iron_condor.get("win_rate", 0),
+                    "days_to_expiry": iron_condor.get("days_to_expiry", dte),
+                    "margin_required": iron_condor.get("margin_required", 0),
+                    "breakeven_low": iron_condor.get("breakeven_low", 0),
+                    "breakeven_high": iron_condor.get("breakeven_high", 0),
                     "unified_score": iron_condor.get("score", 0),
                     "description": iron_condor.get("description", ""),
                     "strategy_details": iron_condor,
@@ -1115,7 +1133,7 @@ class Orchestrator:
                         f"{symbol}_{contract}_{sig['strategy']}_"
                         f"{'_'.join(str(s) for s in strikes)}"
                     )
-                    if not self.hub.check_duplicate(fingerprint, hours=DEDUP_HOURS):
+                    if not self.hub.check_duplicate(fingerprint, hours=1):
                         msg = self.formatter.format_options_strategy(sig)
                         dispatch(msg, level="ENTRY", mode=self._push_mode)
                         self.hub.record_push(

@@ -11,14 +11,13 @@
 - 盈利来源: Theta decay + Vega Short (做空波动率)
 """
 
-import math
 import logging
 from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional, Tuple
 
 from config.settings import MIN_IV, MAX_DELTA_ABS, MIN_OI, MAX_MARGIN, MAX_COST_RATIO
 from config.contracts import ContractRegistry
-from options.pricing import normal_cdf
+from options.pricing import calc_win_rate
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +102,7 @@ class RatioSpread:
     profit_zone_width: float
     win_rate: float
     score: float
+    max_loss_unbounded: bool = True  # Ratio Spread 理论无界亏损
     score_components: dict = field(default_factory=dict)
     score_schema: dict = field(default_factory=dict)
 
@@ -253,18 +253,10 @@ def _calc_ratio_spread(
     t = dte / 365.0
     if t <= 0 or iv_avg <= 0:
         return None
-
-    sigma_sqrt_t = iv_avg * math.sqrt(t)
-    if breakeven_low > 0:
-        d_low = (math.log(breakeven_low / underlying) - 0.5 * iv_avg * iv_avg * t) / sigma_sqrt_t
-    else:
-        d_low = -999.0
-    if breakeven_high > 0:
-        d_high = (math.log(breakeven_high / underlying) - 0.5 * iv_avg * iv_avg * t) / sigma_sqrt_t
-    else:
+    if breakeven_low >= breakeven_high:
         return None
 
-    win_rate = normal_cdf(d_high) - normal_cdf(d_low)
+    win_rate = calc_win_rate(underlying, iv_avg, dte, breakeven_low, breakeven_high)
     contract_multiplier = get_contract_multiplier(registry, symbol)
     margin_estimate = underlying * contract_multiplier * 0.15 * RATIO
     if margin_estimate > MAX_MARGIN:

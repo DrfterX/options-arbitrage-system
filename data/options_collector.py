@@ -85,76 +85,17 @@ def _ensure_akshare() -> None:
 def black_price(
     F: float, K: float, T: float, r: float, sigma: float, is_call: bool
 ) -> float:
-    """Black-76 期货期权定价。
-
-    Args:
-        F: 期货价格。
-        K: 行权价。
-        T: 到期时间（年）。
-        r: 无风险利率（小数，如 0.02）。
-        sigma: 波动率（小数，如 0.25）。
-        is_call: True 为看涨期权，False 为看跌期权。
-
-    Returns:
-        期权理论价格。若 T ≤ 0 或 sigma ≤ 0 则返回 0。
-    """
-    if T <= 0 or sigma <= 0:
-        return 0.0
-
-    d1 = (math.log(F / K) + (sigma ** 2 / 2) * T) / (sigma * math.sqrt(T))
-    d2 = d1 - sigma * math.sqrt(T)
-    df = math.exp(-r * T)
-
-    if is_call:
-        return df * (F * norm.cdf(d1) - K * norm.cdf(d2))
-    else:
-        return df * (K * norm.cdf(-d2) - F * norm.cdf(-d1))
+    """Black-76 期货期权定价（委托 options/pricing.py）。"""
+    from options.pricing import black_price as _bp
+    return _bp(F, K, T, r, sigma, is_call)
 
 
 def black_greeks(
     F: float, K: float, T: float, r: float, sigma: float, is_call: bool
 ) -> dict:
-    """Black-76 模型计算期权 Greeks。
-
-    Args:
-        F: 期货价格。
-        K: 行权价。
-        T: 到期时间（年）。
-        r: 无风险利率（小数）。
-        sigma: 波动率（小数）。
-        is_call: True 为看涨，False 为看跌。
-
-    Returns:
-        Greeks 字典: ``{'delta', 'gamma', 'theta', 'vega'}``。
-        T ≤ 0 或 sigma ≤ 0 时全为零。
-    """
-    if T <= 0 or sigma <= 0:
-        return {"delta": 0.0, "gamma": 0.0, "theta": 0.0, "vega": 0.0}
-
-    d1 = (math.log(F / K) + (sigma ** 2 / 2) * T) / (sigma * math.sqrt(T))
-    d2 = d1 - sigma * math.sqrt(T)
-    df = math.exp(-r * T)
-    nd1 = norm.pdf(d1)
-
-    if is_call:
-        delta = df * norm.cdf(d1)
-        theta = (
-            -F * nd1 * sigma * df / (2 * math.sqrt(T))
-            - r * F * df * norm.cdf(d1)
-            + r * K * df * norm.cdf(d2)
-        ) / 365
-    else:
-        delta = -df * norm.cdf(-d1)
-        theta = (
-            -F * nd1 * sigma * df / (2 * math.sqrt(T))
-            + r * F * df * norm.cdf(-d1)
-            - r * K * df * norm.cdf(-d2)
-        ) / 365
-
-    gamma = df * nd1 / (F * sigma * math.sqrt(T))
-    vega = F * df * nd1 * math.sqrt(T) / 100
-
-    return {"delta": delta, "gamma": gamma, "theta": theta, "vega": vega}
+    """Black-76 Greeks（委托 options/pricing.py）。"""
+    from options.pricing import black_greeks as _bg
+    return _bg(F, K, T, r, sigma, is_call)
 
 
 def calc_iv(
@@ -212,10 +153,13 @@ def calc_iv(
 
 
 def estimate_expiry(contract: str) -> date:
-    """估算期权到期日：合约月份前1个月的25日。
+    """估算期权到期日：合约月份前1个月的25日（保守估计）。
 
     例如合约 ``'RB2609'`` 表示2026年9月合约，
     到期日估算为2026年8月25日。
+
+    注意：实际到期日因交易所/品种而异（SHFE 最后交易日为
+    到期月第5日，DCE/CZCE 为第10日等），此处为统一保守估值。
 
     Args:
         contract: 合约代码，如 ``'RB2609'``。
@@ -755,8 +699,8 @@ class OptionsCollector:
                 # SHFE: 'cu2607C76000' → code[2:6] = '2607'
                 code_month = code[2:6]
             else:
-                # CZCE: 'SA607C1000' → 6='2026', '07'='July' → '2607'
-                code_month = f"{'2' if not code.isupper() else '2'}{code[2:4]}{code[4:6]}"
+                # CZCE: 'SA607C1000' → code[2]='6'(year), code[3:5]='07'(month) → '2607'
+                code_month = f"2{code[2]}{code[3:5]}"
 
             if target_month_suffix and len(code_month) == 4:
                 # 放宽月份匹配：允许 ±1 个月的偏差（期权月份可能略晚于主力合约月份）

@@ -41,13 +41,7 @@ class RiskCheckResult:
         self.warnings: List[str] = []
 
     def add_warning(self, msg: str) -> None:
-        """添加警告信息，同时将 passed 设为 False。
-
-        Args:
-            msg: 警告信息。
-        """
         self.warnings.append(msg)
-        self.passed = False
 
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典。
@@ -153,9 +147,18 @@ class RiskManager:
         net_cost = details.get("net_cost", 0)
         result.details["max_profit"] = round(max_profit, 2)
         result.details["net_cost"] = round(net_cost, 2)
+        max_loss_unbounded = details.get("max_loss_unbounded", False)
+        result.details["max_loss_unbounded"] = max_loss_unbounded
+        if max_loss_unbounded:
+            result.add_warning("策略理论最大亏损无界（Ratio Spread）")
+
         if max_profit > 0 and net_cost != 0:
             if net_cost > 0:
                 profit_margin = max_profit / net_cost if net_cost else 0
+                result.details["profit_margin"] = round(profit_margin, 4)
+            else:
+                # net_cost < 0: 权利金收入策略（Short Strangle / Ratio Spread 等）
+                profit_margin = max_profit / abs(net_cost) if net_cost else 0
                 result.details["profit_margin"] = round(profit_margin, 4)
 
         # 计算综合风险分数

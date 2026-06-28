@@ -24,6 +24,7 @@
 """
 
 import datetime
+import logging
 import os
 import pickle
 import sys
@@ -32,6 +33,8 @@ from typing import Optional, Literal
 
 import akshare as ak
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 # ============================================================
 # 交易日数据缓存（避免每次判断都请求网络）
@@ -48,8 +51,8 @@ def _load_cached_trading_days() -> Optional[set[datetime.date]]:
             if time.time() - mtime < _CACHE_TTL:
                 with open(_CACHE_FILE, "rb") as f:
                     return pickle.load(f)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("交易日缓存读取失败: %s", e)
     return None
 
 
@@ -58,8 +61,8 @@ def _save_trading_days_cache(days: set[datetime.date]) -> None:
     try:
         with open(_CACHE_FILE, "wb") as f:
             pickle.dump(days, f)
-    except Exception:
-        pass  # 缓存写失败不影响主逻辑
+    except Exception as e:
+        logger.warning("交易日缓存写入失败: %s", e)
 
 
 def _fetch_trading_days_from_exchanges() -> set[datetime.date]:
@@ -121,14 +124,14 @@ def is_trading_day(dt: Optional[datetime.date] = None) -> bool:
     try:
         exchange_days = _get_trading_days()
         return dt in exchange_days
-    except Exception:
-        pass  # 网络或解析失败 → 降级
+    except Exception as e:
+        logger.warning("AKShare 交易日历降级（策略1→策略2）: %s", e)
 
     # ---- 策略 2：chinese_calendar ----
     try:
         return _chinese_calendar_is_workday(dt)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("chinese_calendar 降级（策略2→策略3）: %s", e)
 
     # ---- 策略 3：纯周末判断（保底）----
     return dt.weekday() < 5
@@ -210,8 +213,8 @@ def refresh_cache() -> None:
     """强制刷新交易日缓存（通常在每年国务院/交易所发布新公告后手动调用）。"""
     try:
         os.remove(_CACHE_FILE)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("刷新缓存失败: %s", e)
 
 
 # ============================================================

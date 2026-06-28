@@ -21,7 +21,7 @@
 """
 
 import logging
-from typing import Dict, Optional
+from typing import Dict, Literal, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +36,7 @@ _SYMBOL_ACCURACY: Dict[str, float] = {
     "CS": 68.3, "CU": 68.3, "LC": 68.3,
     "AG": 50.0, "AU": 50.0,
     "A": 50.0, "B": 31.7, "C": 0.0,  # 农产品差异大
-    "M": 50.0, "Y": 100.0,
+    "M": 50.0,
     "CF": 15.4, "SR": 50.0, "RM": 50.0, "OI": 2.9,
     "RU": 50.0, "NR": 0.0,
     # 低信度品种 (< 40%)
@@ -138,6 +138,9 @@ class SmartFilter:
         4. 评分 ≥ 0.60 → 提高推送优先级
         5. 能源化工板块 → 加权
 
+    当 `signal_kind='options'` 时，跳过品种准确率检查（期权信号
+    不应被期货回测准确率过滤）。
+
     此类无状态，可全局复用。
     """
 
@@ -166,6 +169,7 @@ class SmartFilter:
         level3_pass: bool = False,
         signal_type: str = "WATCH",
         direction: str = "",
+        signal_kind: str = "futures",
     ) -> FilterDecision:
         """评估信号是否应该推送。
 
@@ -191,6 +195,10 @@ class SmartFilter:
                 confidence=confidence,
                 boost_factor=self.get_sector_boost(symbol),
             )
+
+        # ─── 期权信号：跳过品种准确率检查（期货回测准确率与期权无关） ───
+        if signal_kind == "options":
+            return self._evaluate_option_signal(symbol, score, signal_type)
 
         # ─── 规则 2 + 3: 按品种准确率过滤 ───
         acc = self.get_symbol_accuracy(symbol)
@@ -277,6 +285,50 @@ class SmartFilter:
             push_level="SUPPRESS",
             reason=f"综合置信度 {effective_conf:.1f}% < 55%，已抑制",
             confidence=effective_conf,
+            boost_factor=boost,
+        )
+
+    def _evaluate_option_signal(
+        self,
+        symbol: str,
+        score: float,
+        signal_type: str = "WATCH",
+    ) -> FilterDecision:
+        """评估期权信号（跳过品种准确率检查）。
+
+        期权信号使用评分作为主要推送依据，不依赖期货回测准确率。
+        """
+        boost = self.get_sector_boost(symbol)
+
+        if score >= 70:
+            return FilterDecision(
+                should_push=True,
+                push_level="HIGH",
+                reason=f"期权高评分 {score:.1f}，跳过品种准确率检查",
+                confidence=min(score * 1.2, 99.0),
+                boost_factor=boost,
+            )
+        if score >= 50:
+            return FilterDecision(
+                should_push=True,
+                push_level="NORMAL",
+                reason=f"期权中等评分 {score:.1f}，正常推送",
+                confidence=score,
+                boost_factor=boost,
+            )
+        if signal_type == "ENTRY":
+            return FilterDecision(
+                should_push=True,
+                push_level="NORMAL",
+                reason=f"期权 ENTRY 信号，评分 {score:.1f}",
+                confidence=max(score, 50.0),
+                boost_factor=boost,
+            )
+        return FilterDecision(
+            should_push=False,
+            push_level="SUPPRESS",
+            reason=f"期权评分 {score:.1f} < 50，已抑制",
+            confidence=score,
             boost_factor=boost,
         )
 

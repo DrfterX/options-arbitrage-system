@@ -98,7 +98,7 @@ class TestPhase1InitialDetection:
 
     SYMBOL = "RB"
     CONTRACT = "rb2510"
-    TF = "1d"
+    TF = "1h"
 
     @pytest.fixture
     def db(self) -> Database:
@@ -168,7 +168,7 @@ class TestPhase2ABrokenMigration:
 
     SYMBOL = "RB"
     CONTRACT = "rb2510"
-    TF = "1d"
+    TF = "1h"
 
     @pytest.fixture
     def db(self) -> Database:
@@ -295,7 +295,7 @@ class TestPhase3BReversal:
 
     SYMBOL = "RB"
     CONTRACT = "rb2510"
-    TF = "1d"
+    TF = "1h"
 
     @pytest.fixture
     def db(self) -> Database:
@@ -385,7 +385,7 @@ class TestPhase4MultiplePush:
 
     SYMBOL = "RB"
     CONTRACT = "rb2510"
-    TF = "1d"
+    TF = "1h"
 
     @pytest.fixture
     def db(self) -> Database:

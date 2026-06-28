@@ -16,11 +16,13 @@
 
 import json
 import logging
+import time
 import urllib.request
 import urllib.error
 from typing import Optional
 
 logger = logging.getLogger(__name__)
+_telegram_warn_ts: float = 0.0
 
 
 def _telegram_send(bot_token: str, chat_id: str, msg: str) -> bool:
@@ -99,6 +101,8 @@ def dispatch(
     level: str = "DAILY",
     mode: str = "stdout",
     webhook_url: Optional[str] = None,
+    bot_token: Optional[str] = None,
+    chat_id: Optional[str] = None,
 ) -> None:
     """按级别和模式推送消息。
 
@@ -106,7 +110,9 @@ def dispatch(
         msg: 要推送的消息内容。
         level: 信号等级，取 ``'WATCH'`` / ``'CANDIDATE'`` / ``'ENTRY'`` / ``'DAILY'``。
         mode: 推送模式，当前支持 ``'stdout'`` / ``'webhook'`` / ``'telegram'``。
-        webhook_url: webhook URL（mode='webhook' 时使用；mode='telegram' 时作为 bot_token）。
+        webhook_url: webhook URL（mode='webhook' 时使用）。
+        bot_token: Telegram Bot Token（mode='telegram' 时使用）。
+        chat_id: Telegram 聊天 ID（mode='telegram' 时使用）。
 
     Raises:
         ValueError: 无效的 mode 参数。
@@ -117,23 +123,28 @@ def dispatch(
         logger.debug("dispatch: level=%s mode=stdout len=%d", level, len(msg))
 
     elif mode == "telegram":
-        # Telegram Bot 推送：webhook_url 被复用为 bot_token 以提高兼容性
-        # 优先从 settings 获取 token/chat_id
-        try:
-            from config.settings import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
-            bot_token = TELEGRAM_BOT_TOKEN or webhook_url or ""
-            chat_id = TELEGRAM_CHAT_ID or ""
-        except (ImportError, AttributeError):
-            bot_token = webhook_url or ""
-            chat_id = ""
+        # 优先使用显式参数，其次 settings，最后回退 webhook_url（向后兼容）
+        final_token = bot_token or ""
+        final_chat = chat_id or ""
+        if not final_token or not final_chat:
+            try:
+                from config.settings import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+                final_token = final_token or TELEGRAM_BOT_TOKEN or webhook_url or ""
+                final_chat = final_chat or TELEGRAM_CHAT_ID or ""
+            except (ImportError, AttributeError):
+                final_token = final_token or webhook_url or ""
+                final_chat = final_chat or ""
 
-        if bot_token and chat_id:
-            _telegram_send(bot_token, chat_id, msg)
+        if final_token and final_chat:
+            _telegram_send(final_token, final_chat, msg)
         else:
-            logger.warning(
-                "dispatch: mode=telegram 但未配置 TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID，"
-                "回退到 stdout"
-            )
+            now = time.time()
+            if now - _telegram_warn_ts > 1800:  # 每30分钟告警一次
+                logger.error(
+                    "Telegram 未配置（BOT_TOKEN=%s CHAT_ID=%s），推送丢失",
+                    bool(bot_token), bool(chat_id),
+                )
+                _telegram_warn_ts = now
             print(msg)
 
     elif mode in ("wechat", "webhook"):

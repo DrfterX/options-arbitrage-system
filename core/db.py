@@ -78,13 +78,7 @@ class Database:
             配置好的 sqlite3.Connection 对象。
         """
         if self._conn is not None:
-            try:
-                # 探测连接是否仍然存活（防御性重连）
-                self._conn.execute("SELECT 1")
-                return self._conn
-            except (sqlite3.ProgrammingError, sqlite3.OperationalError):
-                logger.debug("缓存连接已失效，重建: %s", self.db_path)
-                self._conn = None
+            return self._conn
 
         conn = sqlite3.connect(self.db_path, timeout=timeout)
         conn.row_factory = sqlite3.Row
@@ -112,12 +106,52 @@ class Database:
             finally:
                 self._conn = None
 
+    _CURRENT_SCHEMA_VERSION = 2
+
+    def _apply_versioned_migrations(self, conn) -> None:
+        """按版本号应用增量迁移。"""
+        current = 0
+        try:
+            row = conn.execute(
+                "SELECT MAX(version) as v FROM schema_version"
+            ).fetchone()
+            if row:
+                current = row["v"] or 0
+        except Exception:
+            conn.execute("INSERT OR IGNORE INTO schema_version (version,description) VALUES (0,'初始')")
+            conn.commit()
+
+        migrations = {
+            1: {
+                "description": "options_signals 增量列",
+                "sql": [
+                    "ALTER TABLE options_signals ADD COLUMN days_to_expiry INTEGER DEFAULT 0",
+                    "ALTER TABLE options_signals ADD COLUMN margin_required REAL DEFAULT 0",
+                    "ALTER TABLE options_signals ADD COLUMN win_rate REAL DEFAULT 0",
+                    "ALTER TABLE options_signals ADD COLUMN breakeven_low REAL DEFAULT 0",
+                    "ALTER TABLE options_signals ADD COLUMN breakeven_high REAL DEFAULT 0",
+                ],
+            },
+        }
+
+        for version in sorted(migrations):
+            if version > current:
+                meta = migrations[version]
+                for sql in meta["sql"]:
+                    try:
+                        conn.execute(sql)
+                    except Exception:
+                        pass
+                conn.execute(
+                    "INSERT INTO schema_version (version,description) VALUES (?,?)",
+                    (version, meta["description"]),
+                )
+                logger.info("Schema 迁移 v%d: %s", version, meta["description"])
+
     def init_all_tables(self) -> None:
-        """创建所有表（如果不存在）并建立索引。
+        """创建所有表（如果不存在）并建立索引，按版本号应用增量迁移。
 
         幂等操作：重复调用不会破坏已有数据。
-        遍历 ALL_TABLES 字典执行每条 CREATE TABLE 语句，
-        然后执行 INDEXES 中的索引创建语句。
         """
         with self.get_conn() as conn:
             for table_name, create_sql in ALL_TABLES.items():
@@ -126,17 +160,19 @@ class Database:
             for index_sql in INDEXES:
                 conn.execute(index_sql)
             conn.commit()
+            self._apply_versioned_migrations(conn)
+            conn.commit()
         logger.info("数据库初始化完成：%d 张表，%d 个索引",
                      len(ALL_TABLES), len(INDEXES))
 
     def migrate_from_old(self, old_db_path: str) -> dict:
-        """从旧数据库迁移数据（预留接口）。
+        """从旧数据库迁移数据（DB 合并后已废弃，保留向后兼容）。
 
         Args:
-            old_db_path: 旧数据库文件路径。
+            old_db_path: 旧数据库文件路径（不再使用）。
 
         Returns:
-            迁移统计字典，包含各表迁移行数。
+            空迁移统计。
         """
-        logger.warning("migrate_from_old 尚未实现，old_db_path=%s", old_db_path)
-        return {"status": "not_implemented", "tables": {}}
+        logger.info("migrate_from_old 已不再需要（所有数据库已合并到 trading_system.db）")
+        return {"status": "obsolete", "tables": {}}

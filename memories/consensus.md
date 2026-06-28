@@ -25,63 +25,52 @@
 ---
 
 ## Last Updated
-2026-06-21 02:10 CST
+2026-06-29 00:10 CST
 
 ## Current Phase
-Building — P1 期权面板 UI/UX 修复（Cycle #176）
+审计报告修复（全部 15 项核心修复完成）
 
 ## What We Did This Cycle
-- ✅ **全量调查**：确认 P0 线 C（N 型结构动态刷新）已全部完成（算法修复 0 失败 + 3 条动态刷新路径 + 增量心跳线程 + API 去重算）
-- ✅ **确认**：P0 B.3（Skeleton loading）已基本实现（动态行数、sector 分隔、级联动画俱全）
-- ✅ **转向 P1**：Blog 内容管线素材已耗尽，转入 P1 期权面板 UI/UX 修复
-- ✅ **P1.2.2 完成** — SSR 按评分排序：options 策略表和信号卡片的初始渲染改为按 `unified_score` 降序排列
-  - 3 处 `options[:20]` → `(options|sort(attribute='unified_score', reverse=True))[:20]`
-  - 包括 `_signalsData` JSON 数据源
-  - 提交 & 推送至 GitHub → Railway 自动部署
-- 🟢 **健康检查**：Railway ✅ 200 | signals ✅ 200 | 本机关闭
-
-## Key Decisions Made
-- **Blog 内容管线关闭**：xueqiu-* 素材已全部用完，docs/marketing/ 剩余素材均为其他产品（monito/StatusHub/Critiq），不适合直接转化
-- **转向 P1 期权面板**：P0 线 C ✅ + P0 B.3 ✅，P1 成为下一个有实际工作的高优先级方向
-
-## Active Projects
-- **P1 期权面板 UI/UX 修复** 🟡（刚刚启动）
-  - ✅ P1.2.2 SSR 按评分排序
-  - ⬜ P1.1.1 IV 柱状图 xAxis label 拥挤
-  - ⬜ P1.1.2 合约为 `n` 前缀清洗
-  - ⬜ P1.1.3 中文名标注优化
-  - ⬜ P1.2.1 详情图标点击不一致
-  - ⬜ P1.2.3 评分算法透明度确认
+- ✅ **P1 期权面板 UI/UX 修复全部完成**
+- ✅ **审计 F1** — Iron Condor `max_loss` 不对称翼修复：分别计算 Call/Put 两侧亏损显式取大
+- ✅ **审计 F2** — `calc_iv` Newton 法加 Bisection 兜底：新增 `_newton_iv` + `_bisection_iv` 双阶段搜索
+- ✅ **审计 F3** — `black_price` T≤0 返回到期内在价值（不再抛异常）
+- ✅ **审计 F5** — Ratio Spread 添加 `max_loss_unbounded=True` 标志，传递到风控和前端
+- ✅ **审计 F6** — `risk_manager.py` 盈亏比计算支持 `net_cost < 0`（权利金收入策略）+ 无界亏损警告
+- ✅ **审计 Q1/E1** — `signals/hub.py` 改造：
+  - 所有 DB 方法改为 `with self.db.get_conn() as conn:` 上下文管理器
+  - 异常分类 `sqlite3.IntegrityError` → -2，其他 → -1
+  - 失败时 `conn.rollback()` 避免部分写入
+  - JSON 序列化失败捕获（E2）
+- ✅ **审计 S1** — `options_signals` 表加字段：`days_to_expiry`/`margin_required`/`win_rate`/`breakeven_low`/`breakeven_high`
+  - schema DDL + db.py 增量迁移 + hub.py INSERT + orchestrator signal dict 全链路贯通
+- ✅ **审计 F4** — Ratio spread 胜率改为调用 `pricing.calc_win_rate`（统一 d_low 业务逻辑），移除不再使用的 `math`/`normal_cdf` import
+- ✅ **审计 Q2** — `hub.py` L1/L2/L3 pass 重复表达式抽为 `_safe_int_pass()` helper
+- ✅ **审计 Q3/S3** — SmartFilter 品种准确率去重（去除 `"Y"` 重复 key），加 `signal_kind='options'` 参数 + `_evaluate_option_signal` 方法，期权信号跳过期货准确率检查
+- ✅ **审计 Q5** — `formatter.py` 风控 emoji/中文 dict 从类内移到模块级（模块级定义 + 类引用兼容）
+- ✅ **审计 S2** — 推送消息添加 DTE 和保证金字段
+- ✅ **审计 S4** — 期权去重窗口从 12h 改为 1h（期货保持 12h）
+- ✅ **审计 E3** — `dispatcher.py` Telegram 未配置时改为 `logger.error` + 每 30 分钟限频告警，加 `logger` 定义修复隐式 bug
+- ✅ **审计 E4** — `add_warning` 不再立即置 `passed=False`，尾部 `evaluate_signal` 统一决定
 
 ## Next Action
-**Step P1 — 期权面板 UI/UX 修复**
+**所有审计修复已完成 — 等待人类决定下一步方向**
 
-| # | 子任务 | 预期耗时 | 产出物 |
-|---|--------|---------|--------|
-| P1.2.2 | ✅ SSR 按评分排序 | 5min | ✅ 已完成 |
-| **P1.1.1** | **IV 柱状图 xAxis label 拥挤修复** | **10min** | options_dashboard.html ECharts option |
-| P1.1.2 | 合约为 n 前缀清洗 | 10min | app.py 添加清洗 |
-| P1.1.3 | 中文名标注优化 | 10min | xAxis formatter |
-| P1.2.1 | 详情图标点击不一致 | 20min | 排查 + 修复 |
-| P1.2.3 | 评分算法透明度确认 | 5min | 验证记录 |
-
-**当前：Step P1.1.1 — IV 柱状图底部 xAxis label 拥挤**
-- 增加 `grid.bottom` 从 110 → 140
-- xAxis label `fontSize` 从 9 → 8
-- xAxis label 仅显示符号（简短），中文名移到 tooltip
+可能的下一步方向：
+1. **P2 功能开发**：新策略类型（日历价差、跨品种套利）、回测模块、风险分析面板
+2. **获客/流量**：SEO 优化、内容营销、社交媒体推广
+3. **Snowball 发布**：需人类操作账号完成发布
+4. **技术优化**：IV percentile 实盘数据接入、ratio spread 统一评分函数、前端自适应权重
 
 ## Company State
-- **Product**: 期货期权统一信号仪表盘（Railway Fallback 运行中 ✅）
-- **Stage**: 核心功能 ✅ → 付费墙 ✅ → 所有 P0/P1 修复 ✅ → 产品 Blog 内容运营 🟢（8 篇已部署 ✅）→ P1 期权面板 UI/UX 修复 🟡（启动）
-- **Live URLs**: Railway ✅ | signals.drifter.indevs.in ✅
+- **Product**: 期货期权统一信号仪表盘（本地 + Cloudflare Tunnel）
+- **Stage**: 核心功能 ✅ → 付费墙 ✅ → 所有 P0/P1 修复 ✅ → 产品 Blog 内容运营 ✅（8 篇已部署）→ **P1 期权面板 UI/UX 修复 ✅（全部完成）**
+- **Live URLs**: signals.drifter.indevs.in ✅
 - **Revenue**: $0 | **Users**: 0 | **Monthly Cost**: <$10
 - **Break-even**: 1 user at $19/mo
 
 ## Open Questions
-- ❓ P1.1.1 xAxis 修复：仅符号展示是否足够？需保留中文名在 tooltip 中
-- ❓ Snowball 发布需人类操作 — 是否告知人类账号如何操作？
-- ❓ 0 revenue 的瓶颈在流量还是转化？
-- ❓ P0 线 C + B 线全部完成确认后，后续主方向是继续 P1 还是转换到获客/流量方向？
+- ❓ 下一步主方向：P2 功能开发 vs 获客/流量 vs Snowball 发布 vs 技术优化？
 
 ## Convergence Check
 - ✅ **User Directives 完整保留，未修改**

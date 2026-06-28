@@ -69,7 +69,8 @@ TRADING_CALENDAR = {
     "day_start": "09:00",
     "day_end": "15:00",
     "night_start": "21:00",
-    "night_end": "23:00",
+    "night_end": "23:00",  # 部分品种夜盘至 23:30/02:30，由品种级 config 覆盖
+    # TODO: 接入法定节假日判断（当前为静态配置，周末/节假日需外部逻辑处理）
 }
 
 # ============================================================
@@ -115,10 +116,11 @@ OPTIONS_OI_MIN = 300
 MIN_OI = 300
 MIN_IV = 0.25  # 小数，即 25%
 MAX_DELTA_ABS = 0.10
-MAX_MARGIN = 10000
-MARGIN_MAX = 10000
+MAX_MARGIN = 10000  # 单腿最大保证金
 MAX_COST_RATIO = 0.05
 MIN_WIN_RATE = 0.50
+CALL_DELTA_RANGE = (0.12, 0.30)     # Call 虚值 Delta 筛选区间
+PUT_DELTA_RANGE = (-0.30, -0.12)     # Put 虚值 Delta 筛选区间
 
 # ============================================================
 # 策略参数
@@ -191,24 +193,15 @@ BONUS_CHECKS = [
 ]
 
 # ============================================================
-# 评分策略配置（★ P0指令覆盖：3分硬条件入场制 — Cycle #59）
-# ============================================================
-# scorer.py evaluate() 实现（由 P0 指令覆盖 Cycle #35 梯度策略）：
-#   score=3(L1+L2+L3+MACD硬) → ENTRY（3分硬条件，缺一分不行）
-#   score=4(+加分项)         → ADD_POSITION（加仓）
-#   score<3                  → NONE
-# 决策文档: docs/strategy/p2-signal-rebuild.md
-#
-# 以下 GRADIENT_STRATEGY 配置已被 P0 指令覆盖，
-# entry_threshold=2 不再生效，保留仅作历史参考。
+# 评分策略配置 — GRADIENT_STRATEGY 被 win_tracker.py 引用（保留）
 GRADIENT_STRATEGY = {
     # ── 开关 ──
-    "enabled": False,                # ❌ 已由 P0 指令禁用（3分硬条件入场制）
+    "enabled": False,
 
     # ── 入场/加仓阈值（离散分制） ──
-    "entry_threshold": 2,            # ⛔ 被覆盖：原2分入场 → 现要求3分硬条件
-    "add_position_threshold": 3,     # 保留：3分+加分项 → 加仓
-    "skip_threshold": 1,             # ≤1分 → NONE
+    "entry_threshold": 2,
+    "add_position_threshold": 3,
+    "skip_threshold": 1,
 
     # ── 风险控制 ──
     "risk_per_trade": 0.01,

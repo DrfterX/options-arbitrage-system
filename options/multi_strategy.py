@@ -18,7 +18,7 @@ import math
 import logging
 from typing import Any, Dict, List, Optional
 
-from config.settings import MIN_IV, MAX_DELTA_ABS, MIN_OI, MAX_MARGIN
+from config.settings import MIN_IV, MAX_DELTA_ABS, MIN_OI, MAX_MARGIN, CALL_DELTA_RANGE, PUT_DELTA_RANGE
 from config.contracts import ContractRegistry
 from options.pricing import calc_win_rate
 from options.ratio_spread import (
@@ -191,13 +191,13 @@ def find_best_short_strangle(
     best_score: float = 0.0
 
     for call in calls:
-        if call.delta is None or not (0.12 <= call.delta <= 0.30):
+        if call.delta is None or not (CALL_DELTA_RANGE[0] <= call.delta <= CALL_DELTA_RANGE[1]):
             continue
         if call.strike <= underlying:
             continue
 
         for put in puts:
-            if put.delta is None or not (-0.30 <= put.delta <= -0.12):
+            if put.delta is None or not (PUT_DELTA_RANGE[0] <= put.delta <= PUT_DELTA_RANGE[1]):
                 continue
             if put.strike >= underlying:
                 continue
@@ -454,8 +454,9 @@ def _calc_iron_condor(
         return None
 
     max_profit = credit
-    wing_width = max(call_wing, put_wing)
-    max_loss = (wing_width * mult) - credit
+    call_side_loss = call_wing * mult - credit
+    put_side_loss = put_wing * mult - credit
+    max_loss = max(call_side_loss, put_side_loss)
     if max_loss <= 0:
         return None
 
@@ -463,7 +464,7 @@ def _calc_iron_condor(
     breakeven_high = short_call.strike + credit / mult
     profit_zone_width = breakeven_high - breakeven_low
 
-    margin = wing_width * mult
+    margin = max(call_wing, put_wing) * mult
     margin = min(margin, MAX_MARGIN)
     if margin >= MAX_MARGIN:
         return None

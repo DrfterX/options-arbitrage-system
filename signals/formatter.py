@@ -44,12 +44,46 @@ _STRATEGY_CN: Dict[str, str] = {
     "iron_condor": "铁鹰式",
 }
 
+# 风控告警 emoji / 中文
+_RISK_LEVEL_EMOJI: Dict[str, str] = {
+    "critical": "🔴",
+    "warning": "🟡",
+    "info": "🟢",
+    "none": "⚪",
+}
+
+_ACTION_CN: Dict[str, str] = {
+    "stop_loss": "止损触发",
+    "take_profit": "止盈触发",
+    "trailing_stop": "移动止损触发",
+    "none": "正常",
+}
+
+_DIRECTION_ARROW: Dict[str, str] = {
+    "LONG": "📈 多头",
+    "SHORT": "📉 空头",
+    "FLAT": "➖ 中性",
+    "NONE": "",
+}
+
+_ACTION_SUGGESTION: Dict[str, str] = {
+    "stop_loss": "⚠️ 建议评估是否手动平仓或调整止损位",
+    "take_profit": "✅ 建议考虑部分或全部止盈，锁定利润",
+    "trailing_stop": "👀 移动止损已触发，建议关注后续走势",
+}
+
 
 class UnifiedFormatter:
     """统一消息格式化器。
 
     所有方法均为静态方法，无状态，可直接类调用。
     """
+
+    # 向后兼容：类级别引用（orchestrator.py 等外部通过 UnifiedFormatter._ACTION_CN 访问）
+    _RISK_LEVEL_EMOJI = _RISK_LEVEL_EMOJI
+    _ACTION_CN = _ACTION_CN
+    _DIRECTION_ARROW = _DIRECTION_ARROW
+    _ACTION_SUGGESTION = _ACTION_SUGGESTION
 
     @staticmethod
     def _bars(emoji: str, title: str) -> str:
@@ -176,6 +210,8 @@ class UnifiedFormatter:
         max_profit = signal_dict.get("max_profit", 0)
         max_loss = signal_dict.get("max_loss", 0)
         win_rate = signal_dict.get("win_rate", signal_dict.get("details", {}).get("win_rate", 0))
+        days_to_expiry = signal_dict.get("days_to_expiry", 0)
+        margin_required = signal_dict.get("margin_required", 0)
         description = signal_dict.get("description", "")
         reason = signal_dict.get("reason", "")
 
@@ -187,6 +223,13 @@ class UnifiedFormatter:
             f"   Delta: {net_delta:.4f}  |  Theta: {net_theta:.4f}  |  Vega: {net_vega:.4f}",
             f"   最大利润: {max_profit:.1f}  |  最大亏损: {max_loss:.1f}",
         ]
+
+        if days_to_expiry and margin_required:
+            lines.append(f"   DTE: {days_to_expiry}  |  保证金: ¥{margin_required:.0f}")
+        elif days_to_expiry:
+            lines.append(f"   DTE: {days_to_expiry}")
+        elif margin_required:
+            lines.append(f"   保证金: ¥{margin_required:.0f}")
 
         if isinstance(win_rate, (int, float)) and win_rate > 0:
             lines.append(f"   胜率: {win_rate*100:.1f}%")
@@ -442,11 +485,6 @@ class UnifiedFormatter:
         "NONE": "—",
     }
 
-    _ACTION_SUGGESTION: Dict[str, str] = {
-        "stop_loss": "⚠️ 建议评估是否手动平仓或调整止损位",
-        "take_profit": "✅ 建议考虑部分或全部止盈，锁定利润",
-        "trailing_stop": "👀 移动止损已触发，建议关注后续走势",
-    }
 
     @staticmethod
     def format_risk_alert(r: "RiskCheckTriggerResult") -> str:
@@ -461,9 +499,9 @@ class UnifiedFormatter:
         Returns:
             格式化后的多行告警消息字符串。
         """
-        level_emoji = UnifiedFormatter._RISK_LEVEL_EMOJI.get(r.alert_level, "⚪")
-        action_cn = UnifiedFormatter._ACTION_CN.get(r.action, r.action)
-        dir_arrow = UnifiedFormatter._DIRECTION_ARROW.get(r.direction, r.direction)
+        level_emoji = _RISK_LEVEL_EMOJI.get(r.alert_level, "⚪")
+        action_cn = _ACTION_CN.get(r.action, r.action)
+        dir_arrow = _DIRECTION_ARROW.get(r.direction, r.direction)
         suggestion = UnifiedFormatter._ACTION_SUGGESTION.get(r.action, "")
 
         # 价格偏离计算

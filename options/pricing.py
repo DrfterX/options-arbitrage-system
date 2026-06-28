@@ -99,9 +99,12 @@ def black_price(
     Returns:
         期权理论价格。
     """
-    _validate_inputs(t=T, sigma=sigma, strike=K)
+    _validate_inputs(sigma=sigma, strike=K)
 
-    if T <= 0 or sigma <= 0:
+    if T <= 0:
+        intrinsic = max(F - K, 0.0) if is_call else max(K - F, 0.0)
+        return intrinsic * math.exp(-r * T)
+    if sigma <= 0:
         return 0.0
 
     d1 = (math.log(F / K) + 0.5 * sigma * sigma * T) / (sigma * math.sqrt(T))
@@ -136,9 +139,17 @@ def black_greeks(
     Returns:
         包含 delta/gamma/theta/vega/rho 的字典。
     """
-    _validate_inputs(t=T, sigma=sigma, strike=K)
+    _validate_inputs(sigma=sigma, strike=K)
 
-    if T <= 0 or sigma <= 0:
+    if T <= 0:
+        return {
+            "delta": 0.0,
+            "gamma": 0.0,
+            "theta": 0.0,
+            "vega": 0.0,
+            "rho": 0.0,
+        }
+    if sigma <= 0:
         return {
             "delta": 0.0,
             "gamma": 0.0,
@@ -179,7 +190,7 @@ def black_greeks(
     )
     theta = (theta_call if is_call else theta_put) / 365.0
 
-    # Rho (per 1% change in rate)
+    # Rho (per 1% change in rate, 即利率变化 1 个百分点)
     if is_call:
         rho = K * T * discount * normal_cdf(d2) * 0.01
     else:
@@ -207,7 +218,7 @@ def calc_iv(
     tolerance: float = 1e-6,
     max_iterations: int = 100,
 ) -> float:
-    """Newton-Raphson 法计算隐含波动率。
+    """Newton-Raphson + Bisection 混合法计算隐含波动率。
 
     Args:
         market_price: 市场期权价格。
@@ -217,25 +228,51 @@ def calc_iv(
         r: 无风险利率。
         is_call: True=看涨, False=看跌。
         tolerance: 收敛容差。
-        max_iterations: 最大迭代次数。
+        max_iterations: 每次搜索的最大迭代次数。
 
     Returns:
-        隐含波动率（小数），计算失败返回 0。
+        隐含波动率（小数），计算失败返回 0.0。
     """
     if market_price <= 0 or T <= 0:
         return 0.0
 
-    # 初始猜测
+    # Newton-Raphson 阶段
+    sigma = _newton_iv(market_price, F, K, T, r, is_call, tolerance, max_iterations)
+    if sigma > 0:
+        return round(sigma, 6)
+
+    # 兜底：Bisection 阶段
+    sigma = _bisection_iv(market_price, F, K, T, r, is_call, tolerance, max_iterations)
+    if sigma > 0:
+        return round(sigma, 6)
+
+    logger.debug(
+        "IV 未收敛: market=%.4f, F=%.2f, K=%.2f, T=%.4f",
+        market_price, F, K, T,
+    )
+    return 0.0
+
+
+def _newton_iv(
+    market_price: float,
+    F: float,
+    K: float,
+    T: float,
+    r: float,
+    is_call: bool,
+    tolerance: float,
+    max_iterations: int,
+) -> float:
+    """Newton-Raphson 法寻 IV，收敛返回 sigma，不收敛返回 0。"""
     sigma = 0.3
     for _ in range(max_iterations):
         price = black_price(F, K, T, r, sigma, is_call)
         diff = price - market_price
 
         if abs(diff) < tolerance:
-            return round(sigma, 6)
+            return sigma
 
         # Vega = ∂price/∂σ
-        # d1 term
         d1 = (math.log(F / K) + 0.5 * sigma * sigma * T) / (sigma * math.sqrt(T))
         discount = math.exp(-r * T)
         vega = F * discount * normal_pdf(d1) * math.sqrt(T)
@@ -244,18 +281,50 @@ def calc_iv(
             break
 
         sigma = sigma - diff / vega
+        sigma = max(0.001, min(sigma, 5.0))
 
-        if sigma <= 0.001:
-            sigma = 0.001
-        if sigma > 5.0:
-            sigma = 5.0
-
-    # 最后尝试
+    # 最后一次松检查
     final_price = black_price(F, K, T, r, sigma, is_call)
     if abs(final_price - market_price) < tolerance * 100:
-        return round(sigma, 6)
+        return sigma
+    return 0.0
 
-    logger.debug("IV 未收敛: market=%.4f, model=%.4f, sigma=%.4f", market_price, final_price, sigma)
+
+def _bisection_iv(
+    market_price: float,
+    F: float,
+    K: float,
+    T: float,
+    r: float,
+    is_call: bool,
+    tolerance: float,
+    max_iterations: int,
+) -> float:
+    """Bisection 法寻 IV，作为 Newton 失败后的兜底。"""
+    lo, hi = 0.001, 5.0
+    price_lo = black_price(F, K, T, r, lo, is_call) - market_price
+    if price_lo >= 0:
+        return lo  # 最小 vol 已经超出目标价
+
+    for _ in range(max_iterations):
+        mid = (lo + hi) / 2.0
+        price_mid = black_price(F, K, T, r, mid, is_call) - market_price
+
+        if abs(price_mid) < tolerance:
+            return mid
+
+        if price_mid < 0:
+            lo = mid
+        else:
+            hi = mid
+
+        if hi - lo < 1e-8:
+            break
+
+    mid = (lo + hi) / 2.0
+    final_price = black_price(F, K, T, r, mid, is_call)
+    if abs(final_price - market_price) < tolerance * 100:
+        return mid
     return 0.0
 
 

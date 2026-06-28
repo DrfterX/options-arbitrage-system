@@ -29,6 +29,7 @@ from typing import Any, Dict, List, Optional
 from core.db import Database
 from config.settings import DETECT_WINDOWS, LEVEL3_TIMEFRAME
 from futures.shared import _get_active_n_structure, cond4_epsilon, FRESHNESS
+from futures.n_helpers import _determine_direction, _determine_overall_direction, _get_swing_points, _get_klines, _normalize_bar_timestamps
 
 logger = logging.getLogger(__name__)
 
@@ -43,58 +44,6 @@ class NState(Enum):
     COMPLETED = "COMPLETED"
 
 
-def _determine_direction(point_a_price: float, point_b_price: float) -> str:
-    """判断N型方向。
-
-    Args:
-        point_a_price: A点价格。
-        point_b_price: B点价格。
-
-    Returns:
-        'LONG'（正N）或 'SHORT'（倒N）。
-    """
-    if point_b_price > point_a_price:
-        return "LONG"
-    return "SHORT"
-
-
-def _determine_overall_direction(merged: List[Dict[str, Any]]) -> Optional[str]:
-    """从合并后的极值点序列预判整体方向。
-
-    User Directives 要求「先判断方向（上升/下降），再按方向筛选 ABC」。
-    与 _determine_direction（仅看 A→B 两点）不同，本函数从整体趋势判断方向，
-    确保 ABC 标点的方向与整体趋势一致。
-
-    判断逻辑：
-    1. 取最近的 2 个 PEAK 和 2 个 TROUGH
-    2. 如果最近 PEAK > 前一个 PEAK 且最近 TROUGH > 前一个 TROUGH → LONG
-    3. 如果最近 PEAK < 前一个 PEAK 且最近 TROUGH < 前一个 TROUGH → SHORT
-    4. 数据不足 4 个点或趋势不明 → 返回 None（由调用方退回到 A→B 推断）
-
-    Returns:
-        'LONG' / 'SHORT' / None（不确定）。
-    """
-    if len(merged) < 4:
-        return None  # 数据不足以判断整体趋势
-
-    # 取最近的 2 个 PEAK 和 2 个 TROUGH
-    peaks = [p for p in merged if p["point_type"] == "PEAK"]
-    troughs = [t for t in merged if t["point_type"] == "TROUGH"]
-
-    if len(peaks) >= 2 and len(troughs) >= 2:
-        last_two_peaks = peaks[-2:]
-        last_two_troughs = troughs[-2:]
-
-        peak_up = last_two_peaks[-1]["price"] > last_two_peaks[-2]["price"]
-        trough_up = last_two_troughs[-1]["price"] > last_two_troughs[-2]["price"]
-
-        if peak_up and trough_up:
-            return "LONG"
-        if not peak_up and not trough_up:
-            return "SHORT"
-
-    # 趋势不明 → 由调用方退回到 A→B 推断
-    return None
 
 
 # ─── DB 内部辅助 ─────────────────────────────────────────────
@@ -794,15 +743,40 @@ def dynamic_restructure(
         #      LONG: A=TROUGH→B=PEAK，价格从 B 大幅跌回，跌破 B_price
         #      SHORT: A=PEAK→B=TROUGH，价格从 B 大幅反弹，涨破 B_price
         #    回撤阈值：A→B 幅度的 50%
+        #    注意：仅靠 kline 日内高低点会误报（wick 噪声、C 点滑动），
+        #    必须同时检查 swing point 确认（PEAK < B_price / TROUGH > B_price）
         b_range = abs(b_price - a_price)
         if b_range > 0:
-            b_broken = (
-                (direction == "LONG" and latest_high < b_price and
-                 (b_price - latest_high) / b_range > 0.5)
-            ) or (
-                (direction == "SHORT" and latest_low > b_price and
-                 (latest_low - b_price) / b_range > 0.5)
-            )
+            # 读取 swing points 用于确认
+            b_reversal_swings = _get_swing_points(db, symbol, contract, timeframe, limit=10)
+            b_reversal_sp = [sp for sp in b_reversal_swings if sp["timestamp"] > b_time]
+
+            # B 反转的 swing 确认：
+            #   LONG: 最新 swing PEAK 必须低于 B_price（极值点确认回撤），且是最新极值点
+            #   SHORT: 最新 swing TROUGH 必须高于 B_price
+            #   **检查最新整体极值点**：如果最新极值点是 C 同类型（LONG=TROUGH, SHORT=PEAK），
+            #   说明行情仍在 C 滑动方向，不应触发 B 反转。
+            c_type = "TROUGH" if direction == "LONG" else "PEAK"
+            reversal_type = "PEAK" if direction == "LONG" else "TROUGH"
+            has_b_reversal_swing = False
+            latest_sp = b_reversal_sp[-1] if b_reversal_sp else None
+            if latest_sp is not None:
+                # 最新极值点必须是反转类型（PEAK for LONG, TROUGH for SHORT），
+                # 而不是 C 滑动类型（TROUGH for LONG, PEAK for SHORT）
+                if latest_sp["point_type"] == reversal_type:
+                    if direction == "LONG" and latest_sp["price"] < b_price:
+                        has_b_reversal_swing = True
+                    elif direction == "SHORT" and latest_sp["price"] > b_price:
+                        has_b_reversal_swing = True
+
+            b_broken = False
+            if direction == "LONG" and latest_low < b_price and has_b_reversal_swing:
+                if (b_price - latest_low) / b_range > 0.5:
+                    b_broken = True
+            if direction == "SHORT" and latest_high > b_price and has_b_reversal_swing:
+                if (latest_high - b_price) / b_range > 0.5:
+                    b_broken = True
+
             if b_broken:
                 # B 反穿 → 标记 COMPLETED + 全量重算（方向可能翻转）
                 completed = dict(active)
@@ -810,7 +784,7 @@ def dynamic_restructure(
                 _save_n_structure(db, completed)
                 logger.info(
                     "[dynamic_restructure] %s/%s %s: B reversed "
-                    "(b_price=%.2f, range=%.2f, 50%% threshold) → "
+                    "(b_price=%.2f, range=%.2f, 50%% threshold, swing confirmed) → "
                     "COMPLETED + full recalc",
                     symbol, contract, timeframe, b_price, b_range,
                 )

@@ -49,6 +49,83 @@ def cond4_epsilon(c_price: float) -> float:
     return max(COND4_EPSILON_ABSOLUTE, c_price * COND4_EPSILON_RATIO)
 
 
+def _cleanup_stale_structure(
+    ns: dict,
+    conn: "sqlite3.Connection",
+) -> bool:
+    """检查结构一致性（C1/C2/C3），不满足时标记 COMPLETED（写操作）。
+
+    C1: A→B 方向一致（LONG: B > A, SHORT: A > B）
+    C2: B→C 方向一致（LONG: C < B, SHORT: C > B）
+    C3: C 不可突破 A（LONG: C > A, SHORT: C < A）
+
+    此函数在 ``_get_active_n_structure`` 中被调用，与读操作隔离，
+    避免在只读扫描路径中意外写入。
+
+    Args:
+        ns: N 型结构字典。
+        conn: 数据库连接。
+
+    Returns:
+        True=结构已被标记 COMPLETED，False=结构仍有效。
+    """
+    c_price = ns.get("point_c_price")
+    b_price = ns.get("point_b_price")
+    a_price = ns.get("point_a_price")
+    direction = ns["direction"]
+    ns_id = ns["id"]
+
+    # C1: A→B 方向一致
+    if direction == "LONG" and b_price is not None and a_price is not None and b_price <= a_price:
+        conn.execute(
+            "UPDATE futures_n_structures SET state='COMPLETED', updated_at=datetime('now') WHERE id=?",
+            (ns_id,),
+        )
+        conn.commit()
+        return True
+    if direction == "SHORT" and a_price is not None and b_price is not None and a_price <= b_price:
+        conn.execute(
+            "UPDATE futures_n_structures SET state='COMPLETED', updated_at=datetime('now') WHERE id=?",
+            (ns_id,),
+        )
+        conn.commit()
+        return True
+
+    # C2: B→C 方向一致
+    if direction == "LONG" and c_price and b_price and c_price >= b_price:
+        conn.execute(
+            "UPDATE futures_n_structures SET state='COMPLETED', updated_at=datetime('now') WHERE id=?",
+            (ns_id,),
+        )
+        conn.commit()
+        return True
+    if direction == "SHORT" and c_price and b_price and c_price <= b_price:
+        conn.execute(
+            "UPDATE futures_n_structures SET state='COMPLETED', updated_at=datetime('now') WHERE id=?",
+            (ns_id,),
+        )
+        conn.commit()
+        return True
+
+    # C3: C 不可突破 A
+    if direction == "LONG" and c_price is not None and a_price is not None and c_price <= a_price:
+        conn.execute(
+            "UPDATE futures_n_structures SET state='COMPLETED', updated_at=datetime('now') WHERE id=?",
+            (ns_id,),
+        )
+        conn.commit()
+        return True
+    if direction == "SHORT" and c_price is not None and a_price is not None and c_price >= a_price:
+        conn.execute(
+            "UPDATE futures_n_structures SET state='COMPLETED', updated_at=datetime('now') WHERE id=?",
+            (ns_id,),
+        )
+        conn.commit()
+        return True
+
+    return False
+
+
 def _get_active_n_structure(
     db: Database,
     symbol: str,
@@ -64,6 +141,9 @@ def _get_active_n_structure(
       2. 结构有效性 — C 点不可突破 A 点（LONG: C ≥ A；SHORT: C ≤ A）
       3. 极端止损检查 — 最新 K 线收盘价已突破 A 点则失效
       4. 第三笔方向确认 — 最新价必须与 C 点保持方向一致性（LONG: 价 > C；SHORT: 价 < C）
+
+    注意：一致性检查（C1/C2/C3）写入 DB 标记 COMPLETED，已隔离到
+    ``_cleanup_stale_structure`` 中，不影响读取路径。
 
     Args:
         db: Database 实例。
@@ -84,7 +164,10 @@ def _get_active_n_structure(
     now = int(time_module.time())
 
     if conn is None:
+        own_conn = True
         conn = db.get_conn()
+    else:
+        own_conn = False
 
     row = conn.execute(
         """SELECT * FROM futures_n_structures
@@ -98,53 +181,8 @@ def _get_active_n_structure(
 
     ns = dict(row)
 
-    # 0. B→C 方向一致性检查（C2）— 必须在新鲜度检查之前执行
-    # 第二笔（B→C）必须与方向定义一致：
-    #   LONG: 第二笔下跌 → C 必须低于 B
-    #   SHORT: 第二笔上涨 → C 必须高于 B
-    # C2 不满足意味着算法标点偏差（如前期 dynamic_restructure 迁移产生的
-    # A_type 不匹配 + C 方向错误），即使结构已陈旧也应标记 COMPLETED 并清除，
-    # 防止 stale LEG3 行在 DB 持续残留。此检查必须在新鲜度过滤前执行，
-    # 否则旧结构（超过 freshness 窗口）会提前返回 None，错过 C2 修复。
-    c_price = ns.get("point_c_price")
-    b_price = ns.get("point_b_price")
-    a_price = ns.get("point_a_price")
-    if ns["direction"] == "LONG" and c_price and b_price and c_price >= b_price:
-        conn.execute(
-            "UPDATE futures_n_structures SET state='COMPLETED', updated_at=datetime('now') WHERE id=?",
-            (ns["id"],),
-        )
-        conn.commit()
-        return None
-    if ns["direction"] == "SHORT" and c_price and b_price and c_price <= b_price:
-        conn.execute(
-            "UPDATE futures_n_structures SET state='COMPLETED', updated_at=datetime('now') WHERE id=?",
-            (ns["id"],),
-        )
-        conn.commit()
-        return None
-
-    # 0.5 A→B 方向一致性检查（C1）— 必须在新鲜度检查之前执行
-    # 第一笔（A→B）必须与方向定义一致：
-    #   LONG: 第一笔上涨 → B 必须高于 A
-    #   SHORT: 第一笔下跌 → A 必须高于 B
-    # C1 不满足意味着这是方向优先算法修复前存储的旧结构（A→B 方向错误）。
-    # 即使 C2/C3 通过，A→B 方向错误也会导致前端渲染的 A/B 点位置颠倒，
-    # 违反 N 型结构基本定义。此检查必须在新鲜度过滤前执行，
-    # 防止旧结构在 DB 持续残留并向前端返回错误的 A/B 标注。
-    if ns["direction"] == "LONG" and b_price is not None and a_price is not None and b_price <= a_price:
-        conn.execute(
-            "UPDATE futures_n_structures SET state='COMPLETED', updated_at=datetime('now') WHERE id=?",
-            (ns["id"],),
-        )
-        conn.commit()
-        return None
-    if ns["direction"] == "SHORT" and a_price is not None and b_price is not None and a_price <= b_price:
-        conn.execute(
-            "UPDATE futures_n_structures SET state='COMPLETED', updated_at=datetime('now') WHERE id=?",
-            (ns["id"],),
-        )
-        conn.commit()
+    # 一致性清理（C1/C2/C3）— 可能写入 COMPLETED
+    if _cleanup_stale_structure(ns, conn):
         return None
 
     # 1. 时间新鲜度检查
@@ -153,26 +191,10 @@ def _get_active_n_structure(
     if latest_ts and (now - latest_ts) > freshness_cutoff:
         return None
 
-    # 2. 结构有效性检查：C 不可突破 A
-    # C3 检查：C 点不可突破 A 点（LONG: C > A, SHORT: C < A）。
-    # 与 C2 检查同位 — 在新鲜度和收盘价检查之前执行，确保结构的基本
-    # 几何有效性。C3 不满足意味着 C 被 dynamic_restructure 的 C-sliding
-    # 推过了 A 边界（或初始扫描时使用了退选候选人的宽松模式），应标记
-    # COMPLETED 并清除，防止 stale LEG3 行在 DB 持续残留。
-    if ns["direction"] == "LONG" and c_price is not None and a_price is not None and c_price <= a_price:
-        conn.execute(
-            "UPDATE futures_n_structures SET state='COMPLETED', updated_at=datetime('now') WHERE id=?",
-            (ns["id"],),
-        )
-        conn.commit()
-        return None
-    if ns["direction"] == "SHORT" and c_price is not None and a_price is not None and c_price >= a_price:
-        conn.execute(
-            "UPDATE futures_n_structures SET state='COMPLETED', updated_at=datetime('now') WHERE id=?",
-            (ns["id"],),
-        )
-        conn.commit()
-        return None
+    # 2. 结构有效性检查（C3 已在上方 cleanup 处理，此处补充读一致）
+    c_price = ns.get("point_c_price")
+    b_price = ns.get("point_b_price")
+    a_price = ns.get("point_a_price")
 
     # 3. 极端止损检查：当前收盘价已突破 A 点
     last_kline = conn.execute(
