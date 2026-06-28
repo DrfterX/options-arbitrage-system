@@ -55,20 +55,19 @@ class Orchestrator:
     """
 
     def __init__(self) -> None:
-        """初始化调度器，创建所有子系统实例。"""
+        """初始化调度器，子系统按需懒加载（首次使用时创建）。"""
         self.db: Database = Database(DB_PATH)
-        self.registry: ContractRegistry = ContractRegistry(str(DB_PATH))
-        self.futures_collector: FuturesCollector = FuturesCollector(
-            self.db, self.registry
-        )
-        self.options_collector: OptionsCollector = OptionsCollector(self.registry)
-        self.iv_recorder: IVRecorder = IVRecorder(self.db)
-        self.hub: SignalHub = SignalHub(self.db)
-        self.position_tracker: PositionTracker = PositionTracker(self.db)
-        self.risk_manager: PositionRiskManager = PositionRiskManager(self.db, self.position_tracker)
-        self.formatter: UnifiedFormatter = UnifiedFormatter()
+        self._registry: Optional[ContractRegistry] = None
+        self._futures_collector: Optional[FuturesCollector] = None
+        self._options_collector: Optional[OptionsCollector] = None
+        self._iv_recorder: Optional[IVRecorder] = None
+        self._hub: Optional[SignalHub] = None
+        self._position_tracker: Optional[PositionTracker] = None
+        self._risk_manager: Optional[PositionRiskManager] = None
+        self._formatter: Optional[UnifiedFormatter] = None
         self._smart_filter: Optional["SmartFilter"] = None
         # ── Telegram 推送模式自动检测 ──────────────────────────
+        self._safe_auto_execute: bool = not self._check_telegram_config()
         self._enable_telegram: bool = self._check_telegram_config()
         if self._enable_telegram:
             logger.info("Telegram 推送已配置，启用 Telegram 推送模式")
@@ -77,6 +76,55 @@ class Orchestrator:
                 "Telegram 未配置 (TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID 为空)，"
                 "推送回退到 stdout 模式"
             )
+
+    # ── 懒加载 property ─────────────────────────────────────
+    @property
+    def registry(self) -> ContractRegistry:
+        if self._registry is None:
+            self._registry = ContractRegistry(str(DB_PATH))
+        return self._registry
+
+    @property
+    def futures_collector(self) -> FuturesCollector:
+        if self._futures_collector is None:
+            self._futures_collector = FuturesCollector(self.db, self.registry)
+        return self._futures_collector
+
+    @property
+    def options_collector(self) -> OptionsCollector:
+        if self._options_collector is None:
+            self._options_collector = OptionsCollector(self.registry)
+        return self._options_collector
+
+    @property
+    def iv_recorder(self) -> IVRecorder:
+        if self._iv_recorder is None:
+            self._iv_recorder = IVRecorder(self.db)
+        return self._iv_recorder
+
+    @property
+    def hub(self) -> SignalHub:
+        if self._hub is None:
+            self._hub = SignalHub(self.db)
+        return self._hub
+
+    @property
+    def position_tracker(self) -> PositionTracker:
+        if self._position_tracker is None:
+            self._position_tracker = PositionTracker(self.db)
+        return self._position_tracker
+
+    @property
+    def risk_manager(self) -> PositionRiskManager:
+        if self._risk_manager is None:
+            self._risk_manager = PositionRiskManager(self.db, self.position_tracker)
+        return self._risk_manager
+
+    @property
+    def formatter(self) -> UnifiedFormatter:
+        if self._formatter is None:
+            self._formatter = UnifiedFormatter()
+        return self._formatter
 
     @staticmethod
     def _check_telegram_config() -> bool:
@@ -121,33 +169,33 @@ class Orchestrator:
         Returns:
             {contract: current_price} 字典，可能为空。
         """
-        conn = self.db.get_conn()
-        open_positions = conn.execute(
-            "SELECT DISTINCT contract FROM positions WHERE status='open'"
-        ).fetchall()
-        if not open_positions:
-            return {}
+        with self.db.get_conn() as conn:
+            open_positions = conn.execute(
+                "SELECT DISTINCT contract FROM positions WHERE status='open'"
+            ).fetchall()
+            if not open_positions:
+                return {}
 
-        price_map: dict[str, float] = {}
-        for row in open_positions:
-            contract = row["contract"]
-            # ── 优先取 1m 数据（最实时） ────────────────────────────
-            latest = conn.execute(
-                "SELECT close FROM futures_klines "
-                "WHERE contract=? AND timeframe='1m' "
-                "ORDER BY timestamp DESC LIMIT 1",
-                (contract,),
-            ).fetchone()
-            # ── 降级：无 1m 数据时回退到任意周期 ──────────────────
-            if not latest:
+            price_map: dict[str, float] = {}
+            for row in open_positions:
+                contract = row["contract"]
+                # ── 优先取 1m 数据（最实时） ────────────────────────────
                 latest = conn.execute(
                     "SELECT close FROM futures_klines "
-                    "WHERE contract=? ORDER BY timestamp DESC LIMIT 1",
+                    "WHERE contract=? AND timeframe='1m' "
+                    "ORDER BY timestamp DESC LIMIT 1",
                     (contract,),
                 ).fetchone()
-            if latest:
-                price_map[contract] = latest["close"]
-        return price_map
+                # ── 降级：无 1m 数据时回退到任意周期 ──────────────────
+                if not latest:
+                    latest = conn.execute(
+                        "SELECT close FROM futures_klines "
+                        "WHERE contract=? ORDER BY timestamp DESC LIMIT 1",
+                        (contract,),
+                    ).fetchone()
+                if latest:
+                    price_map[contract] = latest["close"]
+            return price_map
 
     def _handle_risk_results(self, results: list[RiskCheckTriggerResult]) -> None:
         """处理风控检查结果：记录日志 + 发送桌面/Telegram 通知。
@@ -317,14 +365,14 @@ class Orchestrator:
                         result.action, close_price, attempt + 1,
                     )
                     # 设置 auto_execute=0 + execute_at 防重入（audit trail）
-                    conn = self.db.get_conn()
-                    conn.execute(
-                        "UPDATE risk_management SET auto_execute=0, "
-                        "execute_at=?, updated_at=datetime('now') "
-                        "WHERE position_id=?",
-                        (close_time, position_id),
-                    )
-                    conn.commit()
+                    with self.db.get_conn() as conn:
+                        conn.execute(
+                            "UPDATE risk_management SET auto_execute=0, "
+                            "execute_at=?, updated_at=datetime('now') "
+                            "WHERE position_id=?",
+                            (close_time, position_id),
+                        )
+                        conn.commit()
                     return True
                 else:
                     logger.warning(
@@ -868,7 +916,7 @@ class Orchestrator:
             try:
                 strangle = find_best_short_strangle(
                     symbol, contract, futures_price, iv_avg, dte,
-                    options_data, self.registry,
+                    options_data, self.registry, iv_percentile=iv_percentile,
                 )
             except Exception as e:
                 logger.warning("  ShortStrangle计算异常 %s: %s", symbol, e)
@@ -878,7 +926,7 @@ class Orchestrator:
             try:
                 iron_condor = find_best_iron_condor(
                     symbol, contract, futures_price, iv_avg, dte,
-                    options_data, self.registry,
+                    options_data, self.registry, iv_percentile=iv_percentile,
                 )
             except Exception as e:
                 logger.warning("  IronCondor计算异常 %s: %s", symbol, e)
@@ -929,6 +977,7 @@ class Orchestrator:
                         "win_rate": spread.win_rate,
                         "score": spread.score,
                         "score_components": spread.score_components or {},
+                        "score_schema": spread.score_schema or {},
                         "margin_required": round(spread.underlying * get_contract_multiplier(self.registry, symbol) * 0.15 * 2, 0),
                         "description": f"Call RatioSpread K1={spread.buy_leg.strike:.0f} K2={spread.sell_leg.strike:.0f}",
                         "legs_detail": f"买Call@{spread.buy_leg.strike:.0f} x1, 卖Call@{spread.sell_leg.strike:.0f} x2",
@@ -976,6 +1025,7 @@ class Orchestrator:
                         "win_rate": spread.win_rate,
                         "score": spread.score,
                         "score_components": spread.score_components or {},
+                        "score_schema": spread.score_schema or {},
                         "margin_required": round(spread.underlying * get_contract_multiplier(self.registry, symbol) * 0.15 * 2, 0),
                         "description": f"Put RatioSpread K1={spread.buy_leg.strike:.0f} K2={spread.sell_leg.strike:.0f}",
                         "legs_detail": f"买Put@{spread.buy_leg.strike:.0f} x1, 卖Put@{spread.sell_leg.strike:.0f} x2",

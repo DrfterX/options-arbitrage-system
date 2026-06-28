@@ -124,6 +124,15 @@ def calc_unified_score(
             "delta": round(delta_score, 1),
             "iv_bonus": round(pct_bonus, 1),
         },
+        "schema": {
+            "theta": 25,
+            "vega": 20,
+            "win_rate": 20,
+            "width": 10,
+            "efficiency": 15,
+            "delta": 10,
+            "iv_bonus": 10,
+        },
     }
 
 
@@ -138,6 +147,7 @@ def find_best_short_strangle(
     dte: int,
     options_data: List[Dict],
     registry: ContractRegistry,
+    iv_percentile: float = 50.0,
 ) -> Optional[Dict[str, Any]]:
     """寻找最佳 Short Strangle（卖虚值Call + 卖虚值Put）。
 
@@ -200,7 +210,7 @@ def find_best_short_strangle(
 
             result = _calc_short_strangle(
                 symbol, contract, underlying, iv_avg, dte,
-                call, put, net_delta, registry,
+                call, put, net_delta, registry, iv_percentile,
             )
             if result and result["score"] > best_score:
                 best_score = result["score"]
@@ -219,6 +229,7 @@ def _calc_short_strangle(
     put: OptionLeg,
     net_delta_in: float,
     registry: ContractRegistry,
+    iv_percentile: float = 50.0,
 ) -> Optional[Dict[str, Any]]:
     """计算 Short Strangle 指标。"""
     mult = get_contract_multiplier(registry, symbol)
@@ -250,7 +261,7 @@ def _calc_short_strangle(
     score_result = calc_unified_score(
         underlying, margin, net_theta, net_vega,
         win_rate, profit_zone_width, max_profit,
-        percentile=50, net_delta=net_delta_in,
+        percentile=iv_percentile, net_delta=net_delta_in,
     )
 
     return {
@@ -263,6 +274,7 @@ def _calc_short_strangle(
         "net_delta": round(net_delta_in, 4),
         "net_theta": round(net_theta, 4),
         "net_vega": round(net_vega, 4),
+        "net_gamma": round(-call.gamma - put.gamma, 4),
         "net_cost": -round(credit, 2),
         "max_profit": round(max_profit, 2),
         "max_loss": None,  # 无限亏损（前端显示为"—"）
@@ -272,6 +284,7 @@ def _calc_short_strangle(
         "win_rate": round(win_rate, 4),
         "score": round(score_result["score"], 1),
         "score_components": score_result["components"],
+        "score_schema": score_result["schema"],
         "margin_required": round(margin, 0),
         "description": (
             f"Short Strangle(卖Call@{call.strike:.0f} 卖Put@{put.strike:.0f})"
@@ -294,6 +307,7 @@ def find_best_iron_condor(
     dte: int,
     options_data: List[Dict],
     registry: ContractRegistry,
+    iv_percentile: float = 50.0,
 ) -> Optional[Dict[str, Any]]:
     """寻找最佳 Iron Condor（卖宽跨+买保护, 风险有限）。
 
@@ -393,7 +407,7 @@ def find_best_iron_condor(
                     result = _calc_iron_condor(
                         symbol, contract, underlying, iv_avg, dte,
                         short_put, long_put, short_call, long_call,
-                        call_wing, put_wing, registry,
+                        call_wing, put_wing, registry, iv_percentile,
                     )
                     if result and result["score"] > best_score:
                         best_score = result["score"]
@@ -415,6 +429,7 @@ def _calc_iron_condor(
     call_wing: float,
     put_wing: float,
     registry: ContractRegistry,
+    iv_percentile: float = 50.0,
 ) -> Optional[Dict[str, Any]]:
     """计算 Iron Condor 指标。"""
     mult = get_contract_multiplier(registry, symbol)
@@ -460,7 +475,7 @@ def _calc_iron_condor(
     score_result = calc_unified_score(
         underlying, margin, net_theta, net_vega,
         win_rate, profit_zone_width, max_profit,
-        percentile=50, net_delta=net_delta,
+        percentile=iv_percentile, net_delta=net_delta,
     )
 
     return {
@@ -473,6 +488,7 @@ def _calc_iron_condor(
         "net_delta": round(net_delta, 4),
         "net_theta": round(net_theta, 4),
         "net_vega": round(net_vega, 4),
+        "net_gamma": round(-short_call.gamma - short_put.gamma + long_call.gamma + long_put.gamma, 4),
         "net_cost": -round(credit, 2),
         "max_profit": round(max_profit, 2),
         "max_loss": round(max_loss, 2),
@@ -482,6 +498,7 @@ def _calc_iron_condor(
         "win_rate": round(win_rate, 4),
         "score": round(score_result["score"], 1),
         "score_components": score_result["components"],
+        "score_schema": score_result["schema"],
         "margin_required": round(margin, 0),
         "description": (
             f"Iron Condor(买Put@{long_put.strike:.0f} "

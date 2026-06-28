@@ -104,6 +104,7 @@ class RatioSpread:
     win_rate: float
     score: float
     score_components: dict = field(default_factory=dict)
+    score_schema: dict = field(default_factory=dict)
 
 
 # ---- 合约乘数查询 ----
@@ -200,7 +201,8 @@ def parse_option_from_market_data(
 # ---- 核心计算 ----
 
 
-def calc_call_ratio_spread(
+
+def _calc_ratio_spread(
     symbol: str,
     contract: str,
     underlying: float,
@@ -209,23 +211,11 @@ def calc_call_ratio_spread(
     buy: OptionLeg,
     sell: OptionLeg,
     registry: ContractRegistry,
+    is_call: bool,
 ) -> Optional[RatioSpread]:
-    """计算 Call Ratio Spread（买1低行权价Call, 卖2高行权价Call）。
-
-    Args:
-        symbol: 品种代码。
-        contract: 合约代码。
-        underlying: 标的价格。
-        iv_avg: 平均隐含波动率。
-        dte: 到期天数。
-        buy: 买入腿。
-        sell: 卖出腿。
-        registry: ContractRegistry 实例。
-
-    Returns:
-        RatioSpread 实例，不满足条件时返回 None。
-    """
-    if buy.strike >= sell.strike:
+    """通用 Ratio Spread 计算（Call/Put 共享逻辑）。"""
+    # 行权价方向检查
+    if (is_call and buy.strike >= sell.strike) or (not is_call and buy.strike <= sell.strike):
         return None
 
     net_delta = buy.delta - RATIO * sell.delta
@@ -244,10 +234,15 @@ def calc_call_ratio_spread(
     net_theta = buy.theta - RATIO * sell.theta
     net_vega = buy.vega - RATIO * sell.vega
 
-    breakeven_low = buy.strike + net_cost
-    breakeven_high = 2 * sell.strike - buy.strike - net_cost
+    if is_call:
+        breakeven_low = buy.strike + net_cost
+        breakeven_high = 2 * sell.strike - buy.strike - net_cost
+        max_profit = sell.strike - buy.strike - net_cost
+    else:
+        breakeven_high = buy.strike - net_cost
+        breakeven_low = 2 * sell.strike - buy.strike + net_cost
+        max_profit = buy.strike - sell.strike - net_cost
 
-    max_profit = sell.strike - buy.strike - net_cost
     if max_profit <= 0:
         return None
 
@@ -260,23 +255,16 @@ def calc_call_ratio_spread(
         return None
 
     sigma_sqrt_t = iv_avg * math.sqrt(t)
-
     if breakeven_low > 0:
-        d_low = (
-            math.log(breakeven_low / underlying) - 0.5 * iv_avg * iv_avg * t
-        ) / sigma_sqrt_t
+        d_low = (math.log(breakeven_low / underlying) - 0.5 * iv_avg * iv_avg * t) / sigma_sqrt_t
     else:
         d_low = -999.0
-
     if breakeven_high > 0:
-        d_high = (
-            math.log(breakeven_high / underlying) - 0.5 * iv_avg * iv_avg * t
-        ) / sigma_sqrt_t
+        d_high = (math.log(breakeven_high / underlying) - 0.5 * iv_avg * iv_avg * t) / sigma_sqrt_t
     else:
         return None
 
     win_rate = normal_cdf(d_high) - normal_cdf(d_low)
-
     contract_multiplier = get_contract_multiplier(registry, symbol)
     margin_estimate = underlying * contract_multiplier * 0.15 * RATIO
     if margin_estimate > MAX_MARGIN:
@@ -293,32 +281,40 @@ def calc_call_ratio_spread(
         + width_score * 10
     )
 
+    side = "CALL" if is_call else "PUT"
+
     return RatioSpread(
-        symbol=symbol,
-        contract=contract,
-        underlying=underlying,
-        iv_avg=iv_avg,
-        days_to_expiry=dte,
-        buy_leg=buy,
-        sell_leg=sell,
-        net_delta=net_delta,
-        net_gamma=net_gamma,
-        net_theta=net_theta,
-        net_vega=net_vega,
-        net_cost=net_cost,
-        max_profit=max_profit,
-        breakeven_low=breakeven_low,
-        breakeven_high=breakeven_high,
+        symbol=symbol, contract=contract, underlying=underlying,
+        iv_avg=iv_avg, days_to_expiry=dte,
+        buy_leg=buy, sell_leg=sell,
+        net_delta=net_delta, net_gamma=net_gamma,
+        net_theta=net_theta, net_vega=net_vega,
+        net_cost=net_cost, max_profit=max_profit,
+        breakeven_low=breakeven_low, breakeven_high=breakeven_high,
         profit_zone_width=profit_zone_width,
-        win_rate=win_rate,
-        score=score,
+        win_rate=win_rate, score=score,
         score_components={
             "theta": round(min(theta_score * 200, 40), 1),
             "vega": round(min(vega_score * 200, 30), 1),
             "win_rate": round(win_rate * 20, 1),
             "width": round(width_score * 10, 1),
         },
+        score_schema={"theta": 40, "vega": 30, "win_rate": 20, "width": 10},
     )
+
+
+def calc_call_ratio_spread(
+    symbol: str,
+    contract: str,
+    underlying: float,
+    iv_avg: float,
+    dte: int,
+    buy: OptionLeg,
+    sell: OptionLeg,
+    registry: ContractRegistry,
+) -> Optional[RatioSpread]:
+    """计算 Call Ratio Spread（委托 _calc_ratio_spread）。"""
+    return _calc_ratio_spread(symbol, contract, underlying, iv_avg, dte, buy, sell, registry, is_call=True)
 
 
 def calc_put_ratio_spread(
@@ -331,118 +327,9 @@ def calc_put_ratio_spread(
     sell: OptionLeg,
     registry: ContractRegistry,
 ) -> Optional[RatioSpread]:
-    """计算 Put Ratio Spread（买1高行权价Put, 卖2低行权价Put）。
+    """计算 Put Ratio Spread（委托 _calc_ratio_spread）。"""
+    return _calc_ratio_spread(symbol, contract, underlying, iv_avg, dte, buy, sell, registry, is_call=False)
 
-    Args:
-        symbol: 品种代码。
-        contract: 合约代码。
-        underlying: 标的价格。
-        iv_avg: 平均隐含波动率。
-        dte: 到期天数。
-        buy: 买入腿。
-        sell: 卖出腿。
-        registry: ContractRegistry 实例。
-
-    Returns:
-        RatioSpread 实例，不满足条件时返回 None。
-    """
-    if buy.strike <= sell.strike:
-        return None
-
-    net_delta = buy.delta - RATIO * sell.delta
-    if abs(net_delta) > MAX_DELTA_ABS:
-        return None
-
-    avg_iv = (buy.iv + sell.iv) / 2
-    if avg_iv < MIN_IV and sell.iv < MIN_IV:
-        return None
-
-    net_cost = buy.mid - RATIO * sell.mid
-    if net_cost > underlying * MAX_COST_RATIO:
-        return None
-
-    net_gamma = buy.gamma - RATIO * sell.gamma
-    net_theta = buy.theta - RATIO * sell.theta
-    net_vega = buy.vega - RATIO * sell.vega
-
-    breakeven_high = buy.strike - net_cost
-    breakeven_low = 2 * sell.strike - buy.strike + net_cost
-
-    max_profit = buy.strike - sell.strike - net_cost
-    if max_profit <= 0:
-        return None
-
-    profit_zone_width = breakeven_high - breakeven_low
-    if profit_zone_width <= 0:
-        return None
-
-    t = dte / 365.0
-    if t <= 0 or iv_avg <= 0:
-        return None
-
-    sigma_sqrt_t = iv_avg * math.sqrt(t)
-
-    if breakeven_low > 0:
-        d_low = (
-            math.log(breakeven_low / underlying) - 0.5 * iv_avg * iv_avg * t
-        ) / sigma_sqrt_t
-    else:
-        d_low = -999.0
-
-    if breakeven_high > 0:
-        d_high = (
-            math.log(breakeven_high / underlying) - 0.5 * iv_avg * iv_avg * t
-        ) / sigma_sqrt_t
-    else:
-        return None
-
-    win_rate = normal_cdf(d_high) - normal_cdf(d_low)
-
-    contract_multiplier = get_contract_multiplier(registry, symbol)
-    margin_estimate = underlying * contract_multiplier * 0.15 * RATIO
-    if margin_estimate > MAX_MARGIN:
-        return None
-
-    theta_score = max(0, -net_theta) / underlying * 100
-    vega_score = max(0, -net_vega) / underlying * 100
-    width_score = profit_zone_width / underlying * 100
-
-    score = (
-        min(theta_score * 200, 40)
-        + min(vega_score * 200, 30)
-        + win_rate * 20
-        + width_score * 10
-    )
-
-    return RatioSpread(
-        symbol=symbol,
-        contract=contract,
-        underlying=underlying,
-        iv_avg=iv_avg,
-        days_to_expiry=dte,
-        buy_leg=buy,
-        sell_leg=sell,
-        net_delta=net_delta,
-        net_gamma=net_gamma,
-        net_theta=net_theta,
-        net_vega=net_vega,
-        net_cost=net_cost,
-        max_profit=max_profit,
-        breakeven_low=breakeven_low,
-        breakeven_high=breakeven_high,
-        profit_zone_width=profit_zone_width,
-        win_rate=win_rate,
-        score=score,
-        score_components={
-            "theta": round(min(theta_score * 200, 40), 1),
-            "vega": round(min(vega_score * 200, 30), 1),
-            "win_rate": round(win_rate * 20, 1),
-            "width": round(width_score * 10, 1),
-        },
-    )
-
-
-# ---- 共享的"找腿+过滤"逻辑 ----
 
 
 def _evaluate_call_spreads(

@@ -1700,7 +1700,7 @@ function showStratDetailFromData(el) {
       if (detail.score_components) {
         var sc = detail.score_components;
         var labels = { theta: 'Θ 贡献', vega: 'V 贡献', win_rate: '胜率贡献', width: '区间贡献', efficiency: '效率贡献', delta: '中性贡献', iv_bonus: 'IV 奖励' };
-        var compMax = { theta: 25, vega: 20, win_rate: 20, width: 10, efficiency: 15, delta: 10, iv_bonus: 10 };
+        var compMax = (detail.score_schema && Object.keys(detail.score_schema).length) ? detail.score_schema : { theta: 25, vega: 20, win_rate: 20, width: 10, efficiency: 15, delta: 10, iv_bonus: 10 };
         var compHtml = '';
         Object.keys(labels).forEach(function(k) {
           if (sc[k] !== undefined && sc[k] !== null && typeof sc[k] === 'number' && isFinite(sc[k])) {
