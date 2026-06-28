@@ -974,7 +974,7 @@
     <div class="options-cards" id="optionsCards">
       {% if options %}
       {% for s in (options|sort(attribute='unified_score', reverse=True))[:20] %}
-      <div class="option-card {% if s.unified_score >= 70 %}strength-high{% elif s.unified_score >= 50 %}strength-mid{% else %}strength-low{% endif %}">
+      <div class="option-card {% if s.unified_score >= 70 %}strength-high{% elif s.unified_score >= 50 %}strength-mid{% else %}strength-low{% endif %}" onclick="showStratDetailFromData(this)" data-sk="{{ s.symbol }}|{{ s.contract }}|{{ s.strategy }}" style="cursor:pointer">
         <div class="option-card-header">
           <div>
             <span class="option-card-sym">{{ s.symbol }}</span>
@@ -1179,9 +1179,7 @@ var IV_DATA = JSON.parse('{{ iv_json|safe }}');
         formatter: function(val, idx) {
           var d = IV_DATA[idx];
           if (!d) return val;
-          var sym = (d.symbol || '').toUpperCase();
-          var cname = (d.name && d.name !== d.symbol) ? d.name : '';
-          return cname ? sym + '\n' + cname : sym;
+          return (d.symbol || '').toUpperCase();
         },
       },
       axisLine: { lineStyle: { color: 'rgba(26,32,64,.5)' } },
@@ -1422,7 +1420,7 @@ function showStratDetail(el) {
 
 document.addEventListener('click', function(e) {
   var popup = document.getElementById('stratPopup');
-  if (popup.classList.contains('show') && !popup.contains(e.target) && !e.target.closest('.strat-detail-link')) {
+  if (popup.classList.contains('show') && !popup.contains(e.target) && !e.target.closest('.strat-detail-link') && !e.target.closest('.option-card')) {
     popup.classList.remove('show');
   }
 });
@@ -1614,7 +1612,7 @@ function renderOptionCards(signals) {
     else if (s.iv_level === '极端低') ivClr = 'var(--iv-extreme)';
     var scoreClr = score >= 70 ? 'var(--brand)' : (score >= 50 ? '#f0b429' : 'var(--text3)');
     var reason = s.reason || '';
-    html += '<div class="option-card ' + strengthCls + '">'
+    html += '<div class="option-card ' + strengthCls + '" onclick="showStratDetailFromData(this)" data-sk="' + signalKey(s) + '" style="cursor:pointer">'
       + '<div class="option-card-header">'
       + '<div><span class="option-card-sym">' + esc(s.symbol || '') + '</span><span style="font-size:.58rem;color:var(--text3);margin-left:2px">' + esc(s.name || '') + '</span> <span class="option-card-contract">' + esc(s.contract || '') + '</span></div>'
       + '<span class="option-card-strat">' + esc(s.strategy_cn || (s.strategy || '').replace(/_/g, ' ')) + '</span>'
